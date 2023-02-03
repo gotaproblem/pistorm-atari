@@ -153,7 +153,7 @@ static uint8_t IDE_action = 0;
 
 void writeIDEB(unsigned int address, unsigned int value) {
   if (atariide0) {
-    if (address >= IDEBASE && address < (IDEBASE + IDESIZE) ) {
+    //if (address >= IDEBASE && address < (IDEBASE + IDESIZE) ) {
 #if (1)
       switch ((address - IDEBASE)){//IDE_IDE_base) - IDE_IDE_adj) {
         case GFEAT_OFFSET:
@@ -199,7 +199,7 @@ IDEwrite8:;
       IDE_write8(atariide0, IDE_action, value);
       return;
 skip_idewrite8:;
-    }
+    //}
 
     
     return;
@@ -257,10 +257,10 @@ skip_idewrite8:;
 void writeIDE(unsigned int address, unsigned int value) {
 #if (1)
   if (atariide0) {
-    if (address - IDEBASE == GDATA_OFFSET) {
+    //if (address - IDEBASE == GDATA_OFFSET) {
       IDE_write16(atariide0, IDE_data, value);
       return;
-    }
+    //}
 
     //if (address == GIRQ_A4000) {
     //  IDE_a4k_irq = value;
@@ -321,7 +321,7 @@ uint8_t readIDEB(unsigned int address) {
   if (atariide0) {
     uint8_t IDE_action = 0, IDE_val = 0;
 #if (1)
-    if (address >= IDEBASE && address < (IDEBASE + IDESIZE) ) { //IDE_IDE_base && address < (IDE_IDE_base + 0x40) ) {
+    //if (address >= IDEBASE && address < (IDEBASE + IDESIZE) ) { //IDE_IDE_base && address < (IDE_IDE_base + 0x40) ) {
 
       //printf ("IDE read byte\n");
       switch ((address - IDEBASE) ) {//- IDE_IDE_adj) {
@@ -361,7 +361,7 @@ ideread8:;
       IDE_val = IDE_read8(atariide0, IDE_action);
       return IDE_val;
 skip_ideread8:;
-    }
+    //}
 /*
     switch (address) {
       //case GIDENT: {

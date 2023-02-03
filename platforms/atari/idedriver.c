@@ -817,7 +817,7 @@ int IDE_attach_hdf(struct ide_controller *c, int drive, int fd)
   d->lba = 0;
 
   d->heads = 255;
-  d->sectors = 63;
+  d->sectors = 64; //63;
   d->header_present = 0;
 
   uint64_t file_size = lseek(fd, 0, SEEK_END);
@@ -852,7 +852,7 @@ int IDE_attach_hdf(struct ide_controller *c, int drive, int fd)
     d->lba = 1;
   }
 
-  ide_make_ident(d->cylinders, d->heads, d->sectors, "PISTORM IDE ", d->identify);
+  ide_make_ident(d->cylinders, d->heads, d->sectors, "PISTORM IDE DK", d->identify);
 
   return 0;
 }
@@ -987,8 +987,8 @@ int ide_make_ident(uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *targe
    make_ascii(ident + 23, "A001.001", 8);
    //make_ascii(ident + 27, name, 40);
    //make_ascii(ident + 31, "A001.001", 8);
-   snprintf(buf, sizeof(buf), "%s %liM", name,
-    (long)( (c * h * s) / (1024 * 1024 / 512 )));
+   snprintf(buf, sizeof(buf), "%s%d %liM", name, 0,
+    (long)( sectors / (1024 * 1024 / 512 )));
     strncpy((char*)(ident + 27), buf, 40);
 
   ident[49] = le16(1 << 9); /* LBA */
@@ -1002,8 +1002,8 @@ int ide_make_ident(uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *targe
   sectors = c * h * s;
   ident[57] = le16(sectors & 0xFFFF);
   ident[58] = le16(sectors >> 16);
-  ident[60] = ident[57];
-  ident[61] = ident[58];
+  ident[60] = sectors & 0xffff; //ident[57];
+  ident[61] = sectors >> 16; //ident[58];
 #else
     //static void ide_identify(IDEState *s)
 //{
@@ -1032,14 +1032,16 @@ int ide_make_ident(uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *targe
 	//put_le16(p + 5, 512); /* XXX: retired, remove ? */
 	put_le16(p + 6, s);
 	snprintf(buf, sizeof(buf), "QM%05d", 12345 );//s->drive_serial);
-	padstr((char *)(p + 10), buf, 20); /* serial number */
+	//padstr((char *)(p + 10), buf, 20); /* serial number */
+  strncpy((char*)(p + 10), buf, 20);
 	//put_le16(p + 20, 3); /* XXX: retired, remove ? */
 	//put_le16(p + 21, 512); /* cache size in sectors */
 	//put_le16(p + 22, 4); /* ecc bytes */
-	padstr((char *)(p + 23), FW_VERSION, 8); /* firmware version */
+	//padstr((char *)(p + 23), FW_VERSION, 8); /* firmware version */
+  strncpy((char*)(p + 23), FW_VERSION, 8);
 	/* Use the same convention for the name as SCSI disks are using: The
 	 * first 8 characters should be the vendor, i.e. use 2 spaces here */
-	snprintf(buf, sizeof(buf), "PISTORM IDE %liM",
+	snprintf(buf, sizeof(buf), "%s%d %liM", name, 0,
 	         //(long)(s->nb_sectors / (1024 * 1024 / 512 ))); //s->bs->sector_size)));
             (long)( oldsize / (1024 * 1024 / 512 ))); //s->bs->sector_size)));
 	//padstr((char *)(p + 27), buf, 40);
