@@ -396,9 +396,9 @@ cpu_loop:
 
     /* cryptodad IDE */
     if (IDEirq && last_irq == 6) { //} && int2_enabled) {
-      write16 ( 0xdff09c, 0x8000 | (1 << 3) && last_irq != 2 );
+      //write16 ( 0xdff09c, 0x8000 | (1 << 3) && last_irq != 2 );
       last_last_irq = last_irq;
-      //last_irq = 2;
+      last_irq = 6;
       M68K_SET_IRQ(6);//(2);
     }
 
@@ -968,7 +968,7 @@ static uint32_t platform_res, rres;
 //void cdtv_dmac_write(uint32_t address, uint32_t value, uint8_t type);
 
 unsigned int garbage = 0;
-
+/*
 static inline uint32_t ps_read(uint8_t type, uint32_t addr) {
   uint32_t result;
 
@@ -1001,6 +1001,7 @@ static inline void ps_write(uint8_t type, uint32_t addr, uint32_t val) {
   }
   return;
 }
+*/
 
 #pragma FORCEINLINE
 uint16_t cpu_irq_ack(int level) {
@@ -1177,16 +1178,21 @@ static inline int32_t platform_read_check(uint8_t type, uint32_t addr, uint32_t 
 
   /* cryptodad IDE */
   
-
+  if ( addr >= 0xfff00000 && addr < 0xfff00040 )
+  {
+    addr &= 0x00ffffff;
+  }
   
   //if (ovl || (addr >= cfg->mapped_low && addr < cfg->mapped_high)) {
   if ( (addr >= cfg->mapped_low && addr < cfg->mapped_high)) {
+
+    
     if (handle_mapped_read(cfg, addr, &target, type) != -1) {
 
-     // if ( addr >= 0x00f00000 && addr < 0x00f00040 )
-     // {
-     //   printf ( "IDE read request @ address 0x%x = 0x%x, type = %d\n", addr, target, type );
-     // }
+      //if ( addr >= 0x00f00000 && addr < 0x00f00040 )
+      //{
+      //  printf ( "IDE read request @ address 0x%x = 0x%x, type = %d\n", addr, target, type );
+      //}
 
      // if ( addr >= 0x00fffa03 && addr < 0x00fffa18 ) //addr >= 0x00fffa00 && addr < 0x00fffa40 )
       //{
@@ -1395,6 +1401,11 @@ static inline int32_t platform_write_check(uint8_t type, uint32_t addr, uint32_t
 */
 
   /* cryptodad IDE */
+  
+  if ( addr >= 0xfff00000 && addr < 0xfff00040 )
+  {
+    addr &= 0x00ffffff;
+  }
   
   //if (ovl || (addr >= cfg->mapped_low && addr < cfg->mapped_high)) {
   if ( (addr >= cfg->mapped_low && addr < cfg->mapped_high)) {
