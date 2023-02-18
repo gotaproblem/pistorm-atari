@@ -24,6 +24,7 @@
 #define REG_STATUS 3
 
 #define STATUS_BIT_INIT 1
+#define STATUS_BIT_BERR 1
 #define STATUS_BIT_RESET 2
 
 #define STATUS_MASK_IPL 0xe000
@@ -171,6 +172,11 @@ void ps_write_status_reg(unsigned int value);
 void ps_setup_protocol();
 void ps_reset_state_machine();
 void ps_pulse_reset();
+
+/* cryptodad */
+/* cryptodad */
+#define PS_CNF_CPU 0x0001
+void ps_config ();
 
 unsigned int ps_get_ipl_zero();
 

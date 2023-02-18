@@ -113,29 +113,50 @@ void set_hard_drive_image_file_atari(uint8_t index, char *filename) {
 void InitIDE(void) {
   uint8_t num_IDE_drives = 0;
 
-  for (int i = 0; i < IDE_MAX_HARDFILES; i++) {
-    if (atari_image_file[i]) {
+  for (int i = 0; i < IDE_MAX_HARDFILES; i++) 
+  {
+    if (atari_image_file[i]) 
+    {
       atarifd = open(atari_image_file[i], O_RDWR);
-      if (atarifd != -1) {
+
+      if (atarifd != -1) 
+      {
         if (!atariide0)
             atariide0 = IDE_allocate("cf");
       }
 
-      if (atarifd == -1) {
+      if (atarifd == -1) 
+      {
         printf("[HDD%d] HDD Image %s failed open\n", i, atari_image_file[i]);
-      } else {
-        printf("[HDD%d] Attaching HDD image %s.\n", i, atari_image_file[i]);
-        //if (strcmp(atari_image_file[i] + (strlen(atari_image_file[i]) - 3), "img") != 0) {
-          //printf("No header present on HDD image %s.\n", atari_image_file[i]);
-          IDE_attach_hdf(atariide0, i, atarifd);
+      } 
+      
+      else 
+      {
+        if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 2 ), "ST" ) == 0 )
+        {
+          printf ( "[FDD%d] Attaching FDD image %s.\n", i, atari_image_file [i] );
+
+          IDE_attach_st ( atariide0, i, atarifd );
           num_IDE_drives++;
-        //}
-        //else {
-        //  printf("Attaching HDD image with header.\n");
-        //  IDE_attach(atariide0, i, atarifd);
-        //  num_IDE_drives++;
-        //}
-        printf("[HDD%d] HDD Image %s attached\n", i, atari_image_file[i]);
+
+          printf ( "[FDD%d] FDD Image %s attached\n", i, atari_image_file [i] );
+        }
+
+        else if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 3 ), "img" ) == 0 )
+        {
+          printf("[HDD%d] Attaching HDD image %s.\n", i, atari_image_file[i]);
+          //if (strcmp(atari_image_file[i] + (strlen(atari_image_file[i]) - 3), "img") != 0) {
+            //printf("No header present on HDD image %s.\n", atari_image_file[i]);
+            IDE_attach_hdf(atariide0, i, atarifd);
+            num_IDE_drives++;
+          //}
+          //else {
+          //  printf("Attaching HDD image with header.\n");
+          //  IDE_attach(atariide0, i, atarifd);
+          //  num_IDE_drives++;
+          //}
+          printf("[HDD%d] HDD Image %s attached\n", i, atari_image_file[i]);
+        }
       }
     }
   }
@@ -144,7 +165,7 @@ void InitIDE(void) {
 
   if (num_IDE_drives == 0) {
     // No IDE drives mounted, disable IDE component of IDE
-    printf("No IDE drives mounted, disabling IDE IDE component.\n");
+    printf("No IDE drives mounted, disabling IDE component.\n");
     IDE_IDE_enabled = 0;
   }
 }
@@ -454,7 +475,7 @@ uint16_t readIDE(unsigned int address) {
       uint16_t value;
       value = IDE_read16(atariide0, IDE_data);
       //	value = (value << 8) | (value >> 8);
-      return value << 8 | value >> 8;
+      return value;//value << 8 | value >> 8;
     }
 
     //if (address == GIRQ_A4000) {

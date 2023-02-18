@@ -59,7 +59,7 @@ void setMemory ( uint32_t size );
 void peek ( uint32_t start );
 void poke ( uint32_t address, uint8_t data );
 void dump ( uint32_t ROMsize, uint32_t ROMaddress );
-
+void memspeed ( uint32_t length );
 
 int doReads;
 int doWrites;
@@ -77,6 +77,7 @@ int cmdMem = 0;
 int cmdDump = 0;
 int cmdClear = 0;
 int cmdInit = 0;
+int cmdMemSpeed = 0;
 uint32_t ROMsize = 192;
 uint32_t ROMaddress = 0x00e00000;
 uint16_t clrPattern = 0x0000;
@@ -289,7 +290,7 @@ int main(int argc, char *argv[])
             uint32_t duration;
 
             /* must be 512 or 1024 or 2048 or 4096 */
-            //setMemory ( memSize );
+            setMemory ( memSize );
 
             printf ( "\nClearing ATARI ST RAM - %d KB\n", testSize );
             fflush (stdout);
@@ -329,6 +330,17 @@ int main(int argc, char *argv[])
             dump ( ROMsize, ROMaddress );
 
             printf ( "ATARI ROM dumped - %d KB\n", ROMsize );
+        }
+
+        if ( cmdMemSpeed )
+        {
+            printf ( "\nChecking ATARI ST RAM memory bandwidth - %d KB\n", testSize );
+            fflush (stdout);
+
+            memspeed ( testSize * SIZE_KILO );
+            
+            //printf ( "\nATARI ST RAM cleared in %d ms @ %.2f KB/s\n\n", 
+            //    duration, ( (float)((testSize * 1024) - OFFSET) / (float)duration * 1000.0) / 1024 );
         }
 
         if ( cmdMem )
@@ -472,6 +484,56 @@ test_loop:
 void m68k_set_irq(unsigned int level) {
 }
 
+
+void memspeed ( uint32_t length )
+{
+    uint32_t address;
+    struct timespec tmsStart, tmsEnd;
+    long int nanoStart;
+    long int nanoEnd;
+
+
+    printf ( "Memory Speed Test\n" );
+
+    address = 0x0;
+    clock_gettime ( CLOCK_REALTIME, &tmsStart );
+
+    for ( uint32_t n = 0; n < length; n += 2 )
+    {
+        read16 ( address );
+
+        address += 2;
+    }
+
+    clock_gettime ( CLOCK_REALTIME, &tmsEnd );
+
+    nanoStart = (tmsStart.tv_sec * 1000) + (tmsStart.tv_nsec / 1000000);
+    nanoEnd = (tmsEnd.tv_sec * 1000) + (tmsEnd.tv_nsec / 1000000);
+
+    printf ( "READ:  %d ms = %.2f MB/s\n", (nanoEnd - nanoStart), 
+        ( 1.0 / ( (float)(nanoEnd - nanoStart) ) * length ) / 1024 );     /* MB/s */
+
+
+
+    address = 0x0;
+    clock_gettime ( CLOCK_REALTIME, &tmsStart );
+    
+    for ( uint32_t n = 0; n < length; n += 2 ) {
+
+        write16 (address, 0x5a5a);
+
+        address += 2;
+    }
+
+    clock_gettime ( CLOCK_REALTIME, &tmsEnd );
+
+    nanoStart = (tmsStart.tv_sec * 1000) + (tmsStart.tv_nsec / 1000000);
+    nanoEnd = (tmsEnd.tv_sec * 1000) + (tmsEnd.tv_nsec / 1000000);
+
+    printf ( "WRITE: %d ms = %.2f MB/s\n", (nanoEnd - nanoStart), 
+       // (( (float)(length / 2) / (float)(nanoEnd - nanoStart)) * 1000.0) / 1024 / 1024 );     /* KB/s */
+        ( 1.0 / ( (float)(nanoEnd - nanoStart) ) * length ) / 1024 );     /* MB/s */
+}
 
 
 void peek ( uint32_t start )
@@ -1261,7 +1323,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                     for ( uint32_t n = 0, add = startAdd; add < length - 2; n += 2, add += 2) 
                     {
                         if ( n == 0 )
-                                printf ( "%-20sRunning ", testStr );
+                            printf ( "%-20sRunning ", testStr );
 
                         d16 = *( (uint16_t *) &garbagePtr [n] );
 
@@ -1543,13 +1605,16 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
         calcLength *= 2;
     }
 
-    printf ( "%-20sTest %d Completed with %d %s in %d ms (%.2f KB/s)\n", 
+    printf ( "%-20sTest %d Completed with %d %s in %d ms (%.2f MB/s)\n", 
         testStr, 
         testNumber,
         thisTestErrors,
         thisTestErrors == 1 ? "error" : "errors",
         (nanoEnd - nanoStart), 
-        (( (float)calcLength / (float)(nanoEnd - nanoStart)) * 1000.0) / 1024 );     /* KB/s */
+       // (( (float)calcLength / (float)(nanoEnd - nanoStart)) * 1000.0) / 1024 );     /* KB/s */
+         ( 1.0 / ( (float)(nanoEnd - nanoStart) ) * length ) / 1024 );     /* MB/s */
+
+        
     
     //if ( thisTestErrors )
     //    printf ( "%-20s%sTest errors = %08d%s\n\n", 
@@ -1575,7 +1640,7 @@ void clearmem ( uint32_t length, uint32_t *duration, uint16_t pattern )
 
     clock_gettime ( CLOCK_REALTIME, &tmsStart );
     
-    for ( uint32_t n = 0; n < length; n += 2 ) {
+    for ( uint32_t n = 8; n < length; n += 2 ) {
 
         write16 (n, pattern);
 
@@ -1883,6 +1948,38 @@ int parser ( int argc, char **argv )
 
             if ( valid )
                 cmdInit = 1;
+        }
+
+        if ( strcmp ( cmdptr, "memspeed" ) == 0 )
+        {
+            valid = 1;
+
+            for ( int z = 3; z && valid && a < argc - 1; z-- )
+            {
+                strncpy ( arg, argv [++a], 80 );
+                argptr = strtok_r ( arg, " ", &savePtr );
+                aptr = strtok ( argptr, "=" );
+        
+                if ( strcmp ( aptr, "size" ) == 0 )
+                {
+                    tptr = strtok ( NULL, "" );
+                    testSize = atoi ( tptr );
+
+                    if ( testSize < 512 )
+                        testSize = 512;
+
+                    if ( testSize > 4096 )
+                        testSize = 4096;
+                } 
+
+                else
+                    valid = 0;
+
+                argptr = strtok ( savePtr, " " );
+            }
+
+            if ( valid )
+                cmdMemSpeed = 1;
         }
     }
 

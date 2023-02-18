@@ -24,6 +24,7 @@
 #include "m68k.h"
 
 #define CHECK_BERR 1
+#define WAIT_IO_START 0
 //
 
 volatile unsigned int *gpio;
@@ -37,7 +38,7 @@ unsigned int gpfsel0_o;
 unsigned int gpfsel1_o;
 unsigned int gpfsel2_o;
 
-int g_irq;
+//int g_irq;
 
 //#if CHECK_BERR
 void (*callback_berr)(uint16_t status, uint32_t address, int mode) = NULL;
@@ -146,9 +147,9 @@ void ps_setup_protocol() {
 void check_berr(uint32_t address, int mode) {
   
   uint16_t status = ps_read_status_reg();
-	g_irq = status >> 13;
+	//g_irq = status >> 13;
   //printf("%s: status: %x, irq = %d, address = %08x, mode = %d\n", __func__, status, g_irq, address, mode ); 
-  if( (status & 0x0001) && callback_berr ) {
+  if( (status & STATUS_BIT_BERR) && callback_berr ) {
       //printf("status: %x\n", status );
       //printf("%s: status: %x, irq = %d, address = %08x, mode = %d\n", __func__, status, g_irq, address, mode ); 
       callback_berr(status,address,mode);  
@@ -156,12 +157,13 @@ void check_berr(uint32_t address, int mode) {
 }
 #endif
 
+
 void ps_write_16(unsigned int address, unsigned int data) 
 {
   static unsigned int l;
-
-  //while ( (*(gpio + 13) & 1) == 1 ) ; /* do not attempt txn until HW is ready */
-
+#if WAIT_IO_START
+  while ( *(gpio + 13) & 1) ; /* do not attempt txn until HW is ready */
+#endif
   *(gpio + 0) = GPFSEL0_OUTPUT;
   *(gpio + 1) = GPFSEL1_OUTPUT;
   *(gpio + 2) = GPFSEL2_OUTPUT;
@@ -188,20 +190,26 @@ void ps_write_16(unsigned int address, unsigned int data)
   *(gpio + 1) = GPFSEL1_INPUT;
   *(gpio + 2) = GPFSEL2_INPUT;
 
-	while ( (l = *(gpio + 13) ) & 1 ) {} // 0x1 == PIN_TXN_IN_PROGRESS
-
+	while ( ( l = *(gpio + 13) ) & 1 );
+ // {
 #if CHECK_BERR
-	if( CHECK_PIN_RESET(l) )
-		check_berr(address,0);
+	  if ( CHECK_PIN_RESET(l) )
+    {
+		  check_berr ( address, 0 );
+     // break;
+    }
 #endif
+  //}
+
 }
+
 
 void ps_write_8(unsigned int address, unsigned int data) 
 {
   static unsigned int l;
-
-  //while ( (*(gpio + 13) & 1) == 1 ) ; /* do not attempt txn until HW is ready */
-
+#if WAIT_IO_START
+  while ( *(gpio + 13) & 1) ; /* do not attempt txn until HW is ready */
+#endif
   if ((address & 1) == 0)
     data = data + (data << 8);  // EVEN, A0=0,UDS
   else
@@ -230,12 +238,16 @@ void ps_write_8(unsigned int address, unsigned int data)
   *(gpio + 1) = GPFSEL1_INPUT;
   *(gpio + 2) = GPFSEL2_INPUT;
 
-	while ( (l = *(gpio + 13) ) & 1 ) {} // 0x1 == PIN_TXN_IN_PROGRESS
-
+	while ( ( l = *(gpio + 13) ) & 1 );
+ // {
 #if CHECK_BERR
-  if ( CHECK_PIN_RESET(l) )
-          check_berr ( address, 0 );
+	  if ( CHECK_PIN_RESET(l) )
+    {
+		  check_berr ( address, 0 );
+     // break;
+    }
 #endif
+  //}
 }
 
 void ps_write_32(unsigned int address, unsigned int value) {
@@ -289,10 +301,22 @@ unsigned int ps_read_16(unsigned int address)
 
 #else
 
+//long int nanoMax = 0;
+//long int nanoMin = 1000000;
+
 uint32_t ps_read_16 ( uint32_t address ) 
 {
   static uint32_t l;
   uint32_t value;
+#if WAIT_IO_START
+  while ( *(gpio + 13) & 1) ; /* do not attempt txn until HW is ready */
+#endif
+  long int nanoStart;
+  long int nanoEnd;
+  long int nanoDiff;
+  long int nanoAvg;
+  struct timespec tmsStart, tmsEnd;
+  //clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
   GPFSEL_OUTPUT;
 
@@ -304,14 +328,28 @@ uint32_t ps_read_16 ( uint32_t address )
 
   //WAIT_TXN;
   while ( ( l = *(gpio + 13) ) & 0x1 ) ; 
-
+  
   value = ((*(gpio + 13) >> 8) & 0xFFFF);
+
+  //clock_gettime ( CLOCK_REALTIME, &tmsEnd );
+
   END_TXN;
 
 #if CHECK_BERR
   if ( CHECK_PIN_RESET(l) )
     check_berr ( address, 1 );
 #endif
+
+  //nanoStart = (tmsStart.tv_sec) + (tmsStart.tv_nsec);
+  //nanoEnd   = (tmsEnd.tv_sec) + (tmsEnd.tv_nsec);
+  //nanoDiff  = nanoEnd - nanoStart;
+  //if ( nanoDiff > nanoMax )
+  //  nanoMax = nanoDiff;
+
+  //if ( nanoDiff < nanoMin )
+  //  nanoMin = nanoDiff;
+
+  //printf ( "ps_read_16 min %ld, max %ld, current %ld nanoseconds\n", nanoMin, nanoMax, nanoDiff );
 
   return value;
 }
@@ -321,19 +359,20 @@ uint32_t ps_read_16 ( uint32_t address )
 unsigned int ps_read_8(unsigned int address) 
 {
   static unsigned int l;
-
-  //while ( (*(gpio + 13) & 1) == 1 ) ; /* do not attempt txn until HW is ready */
-
+#if WAIT_IO_START
+  while ( *(gpio + 13) & 1) ; /* do not attempt txn until HW is ready */
+#endif
   *(gpio + 0) = GPFSEL0_OUTPUT;
   *(gpio + 1) = GPFSEL1_OUTPUT;
   *(gpio + 2) = GPFSEL2_OUTPUT;
 
-  *(gpio + 7) = ((address & 0xffff) << 8) | (REG_ADDR_LO << PIN_A0);
+  
+  *(gpio + 7) = ((address & 0xffff) << 8) | (REG_ADDR_LO << PIN_A0);// | (1 << PIN_WR);
   *(gpio + 7) = 1 << PIN_WR;
   *(gpio + 10) = 1 << PIN_WR;
-  *(gpio + 10) = 0xffffec;
+  *(gpio + 10) = 0xffffec; /* clear GPIOs 2,3,5,6,7 */
 
-  *(gpio + 7) = (( (fc<<13) | 0x0300 | (address >> 16)) << 8) | (REG_ADDR_HI << PIN_A0);
+  *(gpio + 7) = (( (fc<<13) | 0x0300 | (address >> 16)) << 8) | (REG_ADDR_HI << PIN_A0);// | (1 << PIN_WR);
   *(gpio + 7) = 1 << PIN_WR;
   *(gpio + 10) = 1 << PIN_WR;
   *(gpio + 10) = 0xffffec;
@@ -342,7 +381,7 @@ unsigned int ps_read_8(unsigned int address)
   *(gpio + 1) = GPFSEL1_INPUT;
   *(gpio + 2) = GPFSEL2_INPUT;
 
-  *(gpio + 7) = (REG_DATA << PIN_A0);
+  *(gpio + 7) = (REG_DATA << PIN_A0);// | (1 << PIN_RD);
   *(gpio + 7) = 1 << PIN_RD;
 
 	unsigned int value;
@@ -364,13 +403,16 @@ unsigned int ps_read_8(unsigned int address)
     return value & 0xff;  // ODD , A0=1,LDS
 }
 
+
 unsigned int ps_read_32(unsigned int address) {
   return (ps_read_16(address) << 16) | ps_read_16(address + 2);
 }
 
 void ps_write_status_reg(unsigned int value) 
 {
-
+#if WAIT_IO_START
+  while ( *(gpio + 13) & 1) ; /* do not attempt txn until HW is ready */
+#endif
   *(gpio + 0) = GPFSEL0_OUTPUT;
   *(gpio + 1) = GPFSEL1_OUTPUT;
   *(gpio + 2) = GPFSEL2_OUTPUT;
@@ -391,39 +433,41 @@ void ps_write_status_reg(unsigned int value)
 }
 
 
-
+ 
 
 unsigned int ps_read_status_reg() 
 {
-  while ( (*(gpio + 13) & 1) == 1 ) ; /* do not attempt txn until HW is ready */
-
-  readLock = 1;
-  *(gpio + 7) = (REG_STATUS << PIN_A0);
+//#if WAIT_IO_START
+ // while ( *(gpio + 13) & 1) ; /* do not attempt txn until HW is ready */
+//#endif
+  //readLock = 1;
+  *(gpio + 7) = (REG_STATUS << PIN_A0);// | (1 << PIN_RD);
   *(gpio + 7) = 1 << PIN_RD;
   *(gpio + 7) = 1 << PIN_RD;
-  *(gpio + 7) = 1 << PIN_RD;
-  *(gpio + 7) = 1 << PIN_RD;
+  //*(gpio + 7) = 1 << PIN_RD;
+  //*(gpio + 7) = 1 << PIN_RD;
 #ifdef CHIP_FASTPATH
   *(gpio + 7) = 1 << PIN_RD; // delay 210810
   *(gpio + 7) = 1 << PIN_RD; // delay 210810
 #endif
 
-  unsigned int value = *(gpio + 13);
+  unsigned int value;// = *(gpio + 13);
   //uint32_t timeout = 1000000;
-  while ( ( value = *(gpio + 13) ) & (1 << PIN_TXN_IN_PROGRESS ) )
-  {
+  while ( *(gpio + 13) & 1 ) ;//(1 << PIN_TXN_IN_PROGRESS ) )
+  //{
    // if ( timeout-- )
    //   continue;
 
    // value = 0xffffffff;
    // break;
-  }
-
+  //}
+  value = *(gpio + 13);
   *(gpio + 10) = 0xffffec;
 
-  readLock = 0;
+  //readLock = 0;
   return (value >> 8) & 0xffff;
 }
+
 
 void ps_reset_state_machine() {
   ps_write_status_reg(STATUS_BIT_INIT);
@@ -431,6 +475,7 @@ void ps_reset_state_machine() {
   ps_write_status_reg(0);
   usleep(100);
 }
+
 
 void ps_pulse_reset() {
   ps_write_status_reg(0);
@@ -444,15 +489,15 @@ unsigned int ps_get_ipl_zero() {
   return value & (1 << PIN_IPL_ZERO);
 }
 
-#define INT2_ENABLED 1
-
+//#define INT2_ENABLED 1
+#if (0)
 void ps_update_irq() {
   unsigned int ipl = 0;
 
   if (!ps_get_ipl_zero()) {
     //while (readLock);
     unsigned int status = ps_read_status_reg();
-    ipl = (status & 0xe000) >> 13;
+    ipl = (status & STATUS_MASK_IPL) >> 13;
     printf ( "%s: status = 0x%04X, ipl = %d\n", __func__, status, ipl );
   }
 
@@ -462,4 +507,24 @@ void ps_update_irq() {
 
   m68k_set_irq(ipl);
 }
+#endif
 
+
+void
+ps_config ()
+{
+  *(gpio + 0) = GPFSEL0_OUTPUT;
+  *(gpio + 1) = GPFSEL1_OUTPUT;
+  *(gpio + 2) = GPFSEL2_OUTPUT;
+
+  *(gpio + 7) = ((PS_CNF_CPU & 0xffff) << 8) | (REG_STATUS << PIN_A0);
+
+  *(gpio + 7) = (1 << PIN_WR) | (1 << PIN_RD);
+
+  *(gpio + 10) = 1 << PIN_WR;
+  *(gpio + 10) = 0xffffec;
+
+  *(gpio + 0) = GPFSEL0_INPUT;
+  *(gpio + 1) = GPFSEL1_INPUT;
+  *(gpio + 2) = GPFSEL2_INPUT;
+}

@@ -2550,7 +2550,6 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 	uint sr;
 	uint new_pc;
 
-//	printf("Doing interrupt %d\n", int_level );
 
 	#if M68K_EMULATE_ADDRESS_ERROR == OPT_ON
 	if(CPU_TYPE_IS_000(CPU_TYPE))
@@ -2579,8 +2578,9 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 		vector = EXCEPTION_SPURIOUS_INTERRUPT;
 	else if(vector > 255)
 	{
-		M68K_DO_LOG_EMU((M68K_LOG_FILEHANDLE "%s at %08x: Interrupt acknowledge returned invalid vector $%x\n",
-				 m68ki_cpu_names[CPU_TYPE], ADDRESS_68K(REG_PC), vector));
+		//M68K_DO_LOG_EMU((M68K_LOG_FILEHANDLE "%s at %08x: Interrupt acknowledge returned invalid vector $%x\n",
+		printf ( "%08x: Interrupt acknowledge returned invalid vector $%x\n",
+				 ADDRESS_68K(REG_PC), vector);
 		return;
 	}
 
@@ -2619,22 +2619,50 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 }
 
 
+
 /* ASG: Check for interrupts */
 static inline void m68ki_check_interrupts(m68ki_cpu_core *state)
 {
-	/* skip level 0 */
+	uint32_t IntLevel = CPU_INT_LEVEL >> 8;
+
+
+	/* ignore interrupt levels 2 & 4 (hblank and vblank) */
+	//if ( IntLevel == 2 || IntLevel == 4 )
+	//{
+	//	cpu_irq_ack (IntLevel);
+	//	return;
+	//}
+
+	/* ignore level 0 */
 	//if ( CPU_INT_LEVEL > 0 )
 	//{
 		if(state->nmi_pending)
 		{
 			state->nmi_pending = FALSE;
-			m68ki_exception_interrupt(state, 7);
+			m68ki_exception_interrupt ( state, 7 );
 		}
 		
 		else if ( CPU_INT_LEVEL > FLAG_INT_MASK ) 
 		{
-			m68ki_exception_interrupt ( state, CPU_INT_LEVEL >> 8 );
+			m68ki_exception_interrupt ( state, IntLevel );
 		}
+
+			//int status = ps_read_status_reg() >> 13; // nasty hack, breaking the separation to double check interrupt is really valid
+			//if( status != ( CPU_INT_LEVEL >> 8 ) )
+			//		printf("Status mismatch %d != %d\n", CPU_INT_LEVEL >> 8, status );
+			//else
+			//		m68ki_exception_interrupt(state, CPU_INT_LEVEL >> 8);
+		//}
+		/* ipl == 4 */
+		//else 
+		//{
+			//printf ( "%s: should we be here? CPU_INT_LEVEL = %d, FLAG_INT_MASK = %d\n", __func__, CPU_INT_LEVEL >> 8, FLAG_INT_MASK >> 8 );
+		//}
+	//}
+
+	//else 
+	//{
+	//	printf ( "%s, got ipl 0\n", __func__ );
 	//}
 }
 

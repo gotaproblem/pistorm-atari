@@ -19,6 +19,10 @@ const char *op_type_names[OP_TYPE_NUM] = {
   "MEM",
 };
 
+extern uint8_t IDE_IDE_enabled;
+
+
+
 inline int handle_mapped_read(struct emulator_config *cfg, unsigned int addr, unsigned int *val, unsigned char type) {
   unsigned char *read_addr = NULL;
 
@@ -48,6 +52,11 @@ inline int handle_mapped_read(struct emulator_config *cfg, unsigned int addr, un
           break;
         case MAPTYPE_REGISTER:
           if (cfg->platform && cfg->platform->register_read) {
+            /* cryptodad IDE */
+            if ( IDE_IDE_enabled && (addr >= 0xfff00000 && addr < 0xfff00040) )
+            {
+              addr &= 0x00ffffff;
+            }
             if (cfg->platform->register_read(addr, type, &target) != -1) {
               //printf ( "%s: target = 0x%x\n", __func__, target );
               *val = target;
@@ -120,6 +129,11 @@ inline int handle_mapped_write(struct emulator_config *cfg, unsigned int addr, u
           break;
         case MAPTYPE_REGISTER:
           if (cfg->platform && cfg->platform->register_write) {
+            /* cryptodad IDE */
+            if ( IDE_IDE_enabled && (addr >= 0xfff00000 && addr < 0xfff00040) )
+            {
+              addr &= 0x00ffffff;
+            }
             return cfg->platform->register_write(addr, value, type);
           }
           break;

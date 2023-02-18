@@ -38,7 +38,7 @@ void atari_clear_emulating_irq() {
 
 inline int atari_handle_intrqr_read(uint32_t *res) {
   if (atari_emulated_irqs) {
-    *res = ps_read_16(INTREQR) | atari_emulated_irqs;
+    //*res = ps_read_16(INTREQR) | atari_emulated_irqs; /* what is this doing */
     return 1;
   }
   return 0;
@@ -58,7 +58,7 @@ int atari_handle_intrq_write(uint32_t val) {
       }
     }
     if (hardware_irqs_to_clear) {
-      ps_write_16(INTREQ, hardware_irqs_to_clear);
+      //ps_write_16(INTREQ, hardware_irqs_to_clear); /* what is this doing */
     }
     return 1;
   }

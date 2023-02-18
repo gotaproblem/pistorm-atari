@@ -437,17 +437,27 @@ static void cmd_writesectors_complete(struct ide_taskfile *tf)
 
 static void ide_set_error(struct ide_drive *d)
 {
-  d->controller->lba4 &= ~DEVH_HEAD;
+  if ( d->lba )
+    d->controller->lba4 &= ~DEVH_HEAD;
 
   if (d->controller->lba4 & DEVH_LBA) {
     d->controller->lba1 = d->offset & 0xFF;
     d->controller->lba2 = (d->offset >> 8) & 0xFF;
     d->controller->lba3 = (d->offset >> 16) & 0xFF;
-    d->controller->lba4 |= (d->offset >> 24) & DEVH_HEAD;
-  } else {
+
+    if ( d->lba )
+      d->controller->lba4 |= (d->offset >> 24) & DEVH_HEAD;
+
+  } 
+  
+  else 
+  {
     d->controller->lba1 = d->offset % d->sectors + 1;
     d->offset /= d->sectors;
-    d->controller->lba4 |= d->offset / (d->cylinders * d->sectors);
+
+    if ( d->lba )
+      d->controller->lba4 |= d->offset / (d->cylinders * d->sectors);
+
     d->offset %= (d->cylinders * d->sectors);
     d->controller->lba2 = d->offset & 0xFF;
     d->controller->lba3 = (d->offset >> 8) & 0xFF;
@@ -693,7 +703,10 @@ void IDE_write8(struct ide_controller *c, uint8_t r, uint8_t v)
       break;
     case IDE_lba_top:
       c->selected = (v & DEVH_DEV) ? 1 : 0;
-      c->lba4 = v & (DEVH_HEAD|/*DEVH_DEV|*/DEVH_LBA);
+
+      if ( d->lba ) 
+        c->lba4 = v & (DEVH_HEAD|/*DEVH_DEV|*/DEVH_LBA);
+
       break;
     case IDE_command_w:
       t->command = v;
@@ -803,6 +816,45 @@ printf ( "[HDD%d] cyl: %d, hds: %d, sec: %d\n", drive, d->cylinders, d->heads, d
 }
 #endif
 
+/* cryptodad */
+/* attach a floppy disk image .ST */
+int IDE_attach_st (struct ide_controller *c, int drive, int fd)
+{
+  struct ide_drive *d = &c->drive [drive];
+
+  if (d->present) 
+  {
+    printf("[IDE/FDD] Drive already attached.\n");
+    return -1;
+  }
+
+  d->fd = fd;
+  d->present = 1;
+  d->lba = 0;
+  d->header_present = 0;
+
+  d->heads = 1;
+  d->sectors = 9;
+  d->cylinders = 79;
+
+  d->controller->lba4 = 0;
+
+  uint64_t file_size = lseek(fd, 0, SEEK_END);
+  lseek(fd, 0, SEEK_SET);
+
+  if (file_size > 720 * 1024) {
+    printf ( "[IDE/FDD] Floppy image is too big\n" );
+    return -1;
+  }
+
+  ide_make_ident(drive, d->cylinders, d->heads, d->sectors, "PISTORM IDE FD", d->identify);
+
+  return 0;
+}
+
+
+
+
 // Attach a headerless HDD image to the controller
 int IDE_attach_hdf(struct ide_controller *c, int drive, int fd)
 {
@@ -842,17 +894,17 @@ int IDE_attach_hdf(struct ide_controller *c, int drive, int fd)
   }
 
   d->cylinders = (file_size / 512) / (d->sectors * d->heads);
-  if ( d->cylinders == 0 )
-    d->cylinders = 1;
+  //if ( d->cylinders == 0 )
+   // d->cylinders = 1;
 
   printf("[IDE/HDL] Cylinders: %d Heads: %d Sectors: %d - filesize = %d\n", d->cylinders, d->heads, d->sectors, file_size );
 
-  if (file_size >= 4 * 1000 * 1000) {
+  //if (file_size >= 4 * 1000 * 1000) {
    
     d->lba = 1;
-  }
+  //}
 
-  ide_make_ident(d->cylinders, d->heads, d->sectors, "PISTORM IDE DK", d->identify);
+  ide_make_ident(drive, d->cylinders, d->heads, d->sectors, "PISTORM IDE DK", d->identify);
 
   return 0;
 }
@@ -966,9 +1018,10 @@ static void padstr(char *str, const char *src, int len)
 	}
 }
 
-int ide_make_ident(uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *target)
+int ide_make_ident(int drive, uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *target)
 {
-#if (1)
+			 
+#if (0)
   uint16_t *ident = target;
   uint32_t sectors;
   char buf[40];
@@ -1041,7 +1094,7 @@ int ide_make_ident(uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *targe
   strncpy((char*)(p + 23), FW_VERSION, 8);
 	/* Use the same convention for the name as SCSI disks are using: The
 	 * first 8 characters should be the vendor, i.e. use 2 spaces here */
-	snprintf(buf, sizeof(buf), "%s%d %liM", name, 0,
+	snprintf(buf, sizeof(buf), "%s%d %liM", name, drive,
 	         //(long)(s->nb_sectors / (1024 * 1024 / 512 ))); //s->bs->sector_size)));
             (long)( oldsize / (1024 * 1024 / 512 ))); //s->bs->sector_size)));
 	//padstr((char *)(p + 27), buf, 40);
@@ -1050,10 +1103,10 @@ int ide_make_ident(uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *targe
 	put_le16(p + 47, 0x8000 | 1);//MAX_MULT_SECTORS);
 #endif
 	put_le16(p + 48, 1); /* dword I/O */
-	put_le16(p + 49, (1 << 11) | (1 << 9) | (1 << 8)); /* DMA and LBA supported */
-	put_le16(p + 51, 0x200); /* PIO transfer cycle */
-	put_le16(p + 52, 0x200); /* DMA transfer cycle */
-	put_le16(p + 53, 1 | (1 << 1) | (1 << 2)); /* words 54-58,64-70,88 are valid */
+	put_le16(p + 49, (1 << 9)); //(1 << 11) | (1 << 9) | (1 << 8)); /* DMA and LBA supported */
+	put_le16(p + 51, (240 << 8)); //0x200); /* PIO transfer cycle */
+	//put_le16(p + 52, 0x200); /* DMA transfer cycle */
+	put_le16(p + 53, 1);//1 | (1 << 1) | (1 << 2)); /* words 54-58,64-70,88 are valid */
 	put_le16(p + 54, c);
 	put_le16(p + 55, h);
 	put_le16(p + 56, s);
@@ -1062,16 +1115,16 @@ int ide_make_ident(uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *targe
 	put_le16(p + 58, oldsize >> 16);
 	//if (s->mult_sectors)
 	//	put_le16(p + 59, 0x100 | s->mult_sectors);
-	//put_le16(p + 60, s->nb_sectors);
-	//put_le16(p + 61, s->nb_sectors >> 16);
+	put_le16(p + 60, oldsize);//s->nb_sectors);
+	put_le16(p + 61, oldsize >> 16);//s->nb_sectors >> 16);
 	//put_le16(p + 63, 0x07); /* mdma0-2 supported */
-	put_le16(p + 65, 120);
-	put_le16(p + 66, 120);
-	put_le16(p + 67, 120);
-	put_le16(p + 68, 120);
-	put_le16(p + 80, 0xf0); /* ata3 -> ata6 supported */
-	put_le16(p + 81, 0x16); /* conforms to ata5 */
-	put_le16(p + 82, (1 << 14));
+	//put_le16(p + 65, 120);
+	//put_le16(p + 66, 120);
+	//put_le16(p + 67, 120);
+	//put_le16(p + 68, 120);
+	//put_le16(p + 80, 0xf0); /* ata3 -> ata6 supported */
+	//put_le16(p + 81, 0x16); /* conforms to ata5 */
+	//put_le16(p + 82, (1 << 14));
 	/* 13=flush_cache_ext,12=flush_cache,10=lba48 */
 	//put_le16(p + 83, (1 << 14) | (1 << 13) | (1 <<12) | (1 << 10));
 	//put_le16(p + 84, (1 << 14));
