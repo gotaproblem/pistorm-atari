@@ -10,15 +10,15 @@
 #include "pistorm-dev-enums.h"
 #include "platforms/platforms.h"
 #include "gpio/ps_protocol.h"
-#include "platforms/amiga/rtg/rtg.h"
-#include "platforms/amiga/piscsi/piscsi.h"
-#include "platforms/amiga/net/pi-net.h"
+//#include "platforms/amiga/rtg/rtg.h"
+#include "platforms/atari/piscsi/piscsi.h"
+//#include "platforms/amiga/net/pi-net.h"
 
 #include <linux/reboot.h>
 #include <sys/reboot.h>
 #include <endian.h>
 
-#include <interface/vmcs_host/vc_vchi_gencmd.h>
+//#include <interface/vmcs_host/vc_vchi_gencmd.h>
 
 #define DEBUG_PISTORM_DEVICE
 
@@ -40,8 +40,8 @@ static const char *op_type_names[4] = {
 extern uint32_t pistorm_dev_base;
 extern uint32_t do_reset;
 
-extern void adjust_ranges_amiga(struct emulator_config *cfg);
-extern uint8_t rtg_enabled, rtg_on, pinet_enabled, piscsi_enabled, load_new_config, end_signal;
+extern void adjust_ranges_atari(struct emulator_config *cfg);
+extern uint8_t piscsi_enabled, load_new_config, end_signal;
 extern struct emulator_config *cfg;
 extern int cpu_emulation_running;
 
@@ -60,9 +60,9 @@ static uint32_t pi_dbg_string[32];
 static uint32_t pi_cmd_result = 0, shutdown_confirm = 0xFFFFFFFF;
 
 static bool pi_cmd_init = false;
-static VCHI_INSTANCE_T vchi_instance;
-static VCHI_CONNECTION_T *vchi_connection = NULL;
-
+//static VCHI_INSTANCE_T vchi_instance;
+//static VCHI_CONNECTION_T *vchi_connection = NULL;
+/*
 static uint32_t grab_pi_temperature() {
     if (!pi_cmd_init) {
         vcos_init();
@@ -89,13 +89,14 @@ static uint32_t grab_pi_temperature() {
    }
    return atoi(ptr+1);
 }
+*/
 
-int32_t grab_amiga_string(uint32_t addr, uint8_t *dest, uint32_t str_max_len) {
+int32_t grab_atari_string(uint32_t addr, uint8_t *dest, uint32_t str_max_len) {
     int32_t r = get_mapped_item_by_address(cfg, addr);
     uint32_t index = 0;
 
     if (r == -1) {
-        DEBUG("[GRAB_AMIGA_STRING] No mapped range found for address $%.8X. Grabbing string data over the bus.\n", addr);
+        DEBUG("[GRAB_ATARI_STRING] No mapped range found for address $%.8X. Grabbing string data over the bus.\n", addr);
         do {
             dest[index] = (unsigned char)m68k_read_memory_8(addr + index);
             index++;
@@ -112,14 +113,14 @@ int32_t grab_amiga_string(uint32_t addr, uint8_t *dest, uint32_t str_max_len) {
         memset(dest, 0x00, str_max_len + 1);
         return -1;
     }
-    DEBUG("[GRAB_AMIGA_STRING] Grabbed string: %s\n", dest);
+    DEBUG("[GRAB_ATARI_STRING] Grabbed string: %s\n", dest);
     return (int32_t)strlen((const char*)dest);
 }
 
-int32_t amiga_transfer_file(uint32_t addr, char *filename) {
+int32_t atari_transfer_file(uint32_t addr, char *filename) {
     FILE *in = fopen(filename, "rb");
     if (in == NULL) {
-        DEBUG("[AMIGA_TRANSFER_FILE] Failed to open file %s for reading.\n", filename);
+        DEBUG("[ATARI_TRANSFER_FILE] Failed to open file %s for reading.\n", filename);
         return -1;
     }
     fseek(in, 0, SEEK_END);
@@ -129,7 +130,7 @@ int32_t amiga_transfer_file(uint32_t addr, char *filename) {
 
     fseek(in, 0, SEEK_SET);
     if (r == -1) {
-        DEBUG("[GRAB_AMIGA_STRING] No mapped range found for address $%.8X. Transferring file data over the bus.\n", addr);
+        DEBUG("[GRAB_ATARI_STRING] No mapped range found for address $%.8X. Transferring file data over the bus.\n", addr);
         uint8_t tmp_read = 0;
 
         for (uint32_t i = 0; i < filesize; i++) {
@@ -141,7 +142,7 @@ int32_t amiga_transfer_file(uint32_t addr, char *filename) {
         fread(dst, filesize, 1, in);
     }
     fclose(in);
-    DEBUG("[AMIGA_TRANSFER_FILE] Copied %d bytes to address $%.8X.\n", filesize, addr);
+    DEBUG("[ATARI_TRANSFER_FILE] Copied %d bytes to address $%.8X.\n", filesize, addr);
 
     return 0;
 }
@@ -202,14 +203,14 @@ void handle_pistorm_dev_write(uint32_t addr_, uint32_t val, uint8_t type) {
 
         case PI_CMD_TRANSFERFILE:
             DEBUG("[PISTORM-DEV] Write to TRANSFERFILE.\n");
-            if (pi_string[0] == 0 || grab_amiga_string(pi_string[0], (uint8_t *)tmp_string, 255) == -1)  {
+            if (pi_string[0] == 0 || grab_atari_string(pi_string[0], (uint8_t *)tmp_string, 255) == -1)  {
                 printf("[PISTORM-DEV] No or invalid filename for TRANSFERFILE. Aborting.\n");
                 pi_cmd_result = PI_RES_INVALIDVALUE;
             } else if (pi_ptr[0] == 0) {
                 printf("[PISTORM-DEV] Null pointer specified for TRANSFERFILE destination. Aborting.\n");
                 pi_cmd_result = PI_RES_INVALIDVALUE;
             } else {
-                if (amiga_transfer_file(pi_ptr[0], tmp_string) == -1) {
+                if (atari_transfer_file(pi_ptr[0], tmp_string) == -1) {
                     pi_cmd_result = PI_RES_FAILED;
                 } else {
                     pi_cmd_result = PI_RES_OK;
@@ -297,6 +298,7 @@ void handle_pistorm_dev_write(uint32_t addr_, uint32_t val, uint8_t type) {
                 }
             }
             break;
+#if (0)
         case PI_CMD_COPYRECT:
         case PI_CMD_COPYRECT_EX:
             if (pi_ptr[0] == 0 || pi_ptr[1] == 0) {
@@ -521,7 +523,7 @@ void handle_pistorm_dev_write(uint32_t addr_, uint32_t val, uint8_t type) {
             } else {
                 pi_cmd_result = PI_RES_NOCHANGE;
             }
-            adjust_ranges_amiga(cfg);
+            adjust_ranges_atari(cfg);
             break;
         case PI_CMD_RTG_SCALING:
             DEBUG("[PISTORM-DEV] Write to RTG_SCALING: %d\n", val);
@@ -560,8 +562,10 @@ void handle_pistorm_dev_write(uint32_t addr_, uint32_t val, uint8_t type) {
             } else {
                 pi_cmd_result = PI_RES_NOCHANGE;
             }
-            adjust_ranges_amiga(cfg);
+            adjust_ranges_atari(cfg);
             break;
+#endif
+
         case PI_CMD_PISCSI_CTRL:
             DEBUG("[PISTORM-DEV] Write to PISCSI_CTRL: ");
             switch(val) {
@@ -589,7 +593,7 @@ void handle_pistorm_dev_write(uint32_t addr_, uint32_t val, uint8_t type) {
                     break;
                 case PISCSI_CTRL_MAP:
                     DEBUG("MAP\n");
-                    if (pi_string[0] == 0 || grab_amiga_string(pi_string[0], (uint8_t *)tmp_string, 255) == -1)  {
+                    if (pi_string[0] == 0 || grab_atari_string(pi_string[0], (uint8_t *)tmp_string, 255) == -1)  {
                         printf("[PISTORM-DEV] Failed to grab string for PISCSI drive filename. Aborting.\n");
                         pi_cmd_result = PI_RES_FAILED;
                     } else {
@@ -634,12 +638,12 @@ void handle_pistorm_dev_write(uint32_t addr_, uint32_t val, uint8_t type) {
                     pi_cmd_result = PI_RES_INVALIDVALUE;
                     break;
             }
-            adjust_ranges_amiga(cfg);
+            adjust_ranges_atari(cfg);
             break;
-        
+#if (0)        
         case PI_CMD_KICKROM:
             DEBUG("[PISTORM-DEV] Write to KICKROM.\n");
-            if (pi_string[0] == 0 || grab_amiga_string(pi_string[0], (uint8_t *)tmp_string, 255) == -1)  {
+            if (pi_string[0] == 0 || grab_atari_string(pi_string[0], (uint8_t *)tmp_string, 255) == -1)  {
                 printf("[PISTORM-DEV] Failed to grab string KICKROM filename. Aborting.\n");
                 pi_cmd_result = PI_RES_FAILED;
             } else {
@@ -664,12 +668,12 @@ void handle_pistorm_dev_write(uint32_t addr_, uint32_t val, uint8_t type) {
                     }
                 }
             }
-            adjust_ranges_amiga(cfg);
+            adjust_ranges_atari(cfg);
             pi_string[0] = 0;
             break;
         case PI_CMD_EXTROM:
             DEBUG("[PISTORM-DEV] Write to EXTROM.\n");
-            if (pi_string[0] == 0 || grab_amiga_string(pi_string[0], (uint8_t *)tmp_string, 255) == -1)  {
+            if (pi_string[0] == 0 || grab_atari_string(pi_string[0], (uint8_t *)tmp_string, 255) == -1)  {
                 printf("[PISTORM-DEV] Failed to grab string EXTROM filename. Aborting.\n");
                 pi_cmd_result = PI_RES_FAILED;
             } else {
@@ -694,9 +698,10 @@ void handle_pistorm_dev_write(uint32_t addr_, uint32_t val, uint8_t type) {
                     }
                 }
             }
-            adjust_ranges_amiga(cfg);
+            adjust_ranges_atari(cfg);
             pi_string[0] = 0;
             break;
+#endif
 
         case PI_CMD_RESET:
             DEBUG("[PISTORM-DEV] System reset called, code %d\n", (val & 0xFFFF));
@@ -724,7 +729,7 @@ void handle_pistorm_dev_write(uint32_t addr_, uint32_t val, uint8_t type) {
             switch (val) {
                 case PICFG_LOAD:
                     DEBUG("LOAD\n");
-                    if (pi_string[0] == 0 || grab_amiga_string(pi_string[0], (uint8_t *)cfg_filename, 255) == -1) {
+                    if (pi_string[0] == 0 || grab_atari_string(pi_string[0], (uint8_t *)cfg_filename, 255) == -1) {
                         printf("[PISTORM-DEV] Failed to grab string for CONFIG filename. Aborting.\n");
                         pi_cmd_result = PI_RES_FAILED;
                     } else {
@@ -770,7 +775,7 @@ uint32_t handle_pistorm_dev_read(uint32_t addr_, uint8_t type) {
     switch((addr)) {
         case PI_CMD_FILESIZE:
             DEBUG("[PISTORM-DEV] %s read from FILESIZE.\n", op_type_names[type]);
-            if (pi_string[0] == 0 || grab_amiga_string(pi_string[0], (uint8_t *)tmp_string, 255) == -1)  {
+            if (pi_string[0] == 0 || grab_atari_string(pi_string[0], (uint8_t *)tmp_string, 255) == -1)  {
                 DEBUG("[PISTORM-DEV] Failed to grab string for FILESIZE command. Aborting.\n");
                 pi_cmd_result = PI_RES_FAILED;
                 pi_longword[0] = 0;
@@ -802,6 +807,7 @@ uint32_t handle_pistorm_dev_read(uint32_t addr_, uint8_t type) {
             DEBUG("[PISTORM-DEV] %s Read from SWREV\n", op_type_names[type]);
             return PIDEV_SWREV;
             break;
+#if (0)
         case PI_CMD_RTGSTATUS:
             DEBUG("[PISTORM-DEV] %s Read from RTGSTATUS\n", op_type_names[type]);
             return (rtg_on << 1) | rtg_enabled;
@@ -818,17 +824,21 @@ uint32_t handle_pistorm_dev_read(uint32_t addr_, uint8_t type) {
             DEBUG("[PISTORM-DEV] %s Read from NETSTATUS\n", op_type_names[type]);
             return pinet_enabled;
             break;
+#endif
+
         case PI_CMD_PISCSI_CTRL:
             DEBUG("[PISTORM-DEV] %s Read from PISCSI_CTRL\n", op_type_names[type]);
             return piscsi_enabled;
             break;
+#if (0)
         case PI_CMD_GET_FB:
             //DEBUG("[PISTORM-DEV] %s read from GET_FB: %.8X\n", op_type_names[type], rtg_get_fb());
             return rtg_get_fb();
             break;
         case PI_CMD_GET_TEMP:
-            return grab_pi_temperature();
+            return 25;//grab_pi_temperature();
             break;
+#endif
         case PI_DBG_VAL1: case PI_DBG_VAL2: case PI_DBG_VAL3: case PI_DBG_VAL4:
         case PI_DBG_VAL5: case PI_DBG_VAL6: case PI_DBG_VAL7: case PI_DBG_VAL8:
             DEBUG("[PISTORM-DEV] Read DEBUG VALUE %d (%d / $%.8X)\n", (addr - PI_DBG_VAL1) / 4, pi_dbg_val[(addr - PI_DBG_VAL1) / 4], pi_dbg_val[(addr - PI_DBG_VAL1) / 4]);

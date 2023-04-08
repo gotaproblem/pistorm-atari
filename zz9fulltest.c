@@ -29,7 +29,7 @@ extern volatile unsigned int *gpio;
 
 struct timespec f2;
 
-uint8_t gayle_int;
+//uint8_t gayle_int;
 uint32_t mem_fd;
 uint32_t errors = 0;
 uint8_t loop_tests = 0, total_errors = 0;
@@ -51,8 +51,8 @@ void ps_reinit() {
 
     usleep(1500);
 
-    write8(0xbfe201, 0x0101);       //CIA OVL
-	write8(0xbfe001, 0x0000);       //CIA OVL LOW
+   // write8(0xbfe201, 0x0101);       //CIA OVL
+	//write8(0xbfe001, 0x0000);       //CIA OVL LOW
 }
 
 unsigned int dump_read_8(unsigned int address) {

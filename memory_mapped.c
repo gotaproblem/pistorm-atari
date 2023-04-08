@@ -2,7 +2,7 @@
 
 #include "config_file/config_file.h"
 #include "m68k.h"
-#include "platforms/amiga/Gayle.h"
+//#include "platforms/amiga/Gayle.h"
 #include <endian.h>
 
 #define CHKRANGE(a, b, c) a >= (unsigned int)b && a < (unsigned int)(b + c)
@@ -23,55 +23,60 @@ extern uint8_t IDE_IDE_enabled;
 
 
 
-inline int handle_mapped_read(struct emulator_config *cfg, unsigned int addr, unsigned int *val, unsigned char type) {
+inline int handle_mapped_read ( struct emulator_config *cfg, unsigned int addr, unsigned int *val, unsigned char type ) 
+{
   unsigned char *read_addr = NULL;
 
-  for (int i = 0; i < MAX_NUM_MAPPED_ITEMS; i++) {
-    if (cfg->map_type[i] == MAPTYPE_NONE)
+  for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS; i++ ) 
+  //for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS && cfg->map_type[i] != MAPTYPE_NONE; i++ ) 
+  {
+    
+    if ( cfg->map_type[i] == MAPTYPE_NONE )
       continue;
-
-    //else if (ovl && (cfg->map_type[i] == MAPTYPE_ROM || cfg->map_type[i] == MAPTYPE_RAM_WTC)) {
-    else if ( (cfg->map_type[i] == MAPTYPE_ROM || cfg->map_type[i] == MAPTYPE_RAM_WTC)) {
-      if (cfg->map_mirror[i] != ((unsigned int)-1) && CHKRANGE(addr, cfg->map_mirror[i], cfg->map_size[i])) {
-        read_addr = cfg->map_data[i] + ((addr - cfg->map_mirror[i]) % cfg->rom_size[i]);
-        goto read_value;
+    /*
+    if ( (cfg->map_type[i] == MAPTYPE_ROM || cfg->map_type[i] == MAPTYPE_RAM_WTC)) 
+    {
+      if ( cfg->map_mirror[i] != ( (unsigned int)-1) && CHKRANGE(addr, cfg->map_mirror[i], cfg->map_size[i] ) ) 
+      {
+        read_addr = cfg->map_data[i] + ( (addr - cfg->map_mirror[i]) % cfg->rom_size[i] );
+        
+        break;
       }
     }
-    if (CHKRANGE_ABS(addr, cfg->map_offset[i], cfg->map_high[i])) {
+    */
+
+    if ( CHKRANGE_ABS ( addr, cfg->map_offset[i], cfg->map_high[i] ) ) 
+    {
       switch(cfg->map_type[i]) {
         case MAPTYPE_ROM:
           read_addr = cfg->map_data[i] + ((addr - cfg->map_offset[i]) % cfg->rom_size[i]);
-          goto read_value;
+        
           break;
         case MAPTYPE_RAM:
         case MAPTYPE_RAM_WTC:
         case MAPTYPE_RAM_NOALLOC:
         case MAPTYPE_FILE:
           read_addr = cfg->map_data[i] + (addr - cfg->map_offset[i]);
-          goto read_value;
+         
           break;
         case MAPTYPE_REGISTER:
-          if (cfg->platform && cfg->platform->register_read) {
-            /* cryptodad IDE */
-            if ( IDE_IDE_enabled && (addr >= 0xfff00000 && addr < 0xfff00040) )
-            {
-              addr &= 0x00ffffff;
-            }
+          if (cfg->platform && cfg->platform->register_read) 
+          {
             if (cfg->platform->register_read(addr, type, &target) != -1) {
-              //printf ( "%s: target = 0x%x\n", __func__, target );
               *val = target;
               return 1;
             }
           }
-          return -1;
+       
           break;
       }
     }
   }
 
-  return -1;
+  if ( read_addr == NULL )
+    return -1;
 
-read_value:;
+//read_value:;
   switch(type) {
     case OP_TYPE_BYTE:
       *val = read_addr[0];
@@ -97,20 +102,26 @@ inline int handle_mapped_write(struct emulator_config *cfg, unsigned int addr, u
   int res = -1;
   unsigned char *write_addr = NULL;
 
-  for (int i = 0; i < MAX_NUM_MAPPED_ITEMS; i++) {
+  for (int i = 0; i < MAX_NUM_MAPPED_ITEMS; i++) 
+  {
     if (cfg->map_type[i] == MAPTYPE_NONE)
       continue;
-
+    /*
     //else if (ovl && cfg->map_type[i] == MAPTYPE_RAM_WTC) {
-    else if ( cfg->map_type[i] == MAPTYPE_RAM_WTC) {
-      if (cfg->map_mirror[i] != ((unsigned int)-1) && CHKRANGE(addr, cfg->map_mirror[i], cfg->map_size[i])) {
+    else if ( cfg->map_type[i] == MAPTYPE_RAM_WTC) 
+    {
+      if (cfg->map_mirror[i] != ((unsigned int)-1) && CHKRANGE(addr, cfg->map_mirror[i], cfg->map_size[i])) 
+      {
         write_addr = cfg->map_data[i] + ((addr - cfg->map_mirror[i]) % cfg->rom_size[i]);
         res = -1;
         goto write_value;
       }
     }
-    else if (CHKRANGE_ABS(addr, cfg->map_offset[i], cfg->map_high[i])) {
-      switch(cfg->map_type[i]) {
+    */
+    if ( CHKRANGE_ABS ( addr, cfg->map_offset[i], cfg->map_high[i] ) ) 
+    {
+      switch(cfg->map_type[i]) 
+      {
         case MAPTYPE_ROM:
           return 1;
           break;
@@ -128,12 +139,8 @@ inline int handle_mapped_write(struct emulator_config *cfg, unsigned int addr, u
           goto write_value;
           break;
         case MAPTYPE_REGISTER:
-          if (cfg->platform && cfg->platform->register_write) {
-            /* cryptodad IDE */
-            if ( IDE_IDE_enabled && (addr >= 0xfff00000 && addr < 0xfff00040) )
-            {
-              addr &= 0x00ffffff;
-            }
+          if (cfg->platform && cfg->platform->register_write) 
+          {
             return cfg->platform->register_write(addr, value, type);
           }
           break;

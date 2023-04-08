@@ -65,6 +65,7 @@
 /* ======================================================================== */
 
 /* Turn ON if you want to use the following M68K variants */
+/* cryptodad DO NOT DISABLE ANY - messes up cycle timinmgs if any are disabled */
 #define M68K_EMULATE_010            OPT_ON
 #define M68K_EMULATE_EC020          OPT_ON
 #define M68K_EMULATE_020            OPT_ON
@@ -174,7 +175,7 @@
  * access a word or longword at an odd address.
  * NOTE: This is only emulated properly for 68000 mode.
  */
-#define M68K_EMULATE_ADDRESS_ERROR  OPT_ON //OPT_OFF
+#define M68K_EMULATE_ADDRESS_ERROR  OPT_OFF //OPT_ON //OPT_OFF
 
 
 /* Turn ON to enable logging of illegal instruction calls.
@@ -185,8 +186,8 @@
 #define M68K_LOG_1010_1111          OPT_OFF
 #define M68K_LOG_FILEHANDLE         some_file_handle
 
-
-#define M68K_EMULATE_PMMU   OPT_OFF
+/* cryptodad enabling this causes BERR for 68030 */
+#define M68K_EMULATE_PMMU           OPT_OFF
 
 
 /* ----------------------------- COMPATIBILITY ---------------------------- */
@@ -199,7 +200,7 @@
 /* If ON, the enulation core will use 64-bit integers to speed up some
  * operations.
 */
-#define M68K_USE_64_BIT  OPT_ON
+#define M68K_USE_64_BIT             OPT_ON
 
 
 #include "emulator.h"

@@ -15,6 +15,9 @@ void adjust_IDE_1200();
 #define IDESIZE 0x40 //0x070000
 //#define IDEMASK 0xd800ff //0xDF0000
 
+#define BLITTERBASE 0xff8a00
+#define BLITTERSIZE 0x3e
+
 #define CLOCKBASE 0xDC0000
 #define CLOCKSIZE 0x010000
 #define CLOCKMASK 0x00FFFF

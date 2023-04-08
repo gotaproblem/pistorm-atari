@@ -12,7 +12,7 @@
 #include "gpio/ps_protocol.h"
 #include "piscsi-enums.h"
 #include "piscsi.h"
-#include "platforms/amiga/hunk-reloc.h"
+#include "platforms/atari/hunk-reloc.h"
 
 #define BE(val) be32toh(val)
 #define BE16(val) be16toh(val)
@@ -79,7 +79,7 @@ void piscsi_init() {
     }
 
     if (piscsi_rom_ptr == NULL) {
-        FILE *in = fopen("./platforms/amiga/piscsi/piscsi.rom", "rb");
+        FILE *in = fopen("./platforms/atari/piscsi/piscsi.rom", "rb");
         if (in == NULL) {
             printf("[PISCSI] Could not open PISCSI Boot ROM file for reading!\n");
             // Zero out the boot ROM offset from the autoconfig ROM.
@@ -377,7 +377,7 @@ void piscsi_map_drive(char *filename, uint8_t index) {
         printf("[!!!PISCSI] The disk image %s is a UAE Single Partition Hardfile!\n", filename);
         printf("[!!!PISCSI] WARNING: PiSCSI does NOT support UAE Single Partition Hardfiles!\n");
         printf("[!!!PISCSI] PLEASE check the PiSCSI readme file in the GitHub repo for more information.\n");
-        printf("[!!!PISCSI] If this is merely an empty or placeholder file you've created to partition and format on the Amiga, please disregard this warning message.\n");
+        printf("[!!!PISCSI] If this is merely an empty or placeholder file you've created to partition and format on the Atari, please disregard this warning message.\n");
     }
 
     struct piscsi_dev *d = &devs[index];

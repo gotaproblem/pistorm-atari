@@ -675,7 +675,7 @@ void IDE_write8(struct ide_controller *c, uint8_t r, uint8_t v)
     }
     /* Not clear this is the right emulation */
     if (d->present == 0 && r != IDE_lba_top) {
-      ide_fault(d, "not present");
+      //ide_fault(d, "not present");
       return;
     }
   }
@@ -1088,8 +1088,8 @@ int ide_make_ident(int drive, uint16_t c, uint8_t h, uint8_t s, char *name, uint
 	//padstr((char *)(p + 10), buf, 20); /* serial number */
   strncpy((char*)(p + 10), buf, 20);
 	//put_le16(p + 20, 3); /* XXX: retired, remove ? */
-	//put_le16(p + 21, 512); /* cache size in sectors */
-	//put_le16(p + 22, 4); /* ecc bytes */
+	put_le16(p + 21, 512); /* cache size in sectors */
+	put_le16(p + 22, 4); /* ecc bytes */
 	//padstr((char *)(p + 23), FW_VERSION, 8); /* firmware version */
   strncpy((char*)(p + 23), FW_VERSION, 8);
 	/* Use the same convention for the name as SCSI disks are using: The
@@ -1105,18 +1105,19 @@ int ide_make_ident(int drive, uint16_t c, uint8_t h, uint8_t s, char *name, uint
 	put_le16(p + 48, 1); /* dword I/O */
 	put_le16(p + 49, (1 << 9)); //(1 << 11) | (1 << 9) | (1 << 8)); /* DMA and LBA supported */
 	put_le16(p + 51, (240 << 8)); //0x200); /* PIO transfer cycle */
-	//put_le16(p + 52, 0x200); /* DMA transfer cycle */
-	put_le16(p + 53, 1);//1 | (1 << 1) | (1 << 2)); /* words 54-58,64-70,88 are valid */
+	put_le16(p + 52, 0x200); /* DMA transfer cycle */
+	put_le16(p + 53, 1 | (1 << 1) | (1 << 2)); /* words 54-58,64-70,88 are valid */
 	put_le16(p + 54, c);
 	put_le16(p + 55, h);
 	put_le16(p + 56, s);
-	
+
 	put_le16(p + 57, oldsize);
 	put_le16(p + 58, oldsize >> 16);
 	//if (s->mult_sectors)
 	//	put_le16(p + 59, 0x100 | s->mult_sectors);
 	put_le16(p + 60, oldsize);//s->nb_sectors);
 	put_le16(p + 61, oldsize >> 16);//s->nb_sectors >> 16);
+
 	//put_le16(p + 63, 0x07); /* mdma0-2 supported */
 	//put_le16(p + 65, 120);
 	//put_le16(p + 66, 120);
@@ -1125,6 +1126,7 @@ int ide_make_ident(int drive, uint16_t c, uint8_t h, uint8_t s, char *name, uint
 	//put_le16(p + 80, 0xf0); /* ata3 -> ata6 supported */
 	//put_le16(p + 81, 0x16); /* conforms to ata5 */
 	//put_le16(p + 82, (1 << 14));
+
 	/* 13=flush_cache_ext,12=flush_cache,10=lba48 */
 	//put_le16(p + 83, (1 << 14) | (1 << 13) | (1 <<12) | (1 << 10));
 	//put_le16(p + 84, (1 << 14));
@@ -1134,6 +1136,7 @@ int ide_make_ident(int drive, uint16_t c, uint8_t h, uint8_t s, char *name, uint
 	//put_le16(p + 87, (1 << 14));
 	//put_le16(p + 88, 0x3f | (1 << 13)); /* udma5 set and supported */
 	//put_le16(p + 93, 1 | (1 << 14) | 0x2000);
+
 	/* LBA-48 sector count */
 	//put_le16(p + 100, s->nb_sectors);
 	//put_le16(p + 101, s->nb_sectors >> 16);

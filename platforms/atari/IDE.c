@@ -64,10 +64,10 @@ static struct IDE_controller *atariide0 = NULL;
 //uint8_t gary_cfg[8];
 
 //uint8_t ramsey_cfg = 0x08;
-static uint8_t ramsey_id = RAMSEY_REV7;
+//static uint8_t ramsey_id = RAMSEY_REV7;
 
-int ataricounter;
-static uint8_t IDE_irq, IDE_cs, IDE_cs_mask, IDE_cfg;
+//int ataricounter;
+//static uint8_t IDE_cs, IDE_cs_mask, //IDE_cfg; // IDE_irq
 int atarifd;
 
 //uint8_t rtc_type = RTC_TYPE_RICOH;
@@ -78,9 +78,9 @@ char *atari_image_file[IDE_MAX_HARDFILES];
 //unsigned char cdtv_sram[32 * SIZE_KILO];
 
 //uint8_t IDE_a4k = 0xA0;
-uint16_t IDE_a4k_irq = 0;
+//uint16_t IDE_a4k_irq = 0;
 //uint8_t IDE_a4k_int = 0;
-uint8_t IDE_int = 0;
+//uint8_t IDE_int = 0;
 
 //uint32_t IDE_IDE_mask = ~GDATA;
 //uint32_t IDE_IDE_base = GDATA;
@@ -93,15 +93,15 @@ struct ide_controller *get_ide(int index) {
   return atariide0;
 }
 
-void adjust_IDE_4000() {
+//void adjust_IDE_4000() {
   //IDE_IDE_base = IDE_IDE_BASE_A4000;
   //IDE_IDE_adj = 2;
   //IDE_a4k_int = 1;
   //printf ("IDE add set to 0x%x\n", IDE_IDE_base );
-}
+//}
 
-void adjust_IDE_1200() {
-}
+//void adjust_IDE_1200() {
+//}
 
 void set_hard_drive_image_file_atari(uint8_t index, char *filename) {
   if (atari_image_file[index] != NULL)
@@ -110,7 +110,8 @@ void set_hard_drive_image_file_atari(uint8_t index, char *filename) {
   strcpy(atari_image_file[index], filename);
 }
 
-void InitIDE(void) {
+void InitIDE (void) 
+{
   uint8_t num_IDE_drives = 0;
 
   for (int i = 0; i < IDE_MAX_HARDFILES; i++) 
@@ -147,7 +148,7 @@ void InitIDE(void) {
           printf("[HDD%d] Attaching HDD image %s.\n", i, atari_image_file[i]);
           //if (strcmp(atari_image_file[i] + (strlen(atari_image_file[i]) - 3), "img") != 0) {
             //printf("No header present on HDD image %s.\n", atari_image_file[i]);
-            IDE_attach_hdf(atariide0, i, atarifd);
+            IDE_attach_hdf ( atariide0, i, atarifd );
             num_IDE_drives++;
           //}
           //else {
@@ -160,10 +161,12 @@ void InitIDE(void) {
       }
     }
   }
-  if (atariide0)
-    IDE_reset_begin(atariide0);
 
-  if (num_IDE_drives == 0) {
+  if (atariide0)
+    IDE_reset_begin (atariide0);
+
+  if (num_IDE_drives == 0) 
+  {
     // No IDE drives mounted, disable IDE component of IDE
     printf("No IDE drives mounted, disabling IDE component.\n");
     IDE_IDE_enabled = 0;
@@ -172,8 +175,10 @@ void InitIDE(void) {
 
 static uint8_t IDE_action = 0;
 
-void writeIDEB(unsigned int address, unsigned int value) {
-  if (atariide0) {
+void writeIDEB(unsigned int address, unsigned int value) 
+{
+  if (atariide0) 
+  {
     //if (address >= IDEBASE && address < (IDEBASE + IDESIZE) ) {
 #if (1)
       switch ((address - IDEBASE)){//IDE_IDE_base) - IDE_IDE_adj) {

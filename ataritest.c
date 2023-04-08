@@ -113,58 +113,7 @@ void ps_reinit()
     ps_pulse_reset();
 
     usleep(1500);
-
-    /* assuming this is for AMIGA ??? nothing in ATARI memory map */
-    //write8(0xbfe201, 0x0101);       //CIA OVL
-	//write8(0xbfe001, 0x0000);       //CIA OVL LOW
 }
-/*
-unsigned int dump_read_8(unsigned int address) {
-    uint32_t bwait = 10000;
-
-    *(gpio + 0) = GPFSEL0_OUTPUT;
-    *(gpio + 1) = GPFSEL1_OUTPUT;
-    *(gpio + 2) = GPFSEL2_OUTPUT;
-
-    *(gpio + 7) = ((address & 0xffff) << 8) | (REG_ADDR_LO << PIN_A0);
-    *(gpio + 7) = 1 << PIN_WR;
-    *(gpio + 10) = 1 << PIN_WR;
-    *(gpio + 10) = 0xffffec;
-
-    *(gpio + 7) = ((0x0300 | (address >> 16)) << 8) | (REG_ADDR_HI << PIN_A0);
-    *(gpio + 7) = 1 << PIN_WR;
-    *(gpio + 10) = 1 << PIN_WR;
-    *(gpio + 10) = 0xffffec;
-
-    *(gpio + 0) = GPFSEL0_INPUT;
-    *(gpio + 1) = GPFSEL1_INPUT;
-    *(gpio + 2) = GPFSEL2_INPUT;
-
-    *(gpio + 7) = (REG_DATA << PIN_A0);
-    *(gpio + 7) = 1 << PIN_RD;
-
-
-    //while (bwait && (*(gpio + 13) & (1 << PIN_TXN_IN_PROGRESS))) {
-    while ( (*(gpio + 13) & (1 << PIN_TXN_IN_PROGRESS))) {
-       // bwait--;
-    }
-
-    unsigned int value = *(gpio + 13);
-
-    *(gpio + 10) = 0xffffec;
-
-    value = (value >> 8) & 0xffff;
-
-    //if ( !bwait ) {
-    //    ps_reinit();
-    //}
-
-    if ((address & 1) == 0)
-        return (value >> 8) & 0xff;  // EVEN, A0=0,UDS
-    else
-        return value & 0xff;  // ODD , A0=1,LDS
-}
-*/
 
 
 int check_emulator() 
@@ -232,6 +181,7 @@ int main(int argc, char *argv[])
     signal(SIGINT, sigint_handler);
 
     ps_setup_protocol();
+    //exit(1);
     ps_reset_state_machine();
     ps_pulse_reset();
 
@@ -297,8 +247,10 @@ int main(int argc, char *argv[])
 
             clearmem ( testSize * SIZE_KILO, &duration, clrPattern );
             
-            printf ( "\nATARI ST RAM cleared in %d ms @ %.2f KB/s\n\n", 
-                duration, ( (float)((testSize * 1024) - OFFSET) / (float)duration * 1000.0) / 1024 );
+            printf ( "\nATARI ST RAM cleared in %d ms @ %.2f MB/s\n\n", 
+                //duration, ( (float)((testSize * 1024) - OFFSET) / (float)duration * 1000.0) / 1024 );
+                duration, ( ( 1.0 / (float)duration ) * testSize ) );
+
         }
 
         if ( cmdPoke )
@@ -495,15 +447,11 @@ void memspeed ( uint32_t length )
 
     printf ( "Memory Speed Test\n" );
 
-    address = 0x0;
+    /* READ */
     clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-    for ( uint32_t n = 0; n < length; n += 2 )
-    {
+    for ( address =  0; address < length; address += 2 )
         read16 ( address );
-
-        address += 2;
-    }
 
     clock_gettime ( CLOCK_REALTIME, &tmsEnd );
 
@@ -514,16 +462,11 @@ void memspeed ( uint32_t length )
         ( 1.0 / ( (float)(nanoEnd - nanoStart) ) * length ) / 1024 );     /* MB/s */
 
 
-
-    address = 0x0;
+    /* WRITE */
     clock_gettime ( CLOCK_REALTIME, &tmsStart );
     
-    for ( uint32_t n = 0; n < length; n += 2 ) {
-
+    for ( address = 0; address < length; address += 2 )
         write16 (address, 0x5a5a);
-
-        address += 2;
-    }
 
     clock_gettime ( CLOCK_REALTIME, &tmsEnd );
 
@@ -531,7 +474,6 @@ void memspeed ( uint32_t length )
     nanoEnd = (tmsEnd.tv_sec * 1000) + (tmsEnd.tv_nsec / 1000000);
 
     printf ( "WRITE: %d ms = %.2f MB/s\n", (nanoEnd - nanoStart), 
-       // (( (float)(length / 2) / (float)(nanoEnd - nanoStart)) * 1000.0) / 1024 / 1024 );     /* KB/s */
         ( 1.0 / ( (float)(nanoEnd - nanoStart) ) * length ) / 1024 );     /* MB/s */
 }
 
@@ -1612,7 +1554,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
         thisTestErrors == 1 ? "error" : "errors",
         (nanoEnd - nanoStart), 
        // (( (float)calcLength / (float)(nanoEnd - nanoStart)) * 1000.0) / 1024 );     /* KB/s */
-         ( 1.0 / ( (float)(nanoEnd - nanoStart) ) * length ) / 1024 );     /* MB/s */
+         ( 1.0 / ( (float)(nanoEnd - nanoStart) ) * calcLength ) / 1024 );     /* MB/s */
 
         
     

@@ -24,9 +24,9 @@ int get_platform_index(char *name) {
     return -1;
 }
 
-void create_platform_amiga(struct platform_config *cfg, char *subsys);
+//void create_platform_amiga(struct platform_config *cfg, char *subsys);
 void create_platform_atari(struct platform_config *cfg, char *subsys);
-void create_platform_mac68k(struct platform_config *cfg, char *subsys);
+//void create_platform_mac68k(struct platform_config *cfg, char *subsys);
 void create_platform_dummy(struct platform_config *cfg, char *subsys);
 
 struct platform_config *make_platform_config(char *name, char *subsys) {
@@ -50,12 +50,12 @@ struct platform_config *make_platform_config(char *name, char *subsys) {
     memset(cfg, 0x00, sizeof(struct platform_config));
 
     switch(platform_id) {
-        case PLATFORM_AMIGA:
-            create_platform_amiga(cfg, subsys);
-            break;
-        case PLATFORM_MAC:
-            create_platform_mac68k(cfg, subsys);
-            break;
+        //case PLATFORM_AMIGA:
+        //    create_platform_amiga(cfg, subsys);
+        //    break;
+        //case PLATFORM_MAC:
+        //    create_platform_mac68k(cfg, subsys);
+        //    break;
         case PLATFORM_ATARI:
             create_platform_atari(cfg, subsys);
             break;

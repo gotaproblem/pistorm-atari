@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#include "platforms/amiga/hunk-reloc.h"
+#include "platforms/atari/hunk-reloc.h"
 
 #define	TDF_EXTCOM (1<<15)
 

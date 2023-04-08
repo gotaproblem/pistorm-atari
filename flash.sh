@@ -10,8 +10,19 @@ then
     echo "openocd is not installed, please run \"sudo apt install openocd\""
     exit 1
 fi
+
+# fpga jtag
+# tck
+raspi-gpio set 26 pn
+# tms
+raspi-gpio set 24 pn
+# tdi
+raspi-gpio set 27 pn
+# tdo
+raspi-gpio set 25 pu
+
 echo -ne "Detecting CPLD... "
-version=$(sudo openocd -f nprog/detect.cfg 2>/dev/null | awk 'FNR == 3 { print $4 }')
+version=$(sudo openocd -f nprog/detect.cfg | awk 'FNR == 3 { print $4 }')
 if [ $? -ne 0 ]
 then
 	echo "Error detecting CPLD."
@@ -20,7 +31,7 @@ fi
 case $version in
 	"0x020a10dd")
 		echo "EPM240 detected!"
-		./nprog_240.sh
+		./nprog_pi4.sh #./nprog_240.sh
 		;;
 	"0x020a20dd")
 		echo "EPM570 detected!"

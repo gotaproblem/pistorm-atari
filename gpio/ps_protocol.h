@@ -31,8 +31,8 @@
 #define STATUS_SHIFT_IPL 13
 
 //#define BCM2708_PERI_BASE 0x20000000  // pi0-1
-//#define BCM2708_PERI_BASE	0xFE000000  // pi4
-#define BCM2708_PERI_BASE 0x3F000000  // pi3
+#define BCM2708_PERI_BASE	0xFE000000  // pi4
+//#define BCM2708_PERI_BASE 0x3F000000  // pi3
 #define BCM2708_PERI_SIZE 0x01000000
 
 #define GPIO_ADDR 0x200000 /* GPIO controller */
@@ -158,13 +158,13 @@ static inline uint32_t ps_read_16_ex(volatile uint32_t *gpio, uint32_t address) 
     return value;
 }
 
-unsigned int ps_read_8(unsigned int address);
-unsigned int ps_read_16(unsigned int address);
-unsigned int ps_read_32(unsigned int address);
+uint8_t ps_read_8(uint32_t address);
+uint16_t ps_read_16(uint32_t address);
+uint32_t ps_read_32(uint32_t address);
 
-void ps_write_8(unsigned int address, unsigned int data);
-void ps_write_16(unsigned int address, unsigned int data);
-void ps_write_32(unsigned int address, unsigned int data);
+void ps_write_8(uint32_t address, uint16_t data);
+void ps_write_16(uint32_t address, uint16_t data);
+void ps_write_32(uint32_t address, uint32_t data);
 
 unsigned int ps_read_status_reg();
 void ps_write_status_reg(unsigned int value);
@@ -177,6 +177,7 @@ void ps_pulse_reset();
 /* cryptodad */
 #define PS_CNF_CPU 0x0001
 void ps_config ();
+void ps_berrIAK ( uint32_t, int );
 
 unsigned int ps_get_ipl_zero();
 
@@ -202,5 +203,20 @@ static inline uint32_t ps_read_32_ex(volatile uint32_t *gpio, uint32_t address) 
 #define read_reg ps_read_status_reg
 
 #define gpio_get_irq ps_get_ipl_zero
+
+
+/* cryptodad */
+typedef struct stats {
+  uint32_t wstatus;
+  uint32_t w16;
+  uint32_t w8;
+  uint32_t rstatus;
+  uint32_t r16;
+  uint32_t r8;
+  uint32_t wtotal;
+  uint32_t rtotal;
+} t_stats;
+
+
 
 #endif /* _PS_PROTOCOL_H */
