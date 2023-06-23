@@ -9,8 +9,7 @@ MAINFILES        = emulator.c \
 	platforms/atari/atari-platform.c \
 	platforms/atari/atari-registers.c \
 	platforms/atari/IDE.c \
-	platforms/atari/idedriver.c \
-	platforms/atari/blitter.c 
+	platforms/atari/idedriver.c
 #	platforms/atari/pistorm-dev/pistorm-dev.c
 #	platforms/atari/hunk-reloc.c \
 #	platforms/atari/piscsi/piscsi.c \

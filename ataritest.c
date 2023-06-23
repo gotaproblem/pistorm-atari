@@ -904,7 +904,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                 printf ( "%-20sRunning ", testStr );
 
                             d32 = read8 (add);
-                            d32 |= (be16toh ( read16 ( (t_a32)(add.address + 1) ) << 8) );
+                            d32 |= (be16toh ( read16 ( (t_a32)(add.address + 1) ) ) << 8);
                             d32 |= (read8 ( (t_a32)(add.address + 3) ) << 24 );
                             
                             if ( d32 != *( (uint32_t *) &garbagePtr [n] ) )

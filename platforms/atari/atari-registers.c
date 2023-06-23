@@ -7,7 +7,7 @@
 
 uint8_t atari_rtc_emulation_enabled = 1;
 extern uint8_t IDE_emulation_enabled;
-extern uint8_t Blitter_enabled;
+//extern uint8_t Blitter_enabled;
 
 
 void configure_rtc_emulation_atari(uint8_t enabled) {
@@ -48,7 +48,7 @@ int handle_register_read_atari(unsigned int addr, unsigned char type, unsigned i
             }
         }
     }
-
+/*
     else if ( addr >= BLITTERBASE && addr < (BLITTERBASE + BLITTERSIZE) ) 
     {
         if (Blitter_enabled) 
@@ -57,7 +57,7 @@ int handle_register_read_atari(unsigned int addr, unsigned char type, unsigned i
             return 1;
         }
     }
-    
+*/
     return -1;
 }
 
