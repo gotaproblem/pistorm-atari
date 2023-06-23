@@ -7,7 +7,7 @@
 #include <endian.h>
 #include "platforms/platforms.h"
 #include "gpio/ps_protocol.h"
-
+/*
 void dump_range_to_file(uint32_t addr, uint32_t size, char *filename) {
     FILE *out = fopen(filename, "wb+");
     if (out == NULL) {
@@ -40,3 +40,4 @@ uint8_t *dump_range_to_memory(uint32_t addr, uint32_t size) {
     printf ("[SHARED-DUMP_RANGE_TO_FILE] Memory range copied to RAM.\n");
     return mem;
 }
+*/

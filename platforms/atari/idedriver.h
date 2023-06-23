@@ -75,7 +75,7 @@ void IDE_write16(struct ide_controller *c, uint8_t r, uint16_t v);
 uint8_t ide_read_latched(struct ide_controller *c, uint8_t r);
 void ide_write_latched(struct ide_controller *c, uint8_t r, uint8_t v);
 
-struct ide_controller *ide_allocate(const char *name);
+struct ide_controller *IDE_allocate(const char *name);
 int IDE_attach(struct ide_controller *c, int drive, int fd);
 int ide_attach_st(struct ide_controller *c, int drive, int fd);
 int ide_attach_hdf(struct ide_controller *c, int drive, int fd);

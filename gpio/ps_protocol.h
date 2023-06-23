@@ -90,7 +90,7 @@
 #define END_TXN \
   *(gpio + 10) = 0xFFFFEC;
 
-
+/*
 static inline void ps_write_8_ex(volatile uint32_t *gpio, uint32_t address, uint32_t data) {
   if (address & 0x01) {
     data &= 0xFF; // ODD , A0=1,LDS
@@ -127,7 +127,7 @@ static inline uint32_t ps_read_8_ex(volatile uint32_t *gpio, uint32_t address) {
     GPIO_WRITEREG(REG_ADDR_LO, (address & 0xFFFF));
     GPIO_WRITEREG(REG_ADDR_HI, (0x0300 |(address >> 16)));
 
-    asm("nop"); asm("nop");
+    //asm("nop"); asm("nop");
     GPFSEL_INPUT;
     GPIO_PIN_RD;
 
@@ -157,16 +157,34 @@ static inline uint32_t ps_read_16_ex(volatile uint32_t *gpio, uint32_t address) 
 
     return value;
 }
+*/
 
-uint8_t ps_read_8(uint32_t address);
-uint16_t ps_read_16(uint32_t address);
-uint32_t ps_read_32(uint32_t address);
+typedef union 
+{
+  struct 
+  {
+    uint16_t lo;
+    uint16_t hi;
+  };
+  uint32_t address;
 
-void ps_write_8(uint32_t address, uint16_t data);
-void ps_write_16(uint32_t address, uint16_t data);
-void ps_write_32(uint32_t address, uint32_t data);
+} t_a32;
 
-unsigned int ps_read_status_reg();
+//uint8_t ps_read_8(uint32_t address);
+//uint16_t ps_read_16(uint32_t address);
+//uint32_t ps_read_32(uint32_t address);
+uint8_t ps_read_8(t_a32 address);
+uint16_t ps_read_16(t_a32 address);
+uint32_t ps_read_32(t_a32 address);
+
+//void ps_write_8(uint32_t address, uint16_t data);
+void ps_write_8(t_a32 address, uint16_t data);
+//void ps_write_16(uint32_t address, uint16_t data);
+void ps_write_16(t_a32 address, uint16_t data);
+//void ps_write_32(uint32_t address, uint32_t data);
+void ps_write_32(t_a32 address, uint32_t data);
+
+uint16_t ps_read_status_reg();
 void ps_write_status_reg(unsigned int value);
 
 void ps_setup_protocol();
@@ -188,7 +206,7 @@ unsigned int ps_get_ipl_zero();
 #define write8 ps_write_8
 #define write16 ps_write_16
 #define write32 ps_write_32
-
+/*
 static inline void ps_write_32_ex(volatile uint32_t *gpio, uint32_t address, uint32_t data) {
     ps_write_16_ex(gpio, address, data >> 16);
     ps_write_16_ex(gpio, address + 2, data);
@@ -197,7 +215,7 @@ static inline void ps_write_32_ex(volatile uint32_t *gpio, uint32_t address, uin
 static inline uint32_t ps_read_32_ex(volatile uint32_t *gpio, uint32_t address) {
     return (ps_read_16_ex(gpio, address) << 16) | ps_read_16_ex(gpio, address + 2);
 }
-
+*/
 
 #define write_reg ps_write_status_reg
 #define read_reg ps_read_status_reg
@@ -217,6 +235,8 @@ typedef struct stats {
   uint32_t rtotal;
 } t_stats;
 
-
+/* cryptodad - m68kcpu.h uses this - only beneficial with 68020 */
+//#define CHIP_FASTPATH
+//#define FASTPATH_UPPER 0x400000 //0x200000
 
 #endif /* _PS_PROTOCOL_H */

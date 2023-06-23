@@ -11,18 +11,24 @@
 #include "hunk-reloc.h"
 //#include "net/pi-net-enums.h"
 //#include "net/pi-net.h"
-#include "piscsi/piscsi-enums.h"
-#include "piscsi/piscsi.h"
+//#include "piscsi/piscsi-enums.h"
+//#include "piscsi/piscsi.h"
 //#include "ahi/pi_ahi.h"
 //#include "ahi/pi-ahi-enums.h"
 #include "pistorm-dev/pistorm-dev-enums.h"
 #include "pistorm-dev/pistorm-dev.h"
 #include "platforms/platforms.h"
-#include "platforms/shared/rtc.h"
+//#include "platforms/shared/rtc.h"
 //#include "rtg/rtg.h"
 //#include "a314/a314.h"
 #include "platforms/atari/atari-registers.h"
 
+#define DEBUGPRINT 0
+#if DEBUGPRINT
+#define DEBUG_PRINTF(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+#else
+#define DEBUG_PRINTF(fmt, ...) ;
+#endif
 
 #ifdef DEBUG_ATARI_PLATFORM
 #define DEBUG printf
@@ -52,35 +58,39 @@ extern uint8_t rtc_type;
 #define min(a, b) (a < b) ? a : b
 #define max(a, b) (a > b) ? a : b
 
+#ifdef PISCSI
 uint8_t piscsi_enabled = 0;
+extern uint32_t piscsi_base;
+#endif
 //uint8_t a314_emulation_enabled = 0, a314_initialized = 0;
 
-extern uint32_t piscsi_base, pistorm_dev_base;
+
+extern uint32_t pistorm_dev_base;
 
 extern void stop_cpu_emulation(uint8_t disasm_cur);
 
 static uint32_t ac_waiting_for_physical_pic = 0;
 
 inline int custom_read_atari(struct emulator_config *cfg, unsigned int addr, unsigned int *val, unsigned char type) {
-    
+#ifdef PISCSI
     if (piscsi_enabled && addr >= piscsi_base && addr < piscsi_base + (64 * SIZE_KILO)) {
-        //printf("[Amiga-Custom] %s read from PISCSI base @$%.8X.\n", op_type_names[type], addr);
+        //DEBUG_PRINTF ("[Amiga-Custom] %s read from PISCSI base @$%.8X.\n", op_type_names[type], addr);
         //stop_cpu_emulation(1);
         *val = handle_piscsi_read(addr, type);
         return 1;
     }
-
+#endif
     return -1;
 }
 
 inline int custom_write_atari(struct emulator_config *cfg, unsigned int addr, unsigned int val, unsigned char type) {
-
+#ifdef PISCSI
     if (piscsi_enabled && addr >= piscsi_base && addr < piscsi_base + (64 * SIZE_KILO)) {
-        //printf("[Amiga-Custom] %s write to PISCSI base @$%.8x: %.8X\n", op_type_names[type], addr, val);
+        //DEBUG_PRINTF ("[Amiga-Custom] %s write to PISCSI base @$%.8x: %.8X\n", op_type_names[type], addr, val);
         handle_piscsi_write(addr, val, type);
         return 1;
     }
-
+#endif
     return -1;
 }
 
@@ -99,7 +109,7 @@ void adjust_ranges_atari(struct emulator_config *cfg) {
                 cfg->mapped_high = cfg->map_offset[i] + cfg->map_size[i];
         }
     }
-
+#ifdef PISCSI
     if (piscsi_enabled) {
         if (cfg->custom_low == 0)
             cfg->custom_low = PISCSI_OFFSET;
@@ -110,40 +120,43 @@ void adjust_ranges_atari(struct emulator_config *cfg) {
             cfg->custom_low = min(cfg->custom_low, piscsi_base);
         }
     }
-
-    printf("Platform custom range: %.8X-%.8X\n", cfg->custom_low, cfg->custom_high);
-    printf("Platform mapped range: %.8X-%.8X\n", cfg->mapped_low, cfg->mapped_high);
+#endif
+    if ( cfg->custom_high )
+    {
+        DEBUG_PRINTF ("Platform custom range: %.8X-%.8X\n", cfg->custom_low, cfg->custom_high);
+        DEBUG_PRINTF ("Platform mapped range: %.8X-%.8X\n", cfg->mapped_low, cfg->mapped_high);
+    }
 }
 
 int setup_platform_atari(struct emulator_config *cfg) {
-    printf("Performing setup for Atari platform.\n");
+    DEBUG_PRINTF ("Performing setup for Atari platform.\n");
 
     if (strlen(cfg->platform->subsys)) {
-        printf("Subsystem is [%s]\n", cfg->platform->subsys);
+        DEBUG_PRINTF ("Subsystem is [%s]\n", cfg->platform->subsys);
         if (strcmp(cfg->platform->subsys, "st") == 0 ) {
-            printf("Configuring %s TODO.\n", cfg->platform->subsys );
+            DEBUG_PRINTF ("Configuring %s TODO.\n", cfg->platform->subsys );
             //adjust_IDE_4000();
         }
         if (strcmp(cfg->platform->subsys, "ste") == 0 ) {
-            printf("Configuring %s TODO.\n", cfg->platform->subsys );
+            DEBUG_PRINTF ("Configuring %s TODO.\n", cfg->platform->subsys );
             //adjust_IDE_4000();
         }
         else if (strcmp(cfg->platform->subsys, "mega") == 0) {
-            printf("Configuring %s TODO.\n", cfg->platform->subsys );
+            DEBUG_PRINTF ("Configuring %s TODO.\n", cfg->platform->subsys );
             //adjust_IDE_1200();
         }
         else if (strcmp(cfg->platform->subsys, "tt") == 0) {
-            printf("Configuring %s TODO.\n", cfg->platform->subsys );
+            DEBUG_PRINTF ("Configuring %s TODO.\n", cfg->platform->subsys );
             //adjust_IDE_1200();
         }
         else if (strcmp(cfg->platform->subsys, "falcon") == 0) {
-            printf("Configuring %s TODO.\n", cfg->platform->subsys );
+            DEBUG_PRINTF ("Configuring %s TODO.\n", cfg->platform->subsys );
             
             //rtc_type = RTC_TYPE_MSM;
         }
     }
     else
-        printf("No sub system specified.\n");
+        DEBUG_PRINTF ("No sub system specified.\n");
 
     int index = get_named_mapped_item(cfg, "cpu_slot_ram");
     if (index != -1) {
@@ -182,10 +195,10 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val) {
             set_hard_drive_image_file_atari(1, val);
     }
 
-
+#ifdef PISCSI
     // PiSCSI stuff
     if (CHKVAR("piscsi") && !piscsi_enabled) {
-        printf("[ATARI] PISCSI Interface Enabled.\n");
+        DEBUG_PRINTF ("[ATARI] PISCSI Interface Enabled.\n");
         piscsi_enabled = 1;
         piscsi_init();
         //add_z2_pic(ACTYPE_PISCSI, 0);
@@ -214,16 +227,17 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val) {
             piscsi_map_drive(val, 6);
         }
     }
+#endif
 /*
     // RTC stuff
     if CHKVAR("rtc_type") {
         if (val && strlen(val) != 0) {
             if (strcmp(val, "msm") == 0) {
-                printf("[ATARI] RTC type set to MSM.\n");
+                DEBUG_PRINTF ("[ATARI] RTC type set to MSM.\n");
                 rtc_type = RTC_TYPE_MSM;
             }
             else {
-                printf("[ATARI] RTC type set to Ricoh.\n");
+                DEBUG_PRINTF ("[ATARI] RTC type set to Ricoh.\n");
                 rtc_type = RTC_TYPE_RICOH;
             }
         }
@@ -233,18 +247,18 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val) {
     if CHKVAR("swap-df0-df")  {
         if (val && strlen(val) != 0 && get_int(val) >= 1 && get_int(val) <= 3) {
            swap_df0_with_dfx = get_int(val);
-           printf("[ATARI] DF0 and DF%d swapped.\n",swap_df0_with_dfx);
+           DEBUG_PRINTF ("[ATARI] DF0 and DF%d swapped.\n",swap_df0_with_dfx);
         }
     }
 
     if CHKVAR("move-slow-to-chip") {
         move_slow_to_chip = 1;
-        printf("[ATARI] Slow ram moved to Chip.\n");
+        DEBUG_PRINTF ("[ATARI] Slow ram moved to Chip.\n");
     }
 
     if CHKVAR("force-move-slow-to-chip") {
         force_move_slow_to_chip = 1;
-        printf("[ATARI] Forcing slowram move to chip, bypassing Agnus version check.\n");
+        DEBUG_PRINTF ("[ATARI] Forcing slowram move to chip, bypassing Agnus version check.\n");
     }
 */
 }
@@ -255,17 +269,18 @@ void handle_reset_atari(struct emulator_config *cfg) {
 
     //spoof_df0_id = 0;
 
-    printf("[ATARI] Reset handler.\n");
-
+    DEBUG_PRINTF ("[ATARI] Reset handler.\n");
+#ifdef PISCSI
     if ( piscsi_enabled )
         piscsi_refresh_drives ();
+#endif
 /*
     if (move_slow_to_chip && !force_move_slow_to_chip) {
       ps_write_16(VPOSW,0x00); // Poke poke... wake up Agnus!
       int agnus_rev = ((ps_read_16(VPOSR) >> 8) & 0x6F);
       if (agnus_rev != 0x20) {
         move_slow_to_chip = 0;
-        printf("[ATARI] Requested move slow ram to chip but 8372 Agnus not found - Disabling.\n");
+        DEBUG_PRINTF ("[ATARI] Requested move slow ram to chip but 8372 Agnus not found - Disabling.\n");
       }
     }
 */
@@ -274,18 +289,19 @@ void handle_reset_atari(struct emulator_config *cfg) {
 }
 
 void shutdown_platform_atari(struct emulator_config *cfg) {
-    printf("[ATARI] Performing Atari platform shutdown.\n");
+    DEBUG_PRINTF ("[ATARI] Performing Atari platform shutdown.\n");
     if (cfg) {}
     
     if (cfg->platform->subsys) {
         free(cfg->platform->subsys);
         cfg->platform->subsys = NULL;
     }
+#ifdef PISCSI
     if (piscsi_enabled) {
         piscsi_shutdown();
         piscsi_enabled = 0;
     }
-    
+#endif
 
     //mouse_hook_enabled = 0;
     //kb_hook_enabled = 0;
@@ -298,7 +314,7 @@ void shutdown_platform_atari(struct emulator_config *cfg) {
     ac_waiting_for_physical_pic = 0;
 
     autoconfig_reset_all();
-    printf("[ATARI] Platform shutdown completed.\n");
+    DEBUG_PRINTF ("[ATARI] Platform shutdown completed.\n");
 }
 
 void create_platform_atari ( struct platform_config *cfg, char *subsys ) 

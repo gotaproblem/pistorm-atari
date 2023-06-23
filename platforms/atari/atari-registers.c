@@ -3,6 +3,7 @@
 #include "IDE.h"
 #include "config_file/config_file.h"
 #include "atari-registers.h"
+#include "gpio/ps_protocol.h"
 
 uint8_t atari_rtc_emulation_enabled = 1;
 extern uint8_t IDE_emulation_enabled;
@@ -52,7 +53,7 @@ int handle_register_read_atari(unsigned int addr, unsigned char type, unsigned i
     {
         if (Blitter_enabled) 
         {
-            *val = ps_read_8 ( 0x00ff8a3c );
+            *val = ps_read_8 ( (t_a32)( (uint32_t)0x00ff8a3c ) );
             return 1;
         }
     }

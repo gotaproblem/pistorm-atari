@@ -25,7 +25,7 @@
 #include <errno.h>
 #include <time.h>
 #include <arpa/inet.h>
-#include <endian.h>
+//#include <endian.h>
 
 #include "config_file/config_file.h"
 #include "idedriver.h"
@@ -131,8 +131,8 @@ static void ide_xlate_errno(struct ide_taskfile *t, int len)
 
 static void ide_fault(struct ide_drive *d, const char *p)
 {
-  fprintf(stderr, "ide: %s: %d: %s\n", d->controller->name,
-			(int)(d - d->controller->drive), p);
+  //fprintf(stderr, "ide: %s: %d: %s\n", d->controller->name,
+	//		(int)(d - d->controller->drive), p);
 }
 
 /* Disk translation */
@@ -152,7 +152,7 @@ static off_t xlate_block(struct ide_taskfile *t)
   /* Some well known software asks for 0/0/0 when it means 0/0/1. Drives appear
      to interpret sector 0 as sector 1 */
   if (t->drive->controller->lba1 == 0) {
-    fprintf(stderr, "[Bug: request for sector offset 0].\n");
+    //fprintf(stderr, "[Bug: request for sector offset 0].\n");
     t->drive->controller->lba1 = 1;
   }
   cyl = (t->drive->controller->lba3 << 8) | t->drive->controller->lba2;
@@ -551,7 +551,7 @@ static void ide_data_out(struct ide_drive *d, uint16_t v, int len)
 {
   (void)len;
   if (d->state != IDE_DATA_OUT) {
-    ide_fault(d, "bad data write");
+    //ide_fault(d, "bad data write");
     d->taskfile.data = v;
   } else {
     if (d->eightbit)
@@ -818,13 +818,13 @@ printf ( "[HDD%d] cyl: %d, hds: %d, sec: %d\n", drive, d->cylinders, d->heads, d
 
 /* cryptodad */
 /* attach a floppy disk image .ST */
-int IDE_attach_st (struct ide_controller *c, int drive, int fd)
+int ide_attach_st (struct ide_controller *c, int drive, int fd)
 {
   struct ide_drive *d = &c->drive [drive];
 
   if (d->present) 
   {
-    printf("[IDE/FDD] Drive already attached.\n");
+    //DEBUG_PRINTF ("[IDE/FDD] Drive already attached.\n");
     return -1;
   }
 
@@ -843,7 +843,7 @@ int IDE_attach_st (struct ide_controller *c, int drive, int fd)
   lseek(fd, 0, SEEK_SET);
 
   if (file_size > 720 * 1024) {
-    printf ( "[IDE/FDD] Floppy image is too big\n" );
+    //printf ( "[IDE/FDD] Floppy image is too big\n" );
     return -1;
   }
 
@@ -856,11 +856,11 @@ int IDE_attach_st (struct ide_controller *c, int drive, int fd)
 
 
 // Attach a headerless HDD image to the controller
-int IDE_attach_hdf(struct ide_controller *c, int drive, int fd)
+int ide_attach_hdf(struct ide_controller *c, int drive, int fd)
 {
   struct ide_drive *d = &c->drive[drive];
   if (d->present) {
-    printf("[IDE/HDL] Drive already attached.\n");
+    //DEBUG_PRINTF ("[IDE/HDL] Drive already attached.\n");
     return -1;
   }
 
@@ -876,7 +876,7 @@ int IDE_attach_hdf(struct ide_controller *c, int drive, int fd)
   lseek(fd, 0, SEEK_SET);
 
   if (file_size < 4 * 1000 * 1000) {
-    printf ( "[IDE/HDL] File size is too small. Image must be > 4 MB\n" );
+    //printf ( "[IDE/HDL] File size is too small. Image must be > 4 MB\n" );
     return -1;
   }
 
@@ -897,7 +897,7 @@ int IDE_attach_hdf(struct ide_controller *c, int drive, int fd)
   //if ( d->cylinders == 0 )
    // d->cylinders = 1;
 
-  printf("[IDE/HDL] Cylinders: %d Heads: %d Sectors: %d - filesize = %d\n", d->cylinders, d->heads, d->sectors, file_size );
+  //DEBUG_PRINTF ("[IDE/HDL] Cylinders: %d Heads: %d Sectors: %d - filesize = %d\n", d->cylinders, d->heads, d->sectors, file_size );
 
   //if (file_size >= 4 * 1000 * 1000) {
    

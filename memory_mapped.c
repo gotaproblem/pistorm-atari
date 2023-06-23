@@ -98,6 +98,7 @@ inline int handle_mapped_read ( struct emulator_config *cfg, unsigned int addr, 
   return 1;
 }
 
+
 inline int handle_mapped_write(struct emulator_config *cfg, unsigned int addr, unsigned int value, unsigned char type) {
   int res = -1;
   unsigned char *write_addr = NULL;

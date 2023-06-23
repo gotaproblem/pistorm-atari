@@ -4,8 +4,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "rominfo.h"
+
+#define DEBUGPRINT 1
+#if DEBUGPRINT
+#define DEBUG_PRINTF(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+#else
+#define DEBUG_PRINTF(fmt, ...) ;
+#endif
+
 
 #define M68K_CPU_TYPES M68K_CPU_TYPE_SCC68070
 
@@ -52,9 +59,9 @@ const char *mapcmd_names[MAPCMD_NUM] = {
   "range",
   "file",
   "ovl",
-  "id",
-  "autodump_file",
-  "autodump_mem",
+  "id"
+  //"autodump_file",
+  //"autodump_mem",
 };
 
 int get_config_item_type(char *cmd) {
@@ -70,12 +77,12 @@ int get_config_item_type(char *cmd) {
 unsigned int get_m68k_cpu_type(char *name) {
   for (int i = 0; i < M68K_CPU_TYPES; i++) {
     if (strcmp(name, cpu_types[i]) == 0) {
-      printf("[CFG] Set CPU type to %s.\n", cpu_types[i]);
+      DEBUG_PRINTF ("[CFG] Set CPU type to %s.\n", cpu_types[i]);
       return i + 1;
     }
   }
 
-  printf("[CFG] Invalid CPU type %s specified, defaulting to 68000.\n", name);
+  DEBUG_PRINTF ("[CFG] Invalid CPU type %s specified, defaulting to 68000.\n", name);
   return M68K_CPU_TYPE_68000;
 }
 
@@ -128,7 +135,7 @@ unsigned int get_int(char *str) {
           case 'M': ret_int = ret_int * SIZE_MEGA; break;
           case 'G': ret_int = ret_int * SIZE_GIGA; break;
           default:
-            printf("[CFG] Unknown character %c in hex value.\n", str[i]);
+            DEBUG_PRINTF ("[CFG] Unknown character %c in hex value.\n", str[i]);
             break;
         }
       }
@@ -207,7 +214,7 @@ void add_mapping(struct emulator_config *cfg, unsigned int type, unsigned int ad
     index++;
   }
   if (index == MAX_NUM_MAPPED_ITEMS) {
-    printf("[CFG] Unable to map item, only %d items can be mapped with current binary.\n", MAX_NUM_MAPPED_ITEMS);
+    DEBUG_PRINTF ("[CFG] Unable to map item, only %d items can be mapped with current binary.\n", MAX_NUM_MAPPED_ITEMS);
     return;
   }
 
@@ -226,19 +233,19 @@ void add_mapping(struct emulator_config *cfg, unsigned int type, unsigned int ad
 
   switch(type) {
     case MAPTYPE_RAM_NOALLOC:
-      printf("[CFG] Adding %d byte (%d MB) RAM mapping %s...\n", size, size / 1024 / 1024, map_id);
+      DEBUG_PRINTF ("[CFG] Adding %d byte (%d MB) RAM mapping %s...\n", size, size / 1024 / 1024, map_id);
       cfg->map_data[index] = (unsigned char *)filename;
       break;
     case MAPTYPE_RAM_WTC:
-      printf("[CFG] Allocating %d bytes for Write-Through Cached RAM mapping (%.1f MB)...\n", size, (float)size / 1024.0f / 1024.0f);
+      DEBUG_PRINTF ("[CFG] Allocating %d bytes for Write-Through Cached RAM mapping (%.1f MB)...\n", size, (float)size / 1024.0f / 1024.0f);
       goto alloc_mapram;
       break;
     case MAPTYPE_RAM:
-      printf("[CFG] Allocating %d bytes for RAM mapping (%d MB)...\n", size, size / 1024 / 1024);
+      //DEBUG_PRINTF ("[CFG] Allocating %d bytes for RAM mapping (%d MB)...\n", size, size / 1024 / 1024);
 alloc_mapram:
       cfg->map_data[index] = (unsigned char *)malloc(size);
       if (!cfg->map_data[index]) {
-        printf("[CFG] ERROR: Unable to allocate memory for mapped RAM!\n");
+        DEBUG_PRINTF ("[CFG] ERROR: Unable to allocate memory for mapped RAM!\n");
         goto mapping_failed;
       }
       memset(cfg->map_data[index], 0x00, size);
@@ -313,26 +320,32 @@ alloc_mapram:
       in = fopen(filename, "rb");
       if (!in) {
         if (!autodump) {
-          printf("[CFG] Failed to open file %s for ROM mapping. Using onboard ROM instead, if available.\n", filename);
+          DEBUG_PRINTF ("[CFG] Failed to open file %s for ROM mapping. Using onboard ROM instead, if available.\n", filename);
           goto mapping_failed;
-        } else if (autodump == MAPCMD_AUTODUMP_FILE) {
-          printf("[CFG] Could not open file %s for ROM mapping. Autodump flag is set, dumping to file.\n", filename);
+        } 
+        /*
+        else if (autodump == MAPCMD_AUTODUMP_FILE) {
+          DEBUG_PRINTF ("[CFG] Could not open file %s for ROM mapping. Autodump flag is set, dumping to file.\n", filename);
           dump_range_to_file(cfg->map_offset[index], cfg->map_size[index], filename);
           in = fopen(filename, "rb");
           if (in == NULL) {
-            printf("[CFG] Could not open dumped file for reading. Using onboard ROM instead, if available.\n");
+            DEBUG_PRINTF ("[CFG] Could not open dumped file for reading. Using onboard ROM instead, if available.\n");
             goto mapping_failed;
           }
-        } else if (autodump == MAPCMD_AUTODUMP_MEM) {
-          printf("[CFG] Could not open file %s for ROM mapping. Autodump flag is set, dumping to memory.\n", filename);
+        } 
+        */
+       /*
+        else if (autodump == MAPCMD_AUTODUMP_MEM) {
+          DEBUG_PRINTF ("[CFG] Could not open file %s for ROM mapping. Autodump flag is set, dumping to memory.\n", filename);
           cfg->map_data[index] = dump_range_to_memory(cfg->map_offset[index], cfg->map_size[index]);
           cfg->rom_size[index] = cfg->map_size[index];
           if (cfg->map_data[index] == NULL) {
-            printf("[CFG] Could not dump range to memory. Using onboard ROM instead, if available.\n");
+            DEBUG_PRINTF ("[CFG] Could not dump range to memory. Using onboard ROM instead, if available.\n");
             goto mapping_failed;
           }
           goto skip_file_ops;
         }
+        */
       }
       fseek(in, 0, SEEK_END);
       file_size = (int)ftell(in);
@@ -344,7 +357,7 @@ alloc_mapram:
       cfg->map_data[index] = (unsigned char *)calloc(1, cfg->map_size[index]);
       cfg->rom_size[index] = (cfg->map_size[index] <= file_size) ? cfg->map_size[index] : file_size;
       if (!cfg->map_data[index]) {
-        printf("[CFG] ERROR: Unable to allocate memory for mapped ROM!\n");
+        DEBUG_PRINTF ("[CFG] ERROR: Unable to allocate memory for mapped ROM!\n");
         goto mapping_failed;
       }
       memset(cfg->map_data[index], 0x00, cfg->map_size[index]);
@@ -363,7 +376,9 @@ skip_file_ops:
       break;
   }
 
-  printf("[CFG] [MAP %d] Added %s mapping for range %.8lX-%.8lX ID: %s\n", index, map_type_names[type], cfg->map_offset[index], cfg->map_high[index] - 1, cfg->map_id[index] ? cfg->map_id[index] : "None");
+  DEBUG_PRINTF ("[CFG] [MAP %d] Added %s mapping for range %.8lX-%.8lX ID: %s\n", 
+    index, map_type_names[type], cfg->map_offset[index], cfg->map_high[index] - 1, 
+    cfg->map_id[index] ? cfg->map_id[index] : "None");
 
   return;
 
@@ -373,9 +388,27 @@ skip_file_ops:
     fclose(in);
 }
 
+
+
+
+
+char cfg_filename[256];
+
+char *get_pistorm_cfg_filename() {
+    return cfg_filename;
+}
+
+void set_pistorm_cfg_filename(char *filename) {
+    strcpy(cfg_filename, filename);
+}
+
+
+
+
+
 void free_config_file(struct emulator_config *cfg) {
   if (!cfg) {
-    printf("[CFG] Tried to free NULL config, aborting.\n");
+    DEBUG_PRINTF ("[CFG] Tried to free NULL config, aborting.\n");
   }
 
   if (cfg->platform) {
@@ -408,13 +441,13 @@ void free_config_file(struct emulator_config *cfg) {
 
   m68k_clear_ranges();
 
-  printf("[CFG] Config file freed. Maybe.\n");
+  DEBUG_PRINTF ("[CFG] Config file freed. Maybe.\n");
 }
 
 struct emulator_config *load_config_file(char *filename) {
   FILE *in = fopen(filename, "rb");
   if (in == NULL) {
-    printf("[CFG] Failed to open config file %s for reading.\n", filename);
+    DEBUG_PRINTF ("[CFG] Failed to open config file %s for reading.\n", filename);
     return NULL;
   }
 
@@ -425,12 +458,12 @@ struct emulator_config *load_config_file(char *filename) {
 
   parse_line = (char *)calloc(1, 512);
   if (!parse_line) {
-    printf("[CFG] Failed to allocate memory for config file line buffer.\n");
+    DEBUG_PRINTF ("[CFG] Failed to allocate memory for config file line buffer.\n");
     return NULL;
   }
   cfg = (struct emulator_config *)calloc(1, sizeof(struct emulator_config));
   if (!cfg) {
-    printf("[CFG] Failed to allocate memory for temporary emulator config.\n");
+    DEBUG_PRINTF ("[CFG] Failed to allocate memory for temporary emulator config.\n");
     goto load_failed;
   }
 
@@ -466,34 +499,34 @@ struct emulator_config *load_config_file(char *filename) {
             case MAPCMD_TYPE:
               get_next_string(parse_line, cur_cmd, &str_pos, ' ');
               maptype = get_map_type(cur_cmd);
-              //printf("Type! %s\n", map_type_names[maptype]);
+              //DEBUG_PRINTF ("Type! %s\n", map_type_names[maptype]);
               break;
             case MAPCMD_ADDRESS:
               get_next_string(parse_line, cur_cmd, &str_pos, ' ');
               mapaddr = get_int(cur_cmd);
-              //printf("Address! %.8X\n", mapaddr);
+              //DEBUG_PRINTF ("Address! %.8X\n", mapaddr);
               break;
             case MAPCMD_SIZE:
               get_next_string(parse_line, cur_cmd, &str_pos, ' ');
               mapsize = get_int(cur_cmd);
-              //printf("Size! %.8X\n", mapsize);
+              //DEBUG_PRINTF ("Size! %.8X\n", mapsize);
               break;
             case MAPCMD_RANGE:
               get_next_string(parse_line, cur_cmd, &str_pos, '-');
               mapaddr = get_int(cur_cmd);
               get_next_string(parse_line, cur_cmd, &str_pos, ' ');
               mapsize = get_int(cur_cmd) - 1 - mapaddr;
-              //printf("Range! %d-%d\n", mapaddr, mapaddr + mapsize);
+              //DEBUG_PRINTF ("Range! %d-%d\n", mapaddr, mapaddr + mapsize);
               break;
             case MAPCMD_FILENAME:
               get_next_string(parse_line, cur_cmd, &str_pos, ' ');
               strcpy(mapfile, cur_cmd);
-              //printf("File! %s\n", mapfile);
+              //DEBUG_PRINTF ("File! %s\n", mapfile);
               break;
             case MAPCMD_MAP_ID:
               get_next_string(parse_line, cur_cmd, &str_pos, ' ');
               strcpy(mapid, cur_cmd);
-              //printf("File! %s\n", mapfile);
+              //DEBUG_PRINTF ("File! %s\n", mapfile);
               break;
             case MAPCMD_OVL_REMAP:
               get_next_string(parse_line, cur_cmd, &str_pos, ' ');
@@ -504,7 +537,7 @@ struct emulator_config *load_config_file(char *filename) {
               autodump = get_map_cmd(cur_cmd);
               break;
             default:
-              printf("[CFG] Unknown/unhandled map argument %s on line %d.\n", cur_cmd, cur_line);
+              DEBUG_PRINTF ("[CFG] Unknown/unhandled map argument %s on line %d.\n", cur_cmd, cur_line);
               break;
           }
         }
@@ -514,7 +547,7 @@ struct emulator_config *load_config_file(char *filename) {
       }
       case CONFITEM_LOOPCYCLES:
         cfg->loop_cycles = get_int(parse_line + str_pos);
-        printf("[CFG] Set CPU loop cycles to %d.\n", cfg->loop_cycles);
+        DEBUG_PRINTF ("[CFG] Set CPU loop cycles to %d.\n", cfg->loop_cycles);
         break;
       case CONFITEM_MOUSE:
         get_next_string(parse_line, cur_cmd, &str_pos, ' ');
@@ -525,7 +558,7 @@ struct emulator_config *load_config_file(char *filename) {
         get_next_string(parse_line, cur_cmd, &str_pos, ' ');
         cfg->mouse_autoconnect = (strcmp(cur_cmd, "autoconnect") == 0) ? 1 : 0;
         cfg->mouse_enabled = 1;
-        printf("[CFG] Enabled mouse event forwarding from file %s, toggle key %c.\n", cfg->mouse_file, cfg->mouse_toggle_key);
+        DEBUG_PRINTF ("[CFG] Enabled mouse event forwarding from file %s, toggle key %c.\n", cfg->mouse_file, cfg->mouse_toggle_key);
         break;
       case CONFITEM_KEYBOARD:
         get_next_string(parse_line, cur_cmd, &str_pos, ' ');
@@ -534,35 +567,35 @@ struct emulator_config *load_config_file(char *filename) {
         cfg->keyboard_grab = (strcmp(cur_cmd, "grab") == 0) ? 1 : 0;
         get_next_string(parse_line, cur_cmd, &str_pos, ' ');
         cfg->keyboard_autoconnect = (strcmp(cur_cmd, "autoconnect") == 0) ? 1 : 0;
-        printf("[CFG] Enabled keyboard event forwarding, toggle key %c", cfg->keyboard_toggle_key);
+        DEBUG_PRINTF ("[CFG] Enabled keyboard event forwarding, toggle key %c", cfg->keyboard_toggle_key);
         if (cfg->keyboard_grab)
-          printf(", locking from host when connected");
+          DEBUG_PRINTF (", locking from host when connected");
         if (cfg->keyboard_autoconnect)
-          printf(", connected to guest at startup");
-        printf(".\n");
+          DEBUG_PRINTF (", connected to guest at startup");
+        DEBUG_PRINTF (".\n");
         break;
       case CONFITEM_KBFILE:
         get_next_string(parse_line, cur_cmd, &str_pos, ' ');
         cfg->keyboard_file = (char *)calloc(1, strlen(cur_cmd) + 1);
         strcpy(cfg->keyboard_file, cur_cmd);
-        printf("[CFG] Set keyboard event source file to %s.\n", cfg->keyboard_file);
+        DEBUG_PRINTF ("[CFG] Set keyboard event source file to %s.\n", cfg->keyboard_file);
         break;
       case CONFITEM_PLATFORM: {
         char platform_name[128], platform_sub[128];
         memset(platform_name, 0x00, 128);
         memset(platform_sub, 0x00, 128);
         get_next_string(parse_line, platform_name, &str_pos, ' ');
-        printf("[CFG] Setting platform to %s", platform_name);
+        DEBUG_PRINTF ("[CFG] Setting platform to %s", platform_name);
         get_next_string(parse_line, platform_sub, &str_pos, ' ');
         if (strlen(platform_sub))
-          printf(" (sub: %s)", platform_sub);
-        printf("\n");
+          DEBUG_PRINTF (" (sub: %s)", platform_sub);
+        DEBUG_PRINTF ("\n");
         cfg->platform = make_platform_config(platform_name, platform_sub);
         break;
       }
       case CONFITEM_SETVAR: {
         if (!cfg->platform) {
-          printf("[CFG] Warning: setvar used in config file with no platform specified.\n");
+          DEBUG_PRINTF ("[CFG] Warning: setvar used in config file with no platform specified.\n");
           break;
         }
 
@@ -577,7 +610,7 @@ struct emulator_config *load_config_file(char *filename) {
       }
       case CONFITEM_NONE:
       default:
-        printf("[CFG] Unknown config item %s on line %d.\n", cur_cmd, cur_line);
+        DEBUG_PRINTF ("[CFG] Unknown config item %s on line %d.\n", cur_cmd, cur_line);
         break;
     }
 

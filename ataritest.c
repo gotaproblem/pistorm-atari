@@ -466,7 +466,7 @@ void memspeed ( uint32_t length )
     clock_gettime ( CLOCK_REALTIME, &tmsStart );
     
     for ( address = 0; address < length; address += 2 )
-        write16 (address, 0x5a5a);
+        write16 ( address, 0x5a5a);
 
     clock_gettime ( CLOCK_REALTIME, &tmsEnd );
 
@@ -1584,7 +1584,7 @@ void clearmem ( uint32_t length, uint32_t *duration, uint16_t pattern )
     
     for ( uint32_t n = 8; n < length; n += 2 ) {
 
-        write16 (n, pattern);
+        write16 ( n, pattern );
 
         if ( n % (length / 64)  == 0 ) 
         {

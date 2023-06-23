@@ -41,7 +41,10 @@ extern uint32_t pistorm_dev_base;
 extern uint32_t do_reset;
 
 extern void adjust_ranges_atari(struct emulator_config *cfg);
-extern uint8_t piscsi_enabled, load_new_config, end_signal;
+#ifdef PISCSI
+extern uint8_t piscsi_enabled;
+#endif
+extern uint8_t load_new_config, end_signal;
 extern struct emulator_config *cfg;
 extern int cpu_emulation_running;
 
@@ -565,7 +568,7 @@ void handle_pistorm_dev_write(uint32_t addr_, uint32_t val, uint8_t type) {
             adjust_ranges_atari(cfg);
             break;
 #endif
-
+#ifdef PISCSI
         case PI_CMD_PISCSI_CTRL:
             DEBUG("[PISTORM-DEV] Write to PISCSI_CTRL: ");
             switch(val) {
@@ -640,6 +643,8 @@ void handle_pistorm_dev_write(uint32_t addr_, uint32_t val, uint8_t type) {
             }
             adjust_ranges_atari(cfg);
             break;
+#endif
+
 #if (0)        
         case PI_CMD_KICKROM:
             DEBUG("[PISTORM-DEV] Write to KICKROM.\n");
@@ -826,10 +831,13 @@ uint32_t handle_pistorm_dev_read(uint32_t addr_, uint8_t type) {
             break;
 #endif
 
+#ifdef PISCSI
         case PI_CMD_PISCSI_CTRL:
             DEBUG("[PISTORM-DEV] %s Read from PISCSI_CTRL\n", op_type_names[type]);
             return piscsi_enabled;
             break;
+#endif
+
 #if (0)
         case PI_CMD_GET_FB:
             //DEBUG("[PISTORM-DEV] %s read from GET_FB: %.8X\n", op_type_names[type], rtg_get_fb());

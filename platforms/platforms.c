@@ -5,6 +5,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+
+#define DEBUGPRINT 0
+#if DEBUGPRINT
+#define DEBUG_PRINTF(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+#else
+#define DEBUG_PRINTF(fmt, ...) ;
+#endif
+
 static char*platform_names[PLATFORM_NUM] = {
     "none",
     "amiga",
@@ -27,7 +35,7 @@ int get_platform_index(char *name) {
 //void create_platform_amiga(struct platform_config *cfg, char *subsys);
 void create_platform_atari(struct platform_config *cfg, char *subsys);
 //void create_platform_mac68k(struct platform_config *cfg, char *subsys);
-void create_platform_dummy(struct platform_config *cfg, char *subsys);
+//void create_platform_dummy(struct platform_config *cfg, char *subsys);
 
 struct platform_config *make_platform_config(char *name, char *subsys) {
     struct platform_config *cfg = NULL;
@@ -35,16 +43,16 @@ struct platform_config *make_platform_config(char *name, char *subsys) {
 
     if (platform_id == -1) {
         // Display a warning if no match is found for the config name, in case it was mistyped.
-        printf("No match found for platform name \'%s\', defaulting to none/generic.\n", name);
+        DEBUG_PRINTF ("No match found for platform name \'%s\', defaulting to none/generic.\n", name);
         platform_id = PLATFORM_NONE;
     }
     else {
-        printf("Creating platform config for %s...\n", name);
+        DEBUG_PRINTF ("Creating platform config for %s...\n", name);
     }
 
     cfg = (struct platform_config *)malloc(sizeof(struct platform_config));
     if (!cfg) {
-        printf("Failed to allocate memory for new platform config!.\n");
+        DEBUG_PRINTF ("Failed to allocate memory for new platform config!.\n");
         return NULL;
     }
     memset(cfg, 0x00, sizeof(struct platform_config));
@@ -59,10 +67,10 @@ struct platform_config *make_platform_config(char *name, char *subsys) {
         case PLATFORM_ATARI:
             create_platform_atari(cfg, subsys);
             break;
-        case PLATFORM_NONE:
-        case PLATFORM_X68000:
+        //case PLATFORM_NONE:
+        //case PLATFORM_X68000:
         default:
-            create_platform_dummy(cfg, subsys);
+            //create_platform_dummy(cfg, subsys);
             break;
     }
 

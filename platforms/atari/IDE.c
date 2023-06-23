@@ -7,8 +7,7 @@
 //  Copyright © 2019 Matt Parsons. All rights reserved.
 //
 
-#include "IDE.h"
-#include "idedriver.h"
+#include "platforms/atari/IDE.h"
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
@@ -16,11 +15,17 @@
 #include <unistd.h>
 #include <time.h>
 #include <endian.h>
-
-#include "platforms/shared/rtc.h"
+//#include "platforms/shared/rtc.h"
 #include "config_file/config_file.h"
-
 #include "atari-registers.h"
+#include "platforms/atari/idedriver.h"
+
+#define DEBUGPRINT 0
+#if DEBUGPRINT
+#define DEBUG_PRINTF(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+#else
+#define DEBUG_PRINTF(fmt, ...) ;
+#endif
 
 #define DEBUG_IDE
 #ifdef DEBUG_IDE
@@ -48,17 +53,17 @@ uint8_t *IDE_allocate(const char *name) { if (name) {}; return NULL; }
 
 void IDE_attach_hdf(uint8_t *dummy, uint32_t idx, uint32_t atarifd) {
   if (dummy || idx || atarifd) {};
-  printf("[!!!IDE] No IDE emulation layer available, HDF image not attached.\n");
+  DEBUG_PRINTF ("[!!!IDE] No IDE emulation layer available, HDF image not attached.\n");
   return;
 }
 
 void IDE_attach(uint8_t *dummy, uint32_t idx, uint32_t atarifd) {
   if (dummy || idx || atarifd) {};
-  printf("[!!!IDE] No IDE emulation layer available, image not mounted.\n");
+  DEBUG_PRINTF ("[!!!IDE] No IDE emulation layer available, image not mounted.\n");
   return;
 }
 #else
-static struct IDE_controller *atariide0 = NULL;
+static struct ide_controller *atariide0 = NULL;
 #endif
 
 //uint8_t gary_cfg[8];
@@ -128,7 +133,7 @@ void InitIDE (void)
 
       if (atarifd == -1) 
       {
-        printf("[HDD%d] HDD Image %s failed open\n", i, atari_image_file[i]);
+        DEBUG_PRINTF ("[HDD%d] HDD Image %s failed open\n", i, atari_image_file[i]);
       } 
       
       else 
@@ -137,7 +142,7 @@ void InitIDE (void)
         {
           printf ( "[FDD%d] Attaching FDD image %s.\n", i, atari_image_file [i] );
 
-          IDE_attach_st ( atariide0, i, atarifd );
+          ide_attach_st ( atariide0, i, atarifd );
           num_IDE_drives++;
 
           printf ( "[FDD%d] FDD Image %s attached\n", i, atari_image_file [i] );
@@ -145,18 +150,18 @@ void InitIDE (void)
 
         else if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 3 ), "img" ) == 0 )
         {
-          printf("[HDD%d] Attaching HDD image %s.\n", i, atari_image_file[i]);
+          DEBUG_PRINTF ("[HDD%d] Attaching HDD image %s.\n", i, atari_image_file[i]);
           //if (strcmp(atari_image_file[i] + (strlen(atari_image_file[i]) - 3), "img") != 0) {
-            //printf("No header present on HDD image %s.\n", atari_image_file[i]);
-            IDE_attach_hdf ( atariide0, i, atarifd );
+            //DEBUG_PRINTF ("No header present on HDD image %s.\n", atari_image_file[i]);
+            ide_attach_hdf ( atariide0, i, atarifd );
             num_IDE_drives++;
           //}
           //else {
-          //  printf("Attaching HDD image with header.\n");
+          //  DEBUG_PRINTF ("Attaching HDD image with header.\n");
           //  IDE_attach(atariide0, i, atarifd);
           //  num_IDE_drives++;
           //}
-          printf("[HDD%d] HDD Image %s attached\n", i, atari_image_file[i]);
+          DEBUG_PRINTF ("[HDD%d] HDD Image %s attached\n", i, atari_image_file[i]);
         }
       }
     }
@@ -168,7 +173,7 @@ void InitIDE (void)
   if (num_IDE_drives == 0) 
   {
     // No IDE drives mounted, disable IDE component of IDE
-    printf("No IDE drives mounted, disabling IDE component.\n");
+    //DEBUG_PRINTF ("No IDE drives mounted, disabling IDE component.\n");
     IDE_IDE_enabled = 0;
   }
 }
@@ -183,11 +188,11 @@ void writeIDEB(unsigned int address, unsigned int value)
 #if (1)
       switch ((address - IDEBASE)){//IDE_IDE_base) - IDE_IDE_adj) {
         case GFEAT_OFFSET:
-          //printf("Write to GFEAT: %.2X.\n", value);
+          //DEBUG_PRINTF ("Write to GFEAT: %.2X.\n", value);
           IDE_action = IDE_feature_w;
           goto IDEwrite8;
         case GCMD_OFFSET:
-          //printf("Write to GCMD: %.2X.\n", value);
+          //DEBUG_PRINTF ("Write to GCMD: %.2X.\n", value);
           IDE_action = IDE_command_w;
           goto IDEwrite8;
         case GSECTCOUNT_OFFSET:
@@ -203,11 +208,11 @@ void writeIDEB(unsigned int address, unsigned int value)
           IDE_action = IDE_cyl_hi;
           goto IDEwrite8;
         case GDEVHEAD_OFFSET:
-          //printf("Write to GDEVHEAD: %.2X.\n", value);
+          //DEBUG_PRINTF ("Write to GDEVHEAD: %.2X.\n", value);
           IDE_action = IDE_dev_head;
           goto IDEwrite8;
         case GCTRL_OFFSET:
-          //printf("Write to GCTRL: %.2X.\n", value);
+          //DEBUG_PRINTF ("Write to GCTRL: %.2X.\n", value);
           IDE_action = IDE_devctrl_w;
           goto IDEwrite8;
         //case GIRQ_4000_OFFSET:
@@ -235,15 +240,15 @@ skip_idewrite8:;
 #if (0)
   switch (address) {
     /*case 0xDD203A:
-      printf("Write bye to A4000 IDE: %.2X\n", value);
+      DEBUG_PRINTF ("Write bye to A4000 IDE: %.2X\n", value);
       IDE_a4k = value;
       return;*/
    // case GIDENT:
-      //printf("Write to GIDENT: %d\n", value);
+      //DEBUG_PRINTF ("Write to GIDENT: %d\n", value);
    //   ataricounter = 0;
     //  return;
     case GCONF:
-      //printf("Write to GCONF: %d\n", IDE_cfg);
+      //DEBUG_PRINTF ("Write to GCONF: %d\n", IDE_cfg);
       IDE_cfg = value;
       return;
     //case RAMSEY_REG:
@@ -256,7 +261,7 @@ skip_idewrite8:;
       IDE_cs_mask = value & ~3;
       IDE_cs &= ~3;
       IDE_cs |= value & 3;
-      printf("Write to GCS: %d\n", IDE_cs);
+      DEBUG_PRINTF ("Write to GCS: %d\n", IDE_cs);
       atariide0->selected = IDE_cs;
       return;
   }
@@ -266,12 +271,12 @@ skip_idewrite8:;
   //if ((address & IDEMASK) == CLOCKBASE) {
   //  if ((address & CLOCKMASK) >= 0x8000) {
       //if (cdtv_mode) {
-      //  //printf("[CDTV] BYTE write to SRAM @%.8X (%.8X): %.2X\n", (address & CLOCKMASK) - 0x8000, address, value);
+      //  //DEBUG_PRINTF ("[CDTV] BYTE write to SRAM @%.8X (%.8X): %.2X\n", (address & CLOCKMASK) - 0x8000, address, value);
       //  cdtv_sram[(address & CLOCKMASK) - 0x8000] = value;
       //}
    //   return;
    // }
-    //printf("Byte write to RTC.\n");
+    //DEBUG_PRINTF ("Byte write to RTC.\n");
     //put_rtc_byte(address, value, rtc_type);
     //DEBUG("Write Byte to IDE Space 0x%06x (0x%06x)\n", address, value);
   //  return;
@@ -297,12 +302,12 @@ void writeIDE(unsigned int address, unsigned int value) {
   //if ((address & IDEMASK) == CLOCKBASE) {
   //  if ((address & CLOCKMASK) >= 0x8000) {
       //if (cdtv_mode) {
-      //  //printf("[CDTV] WORD write to SRAM @%.8X (%.8X): %.4X\n", (address & CLOCKMASK) - 0x8000, address, htobe16(value));
+      //  //DEBUG_PRINTF ("[CDTV] WORD write to SRAM @%.8X (%.8X): %.4X\n", (address & CLOCKMASK) - 0x8000, address, htobe16(value));
       //  ((short *) ((size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000)))[0] = htobe16(value);
       //}
   //    return;
   //  }
-    //printf("Word write to RTC.\n");
+    //DEBUG_PRINTF ("Word write to RTC.\n");
     //put_rtc_byte(address + 1, (value & 0xFF), rtc_type);
     //put_rtc_byte(address, (value >> 8), rtc_type);
   //  return;
@@ -319,12 +324,12 @@ void writeIDEL(unsigned int address, unsigned int value) {
   //if ((address & IDEMASK) == CLOCKBASE) {
     //if ((address & CLOCKMASK) >= 0x8000) {
       //if (cdtv_mode) {
-      //  //printf("[CDTV] LONGWORD write to SRAM @%.8X (%.8X): %.8X\n", (address & CLOCKMASK) - 0x8000, address, htobe32(value));
+      //  //DEBUG_PRINTF ("[CDTV] LONGWORD write to SRAM @%.8X (%.8X): %.8X\n", (address & CLOCKMASK) - 0x8000, address, htobe32(value));
       //  ((int *) (size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000))[0] = htobe32(value);
       //}
       //return;
     //}
-    //printf("Longword write to RTC.\n");
+    //DEBUG_PRINTF ("Longword write to RTC.\n");
     //put_rtc_byte(address + 3, (value & 0xFF), rtc_type);
     //put_rtc_byte(address + 2, ((value & 0x0000FF00) >> 8), rtc_type);
     //put_rtc_byte(address + 1, ((value & 0x00FF0000) >> 16), rtc_type);
@@ -398,18 +403,18 @@ skip_ideread8:;
       //    val = 0x00;
       //  }
       //  ataricounter++;
-        //printf("Read from GIDENT: %.2X.\n", val);
+        //DEBUG_PRINTF ("Read from GIDENT: %.2X.\n", val);
       //  return val;
       //}
       //case GINT:
       //  return IDE_int;
       //case GCONF:
-        //printf("Read from GCONF: %d\n", IDE_cfg & 0x0F);
+        //DEBUG_PRINTF ("Read from GCONF: %d\n", IDE_cfg & 0x0F);
       //  return IDE_cfg & 0x0f;
       //case GCS: {
       //  uint8_t v;
       //  v = IDE_cs_mask | IDE_cs;
-      //  printf("Read from GCS: %d\n", v);
+      //  DEBUG_PRINTF ("Read from GCS: %d\n", v);
       //  return v;
       //}
       // This seems incorrect, GARY_REG3 is the same as GIDENT, and the A4000
@@ -439,7 +444,7 @@ skip_ideread8:;
       }
       //case 0xDD203A:
         // This can't be correct, as this is the same address as GDEVHEAD on the A4000 IDE.
-        //printf("Read Byte from IDE A4k: %.2X\n", IDE_a4k);
+        //DEBUG_PRINTF ("Read Byte from IDE A4k: %.2X\n", IDE_a4k);
         //return IDE_a4k;
 
       default:
@@ -451,12 +456,12 @@ skip_ideread8:;
   //if ((address & IDEMASK) == CLOCKBASE) {
   //  if ((address & CLOCKMASK) >= 0x8000) {
       //if (cdtv_mode) {
-      //  //printf("[CDTV] BYTE read from SRAM @%.8X (%.8X): %.2X\n", (address & CLOCKMASK) - 0x8000, address, cdtv_sram[(address & CLOCKMASK) - 0x8000]);
+      //  //DEBUG_PRINTF ("[CDTV] BYTE read from SRAM @%.8X (%.8X): %.2X\n", (address & CLOCKMASK) - 0x8000, address, cdtv_sram[(address & CLOCKMASK) - 0x8000]);
       //  return cdtv_sram[(address & CLOCKMASK) - 0x8000];
       //}
   //    return 0;
   //  }
-    //printf("Byte read from RTC.\n");
+    //DEBUG_PRINTF ("Byte read from RTC.\n");
   //  return 0xff; //get_rtc_byte(address, rtc_type);
   //}
 #else
@@ -492,12 +497,12 @@ uint16_t readIDE(unsigned int address) {
   //if ((address & IDEMASK) == CLOCKBASE) {
   //  if ((address & CLOCKMASK) >= 0x8000) {
       //if (cdtv_mode) {
-      //  //printf("[CDTV] WORD read from SRAM @%.8X (%.8X): %.4X\n", (address & CLOCKMASK) - 0x8000, address, be16toh( (( unsigned short *) (size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000))[0]));
+      //  //DEBUG_PRINTF ("[CDTV] WORD read from SRAM @%.8X (%.8X): %.4X\n", (address & CLOCKMASK) - 0x8000, address, be16toh( (( unsigned short *) (size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000))[0]));
       //  return be16toh( (( unsigned short *) (size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000))[0]);
       //}
   //    return 0;
   //  }
-    //printf("Word read from RTC.\n");
+    //DEBUG_PRINTF ("Word read from RTC.\n");
   //  return 0xffff; //((get_rtc_byte(address, rtc_type) << 8) | (get_rtc_byte(address + 1, rtc_type)));
   //}
 #else
@@ -514,12 +519,12 @@ uint32_t readIDEL(unsigned int address) {
   //if ((address & IDEMASK) == CLOCKBASE) {
     //if ((address & CLOCKMASK) >= 0x8000) {
       //if (cdtv_mode) {
-      //  //printf("[CDTV] LONGWORD read from SRAM @%.8X (%.8X): %.8X\n", (address & CLOCKMASK) - 0x8000, address, be32toh( (( unsigned short *) (size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000))[0]));
+      //  //DEBUG_PRINTF ("[CDTV] LONGWORD read from SRAM @%.8X (%.8X): %.8X\n", (address & CLOCKMASK) - 0x8000, address, be32toh( (( unsigned short *) (size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000))[0]));
       //  return be32toh( (( unsigned int *) (size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000))[0]);
       //}
      // return 0;
     //}
-    //printf("Longword read from RTC.\n");
+    //DEBUG_PRINTF ("Longword read from RTC.\n");
     //return 0xffffffff; //((get_rtc_byte(address, rtc_type) << 24) | (get_rtc_byte(address + 1, rtc_type) << 16) | (get_rtc_byte(address + 2, rtc_type) << 8) | (get_rtc_byte(address + 3, rtc_type)));
   //}
   if (address - IDEBASE == GDATA_OFFSET) {

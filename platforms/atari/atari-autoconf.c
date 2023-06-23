@@ -60,7 +60,7 @@ unsigned char ac_piscsi_rom[] = {
 };
 
 void autoconfig_reset_all() {
-  printf("[AUTOCONF] Resetting all autoconf data.\n");
+ // printf("[AUTOCONF] Resetting all autoconf data.\n");
   for (int i = 0; i < AC_PIC_LIMIT; i++) {
     ac_z2_type[i] = ACTYPE_NONE;
     ac_z3_type[i] = ACTYPE_NONE;
