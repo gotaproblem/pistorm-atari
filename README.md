@@ -1,13 +1,9 @@
-# PiStorm
+# PiStorm 4 Atari
 
-![logo](media/pistorm_banner.jpg)
 
-# Join us on Discord or on Libera Chat IRC #PiStorm
+# Join us on Discord
 
-* There's a Discord server dedicated to PiStorm discussion and development, which you can join through this handy invite link: https://discord.com/invite/j6rPtzxaNW
-* There are also IRC channels on the Libera IRC network (irc.libera.chat):
-  * `#PiStorm`, bridged with the `#general` channel on Discord, `#PiStorm-hardware` which is bridged with `#hardware`, `#PiStorm-firmware`, bridged with `#firmware`,
-  * `#PiStorm-Amiga` bridged with `#software-amiga`, `#PiStorm-pi`, brigded with `#software-pi` and `#PiStorm-chat`, bridged with `#ot-and-chitchat`.
+* There's a Discord server dedicated to PiStorm Atari discussion and development, which you can join through this handy invite link: https://discord.gg/QFSQam5P
 
 * **IMPORTANT NOTE: Selling blank or complete PCBs or derivatives on eBay or elsewhere for excessive profit is frowned upon and may lead to forthcoming related projects being closed source.**
 * Even with the current global chip shortage (October 2021), components are not **so** expensive that you should pay up to a hundred dollars or Euros for a board.
@@ -16,40 +12,26 @@
 
 # Project information
 
-* The PiStorm itself is an adapter board intended to be paired with a Raspberry Pi Model 3A+. It goes in the DIP socket on and acts in place of the CPU, but functionality can be extended beyond simple CPU emulation.
-* Hardware files are available in `PiStorm_RevB_EPM240_74LVC16373.zip`, but they may be out of date. Joining the Discord and checking for the latest revision/BoM for the PiStorm adapter board is recommended. Please note that just because it says "RevB_EPM240" does _NOT_ mean that all Rev B boards are EPM240s.
-  * ~~Please note that the `EPM240` and `EPM570` used on the PiStorm board must be an Altera **MAX II** CPLD. There are currently some speed grade issues with the newer **MAX V** counterparts that prevent them from functioning as a replacement.~~
-  * There is now an experimental bitstream available for the **MAX V** EPM240 part that can be flashed using the `flash.sh` script, but please note that this is not yet thoroughly tested and since not all silicon is created equal and this firmware requires overclocking the CPLD itself, it may not or may not work properly. Testing is currently underway.
+* This fork is solely for the Atari platform. All Amiga code has been removed.
+* Development is ongoing on an Atari STe, utilising an exxos PLLC adapter board to allow the fitting of the PiStorm interface. The ongoing work is a "proof-of-concept". If proven to offer acceptable performance, then bespoke hardware will be needed to allow installation within the confines of the Atari ST platform.
+* The Atari platform differs greatly to the Amiga platform. Atari uses FC lines and depends heavily upon bus arbitration and interrupts.
+* Initial development was on a PI3B, but performance was poor. A PI3A+ was tried and again the performance was poor. Finally, a PI4B was tried. Although initial performance was still poor in comparison to the Amiga, there was headroom for improvemnt. Over many months, performance has slowly increased, and at time of writing, performance is finally acceptable. 
+# Performance with the current use of Musashi as the 68k CPU emulator is somewhere around a 100-125MHz 68030.
 
-* While the PiStorm should work with any DIP socket 16-bit 68000-powered system, the FC lines are currently not properly handled and no guarantees can be made for it working on anything except an Amiga 500, 500+, 1000 and 2000. It does work to some extend in a CDTV, but the lack of bus arbitration signal handling in the CPLD firmware will mean that the CD-ROM drive either does not work at all, or only works sporadically when the timing stars align.
-* General Performance with the current use of Musashi as the 68k CPU emulator is somewhere around a 100-125MHz 68030.
-* The intended Raspberry Pi model to use with the PiStorm is Model 3A+. 3B+ works, but due to component clearance issues it will not fit unless the Pi itself is modified (USB ports replaced) or a GPIO spacer/relocator is installed.
-* **Raspberry Pi Zero2 and Raspberry Pi Model 3a+ work out of the box**, the Raspberry Pi Zero and Model 2/4 **cannot** currently be used with the PiStorm. While support for other Raspberry Pi models is planned with an updated CPLD firmware, there is no ETA for this.
-* While the BOM lists an `EPM570T100C5N` as the CPLD that should be used, you can substitute it with for instance an `EPM240T100C5N` or equivalent, but there are some things worth knowing.
-  * The **T100** part of the component name is important, as this signifies the number of pins, make sure this is in the part name of the model you substitute the original one with.
-  * The number 5 in C**5**N is the speed grade of the CPLD. 5 is slower than 4 or 3, and while 4 works with the current bit stream (June 2, 2021), it cannot be guaranteed to work with upcoming CPLD bit streams, so please stick to speed grade 5 for the time being.
-  * The letter C in **C**5N denotes "Consumer" grade CPLD. They are available in "I" and "A" variants as well, denoting "Industrial" and "Automotive". The only difference here is the operating temperature range for the component.
-  * The letter N in C5**N** signifies that the device is RoHS compliant. If you do not require an RoHS compliant device for your board, the one with no N can also be used.
-  * While the **GT** variant of the EPM240 (for instance `EPM240GT100I5N`) does work, this requires some changes to the components you populate the board with, please inquire on Discord or IRC for detailed information.
 
-# Amiga-specific functionality
+# Extended functionality
 
-Since much of the initial work and testing for the PiStorm was done on Amiga computers, a number of extended features are available when the PiStorm is paired with for instance an Amiga 500:
-* Kickstart ROM mapping: 1.3, 2.0, 3.1, anything you might own and have dumped in a byteswapped format. Extended ROM mapping as well for instance with the CDTV extended BIOS.
-  * An A1200 3.1+ Kickstart ROM is currently recommended, as this one has the most dynamic automatic configuration on boot.
-* Fast RAM: Z2, Z3 and CPU local Fast can be mapped for high performance memory available to the CPU only on the PiStorm side of things.
-* Virtual SCSI: PiSCSI, a high performance virtual SCSI interface for mapping raw RDB disk images or physical storage devices connected to the Pi for use on the Amiga.
-* RTG: PiGFX, a virtual RTG board with almost all P96-supported functionality supported and accelerated.
-* Some other things: Most likely I forgot something while writing this, but someone will probably tell me about it.
+A virtual IDE interface is included which allows for two disk drive images to be attached. The BBaN Solutions HDC has been tested extensively and offers good performance via the ACSI bus.
+* Atari ST ROM images can be loaded at initialisation. For example, the emulation can boot using TOS 1.4 (ST only), TOS 1.62, TOS 2.06 or even EMUTos
+* TT-RAM option can be added to increase performance
+* Additional interfaces will be added with time
 
 # Simple quickstart
 
 * Download Raspberry Pi OS from https://www.raspberrypi.org/software/operating-systems/, the Lite version is recommended as the windowing system of the Full version adds a lot of extra system load which may impact performance.
-* Write the Image to a SD Card. 8GB is plenty for the PiStorm binaries and required libraries, but if you wish to use large hard drive images or sometthing with it, go with a bigger card.
-* Install the PiStorm adapter in place of the orignal CPU in the system, for instance an Amiga 500.
+* Write the Image to a SD Card. For development, a minimum of 32GB is recommended for the PiStorm binaries and required libraries, but if you wish to use large hard drive images or sometthing with it, go with a bigger card.
+* Install the PiStorm adapter in place of the orignal CPU in the system.
   Make sure the PiStorm sits flush and correct in the socket.
-  When installed in an Amiga 500, The correct orientation on the PiStorm is with the USB port facing toward you and the HDMI port facing to the right.
-  If the PiStorm does not stay in place properly (popping out of the CPU socket) then bend the pins of the PiStorm very very very slightly outwards.
   Double check that all is properly in place and no pins are bent.
 * Connect an HDMI Display and a USB keyboard to the PiStorm. Using a USB Hub is possible, an externally powered hub is recommended.
   Connect the Amiga to the PSU and PAL Monitor
@@ -69,24 +51,30 @@ Now the final steps to get things up and running, all of this is done from a com
 * `sudo apt-get update`
 * `sudo apt full-upgrade` (If you get mysterious 'not found' messages from running the line in the next step.)
 * `sudo apt-get install git libasound2-dev`
-* `git clone https://github.com/captain-amygdala/pistorm.git`
-* `cd pistorm`
+* `git clone https://github.com/gotaproblem/pistorm-atari`
+* `cd pistorm-atari`
 * `make`
 
-**Important note:** If you are using **Raspberry Pi OS "Bullseye"**, the main graphics backend for the OS has changed from dispmanx to DRM, and you need to follow these steps instead of just running `make`:
-* First run `sudo apt-get install libdrm-dev libegl1-mesa-dev libgles2-mesa-dev libgbm-dev` to install the DRM OpenGL/ES libraries, which are for some reason not included with the distro by default. These are necessary to link the graphics output library (raylib).
-* Then finally, run `make PLATFORM=PI3_BULLSEYE` for the emulator to compile successfully.
+**Testing**
+It is recommended you run ataritest to confirm basic functionality.
+* cd pistorm-atari
+* sudo ./ataritest --memory tests=rw
 
-Next up, follow the steps for installing the FPGA bitstream update below. (Scroll down.)
+ataritest can do a lot more, like reading and writing (peek and poke), to Atari memory space, filling Atari memory with patterns.
 
-If you are running the PiStorm in an Amiga computer, you can start the emulator with a basic default Amiga config by typing `sudo ./emulator --config amiga.cfg`.  
-In addition, the emulator will attempt to load a file called `default.cfg` if no config file is specified on the command line, so if you wish for the emulator to start up with for instance the basic default Amiga config, you can copy `amiga.cfg` to `default.cfg`.  
-**Important note:** Try not to edit the sample config files such as `amiga.cfg`, always save them under a different name, for instance one directory level below the `pistorm` directory.  
-One way to do this would be to copy for instance `amiga.cfg` like this: `cp ./amiga.cfg ../amiga.cfg` and then running the emulator using `sudo ./emulator --config ../amiga.cfg`. This way, you will never have any problems using `git pull` to update your PiStorm repo to the latest commit.
+**Starting the Emulator**
+You can start the emulator with a basic default Atari config by typing `sudo ./emulator --config atari.cfg`.    
+**Important note:** Try not to edit the sample config file - `atari.cfg`. It is advised you create three directories above the pistorm-atari installation, for configurations, rom images and disk images. 
+* cd pistorm-atari
+* cd ..
+* mkdir configs
+* mkdir roms
+* mkdir dkimages
+* cp pistorm-atari/atari.cfg configs/ 
+* cd pistorm-atari
+Run the emulator using `sudo ./emulator --config ../configs/atari.cfg`. This way, you will never have any problems using `git pull` to update your PiStorm repo to the latest commit.
 
-To exit the emulator you can press `Ctrl+C` (on the keyboard or over SSH) or press `Q` on the keyboard connected to the Raspberry Pi.
-
-For Amiga, there is currently no Gayle or IDE controller emulation available, but PiSCSI can now autoboot RDB/RDSK hard drive images (and physical drives), with Kickstart 2.0 and up. Check out the readme in `platforms/amiga/piscsi` for more detailed information.
+To exit the emulator you can press `Ctrl+C`.
 
 # FPGA bitstream update :
 
