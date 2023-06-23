@@ -66,12 +66,18 @@ You can start the emulator with the default Atari configuration by typing `sudo 
 **Important note:** Do not edit the default configuration file - `atari.cfg`. Instead, make a copy and save it in configs/.
 This way, you will never have any problems using `git pull` to update your PiStorm repo to the latest commit.
 Three sub-directories are present for Emulator run-time usage: They are, roms, dkimages and configs.
-* dkimages and roms contain compressed files
+* dkimages and roms contain compressed files 
 * `cd roms`
 * `unzip roms.zip`
-* `cd ../dkimages`
+* `cd ..`
+**The disk images are too large for GitHub. Please find the disk images at https://bbansolutions.co.uk**
+Download the disk image.zip file, copy to the PI4 pistorm-atari/dkimages directory. Uncomress the file to give two disk images.
+* `cd pistorm-atari`
+* `mkdir dkimages`
+* `cd dkimages`
 * `unzip disks.zip`
 * `cd ..`
+
 Run the emulator using `sudo ./emulator --config configs/atari.cfg`.
 
 To exit the emulator you can press `Ctrl+C`.
