@@ -165,7 +165,7 @@ int check_emulator()
 int main(int argc, char *argv[]) 
 {
     uint32_t test_size = 2 * SIZE_KILO;
-    
+    t_a32 add;
 
 
     cur_loop = 1;
@@ -324,10 +324,12 @@ int main(int argc, char *argv[])
             //if (doWrites)
             {
                 printf ( "Priming test data\n");
-                
-                for ( uint32_t i = 0, add = OFFSET ; add < test_size; i++, add++ ) 
+
+                add.address = (uint32_t)OFFSET;
+
+                for ( uint32_t i = 0; add.address < test_size; i++, add.address++ ) 
                 {
-                    garbege_datas [i] = add % 2 ? (add - 1 >> 8) & 0xff : add & 0xff;
+                    garbege_datas [i] = add.address % 2 ? (add.address - 1 >> 8) & 0xff : add.address & 0xff;
 
                     //if ( i == 0 )
                     //    printf ( "add %.8X = %.2X\n", add, garbege_datas [i] );
@@ -379,7 +381,9 @@ test_loop:
 
                 printf ( "Priming test data\n" );
 
-                for ( uint32_t i = 0, add = OFFSET ; add < test_size; i++, add++ ) 
+                add.address = (uint32_t)OFFSET;
+
+                for ( uint32_t i = 0; add.address < test_size; i++, add.address++ ) 
                 {
                     garbege_datas [i] = (uint8_t)(rand() % 0xFF );
                     write8 ( add, (uint32_t) garbege_datas [i] );
@@ -439,7 +443,7 @@ void m68k_set_irq(unsigned int level) {
 
 void memspeed ( uint32_t length )
 {
-    uint32_t address;
+    t_a32 address;
     struct timespec tmsStart, tmsEnd;
     long int nanoStart;
     long int nanoEnd;
@@ -450,7 +454,7 @@ void memspeed ( uint32_t length )
     /* READ */
     clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-    for ( address =  0; address < length; address += 2 )
+    for ( address.address =  0; address.address < length; address.address += 2 )
         read16 ( address );
 
     clock_gettime ( CLOCK_REALTIME, &tmsEnd );
@@ -465,7 +469,7 @@ void memspeed ( uint32_t length )
     /* WRITE */
     clock_gettime ( CLOCK_REALTIME, &tmsStart );
     
-    for ( address = 0; address < length; address += 2 )
+    for ( address.address = 0; address.address < length; address.address += 2 )
         write16 ( address, 0x5a5a);
 
     clock_gettime ( CLOCK_REALTIME, &tmsEnd );
@@ -482,24 +486,24 @@ void peek ( uint32_t start )
 {
     char            ascii [17];
     int             i, j;
-    uint32_t        address;
+    t_a32           address;
     unsigned char   data [0x100];                                   /* 256 byte block */
     int             size = 0x100;
     
 
         
-    address = (start / 16) * 16;                                    /* we want a 16 byte boundary */
+    address.address = (start / 16) * 16;                                    /* we want a 16 byte boundary */
  
     ascii[16] = '\0';
 
     printf ( "\n Address    00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F\n\n" );
 
-    for ( i = 0; i < size; ++i, address++ ) 
+    for ( i = 0; i < size; ++i, address.address++ ) 
     {
         data [i] = read8 (address);
 
-        if ( !(address % 16) )
-            printf( " $%.6X  | ", address );
+        if ( !(address.address % 16) )
+            printf( " $%.6X  | ", address.address );
 
         printf( "%02X ", ((unsigned char*)data)[i]);
 
@@ -546,7 +550,7 @@ void peek ( uint32_t start )
 
 void poke ( uint32_t address, uint8_t data )
 {
-    write8 ( address, data );
+    write8 ( (t_a32)address, data );
 }
 
 
@@ -585,7 +589,7 @@ void setMemory ( uint32_t size )
         break;
     }
 
-    write8 ( 0xff8001, banks ); 
+    write8 ( (t_a32)((uint32_t)0xff8001), banks ); 
 }
 
 
@@ -594,7 +598,8 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
     uint8_t  d8, rd8;
     uint16_t d16, rd16;
     uint32_t d32, rd32;
-    uint32_t radd;
+    t_a32    radd;
+    t_a32    add;
     long int nanoStart;
     long int nanoEnd; 
 
@@ -634,9 +639,11 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                         printf ( "Test %d\n", testNumber );
                         printf ( "%-20s[BYTE] Reading RAM...\n", testStr );
 
+                        add.address = startAdd;
+
                         clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-                        for ( uint32_t n = 0, add = startAdd ; add < length; n++, add++ ) 
+                        for ( uint32_t n = 0 ; add.address < length; n++, add.address++ ) 
                         {
                             if ( n == 0 )
                                 printf ( "%-20sRunning ", testStr );
@@ -653,7 +660,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                     printf ( "%-20s%sData mismatch at $%.6X: %.02X should be %.02X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        add, 
+                                        add.address, 
                                         d8, 
                                         garbagePtr [n],
                                         NORMAL );
@@ -695,9 +702,11 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                         printf ( "Test %d\n", testNumber );
                         printf ( "%-20s[WORD] Reading RAM aligned...\n", testStr );
 
+                        add.address = startAdd;
+
                         clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-                        for ( uint32_t n = 0, add = startAdd ; add < length - 2; n += 2, add += 2 ) 
+                        for ( uint32_t n = 0; add.address < length - 2; n += 2, add.address += 2 ) 
                         {
                             if ( n == 0 )
                                 printf ( "%-20sRunning ", testStr );
@@ -714,7 +723,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                     printf ( "%-20s%sData mismatch at $%.6X: %.04X should be %.04X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        add, 
+                                        add.address, 
                                         d16, 
                                         (uint16_t) garbagePtr [n + 1] << 8 | garbagePtr [n],
                                         NORMAL );
@@ -757,14 +766,16 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                         printf ( "Test %d\n", testNumber );
                         printf ( "%-20s[WORD] Reading RAM unaligned...\n", testStr );
 
+                        add.address = startAdd + 1;
+
                         clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-                        for ( uint32_t n = 1, add = startAdd + 1; add < length - 2; n += 2, add += 2 ) 
+                        for ( uint32_t n = 1; add.address < length - 2; n += 2, add.address += 2 ) 
                         {
                             if ( n == 1 )
                                 printf ( "%-20sRunning ", testStr );
 
-                            d16 = be16toh ( (read8 (add) << 8) | read8 (add + 1) );
+                            d16 = be16toh ( (read8 (add) << 8) | read8 ( (t_a32)(add.address + 1) ) );
                             
                             if ( d16 != *( (uint16_t *) &garbagePtr [n] ) )
                             {
@@ -776,7 +787,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                     printf ( "%-20s%sData mismatch at $%.6X: %.04X should be %.04X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        add, 
+                                        add.address, 
                                         d16, 
                                         *( (uint16_t *) &garbagePtr [n] ),
                                         NORMAL );
@@ -819,9 +830,11 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                         printf ( "Test %d\n", testNumber );
                         printf ( "%-20s[LONG] Reading RAM aligned...\n", testStr );
 
+                        add.address = startAdd;
+
                         clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-                        for ( uint32_t n = 0, add = startAdd; add < length - 4; n += 4, add += 4 ) 
+                        for ( uint32_t n = 0; add.address < length - 4; n += 4, add.address += 4 ) 
                         {
                             if ( n == 0 )
                                 printf ( "%-20sRunning ", testStr );
@@ -838,7 +851,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                     printf ( "%-20s%sData mismatch at $%.6X: %.08X should be %.08X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        add, 
+                                        add.address, 
                                         d32, 
                                         *( (uint32_t *) &garbagePtr [n] ),
                                         NORMAL );
@@ -881,16 +894,18 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                         printf ( "Test %d\n", testNumber );
                         printf ( "%-20s[LONG] Reading RAM unaligned...\n", testStr );
 
+                        add.address = startAdd + 1;
+
                         clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-                        for ( uint32_t n = 1, add = startAdd + 1; add < length - 4; n += 4, add += 4 ) 
+                        for ( uint32_t n = 1; add.address < length - 4; n += 4, add.address += 4 ) 
                         {
                             if ( n == 1 )
                                 printf ( "%-20sRunning ", testStr );
 
                             d32 = read8 (add);
-                            d32 |= (be16toh ( read16 (add + 1) ) << 8);
-                            d32 |= (read8 (add + 3) << 24 );
+                            d32 |= (be16toh ( read16 ( (t_a32)(add.address + 1) ) << 8) );
+                            d32 |= (read8 ( (t_a32)(add.address + 3) ) << 24 );
                             
                             if ( d32 != *( (uint32_t *) &garbagePtr [n] ) )
                             {
@@ -902,7 +917,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                     printf ( "%-20s%sData mismatch at $%.6X: %.08X should be %.08X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        add, 
+                                        add.address, 
                                         d32, 
                                         *( (uint32_t *) &garbagePtr [n] ),
                                         NORMAL );
@@ -948,9 +963,11 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                         printf ( "Test %d\n", testNumber );
                         printf ( "%-20s[BYTE] Writing random data to random addresses...\n", testStr );
 
+                        add.address = startAdd;
+
                         clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-                        for ( uint32_t n = 0, add = startAdd ; add < length; n++, add++ ) 
+                        for ( uint32_t n = 0; add.address < length; n++, add.address++ ) 
                         {
                             if ( n == 0 )
                                 printf ( "%-20sRunning ", testStr );
@@ -959,9 +976,9 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
 
                             for ( int z = 10; z; z-- ) /* ten retries should be enough especially for small mem size */
                             {
-                                radd = (uint32_t) ( rand () % length );
+                                radd = (t_a32)( (uint32_t) ( rand () % length ) );
 
-                                if ( radd < startAdd )
+                                if ( radd.address < startAdd )
                                     continue;
 
                                 break;
@@ -981,7 +998,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                     printf ( "%-20s%sData mismatch at $%.6X: %.02X should be %.02X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        radd, 
+                                        radd.address, 
                                         d8, 
                                         rd8,
                                         NORMAL );
@@ -1038,9 +1055,9 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
 
                             for ( int z = 10; z; z-- ) /* ten retries should be enough especially for small mem size */
                             {
-                                radd = (uint32_t) ( rand () % length );
+                                radd.address = (uint32_t) ( rand () % length );
 
-                                if ( radd < startAdd )
+                                if ( radd.address < startAdd )
                                     continue;
 
                                 break;
@@ -1061,7 +1078,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                     printf ( "%-20s%sData mismatch at $%.6X: %.04X should be %.04X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        radd, 
+                                        radd.address, 
                                         d16, 
                                         rd16,
                                         NORMAL );
@@ -1107,9 +1124,11 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                         printf ( "Test %d\n", testNumber );
                         printf ( "%-20s[LONG] Writing random data to random addresses aligned...\n", testStr );
 
+                        add.address = startAdd;
+
                         clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-                        for ( uint32_t n = 0, add = startAdd ; add < length - 4; n += 4, add += 4 ) 
+                        for ( uint32_t n = 0; add.address < length - 4; n += 4, add.address += 4 ) 
                         {
                             if ( n == 0 )
                                 printf ( "%-20sRunning ", testStr );
@@ -1118,9 +1137,9 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
 
                             for ( int z = 10; z; z-- ) /* ten retries should be enough especially for small mem size */
                             {
-                                radd = (uint32_t) ( rand () % length );
+                                radd.address = (uint32_t) ( rand () % length );
 
-                                if ( radd < startAdd )
+                                if ( radd.address < startAdd )
                                     continue;
 
                                 break;
@@ -1140,7 +1159,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                     printf ( "%-20s%sData mismatch at $%.6X: %.08X should be %.08X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        radd, 
+                                        radd.address, 
                                         d32, 
                                         rd32,
                                         NORMAL );
@@ -1196,7 +1215,9 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
 
                     clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-                    for ( uint32_t n = 0, add = startAdd; add < length; n++, add++ ) 
+                    add.address = startAdd;
+
+                    for ( uint32_t n = 0; add.address < length; n++, add.address++ ) 
                     {
                         if ( n == 0 )
                             printf ( "%-20sRunning ", testStr );
@@ -1217,7 +1238,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                 printf ( "%-20s%sData mismatch at $%.6X: %.02X should be %.02X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        add, 
+                                        add.address, 
                                         rd8, 
                                         d8,
                                         NORMAL );
@@ -1260,9 +1281,11 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                     printf ( "Test %d\n", testNumber );
                     printf ( "%-20s[WORD] Writing to RAM aligned... \n", testStr );
 
+                    add.address = startAdd;
+
                     clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-                    for ( uint32_t n = 0, add = startAdd; add < length - 2; n += 2, add += 2) 
+                    for ( uint32_t n = 0; add.address < length - 2; n += 2, add.address += 2) 
                     {
                         if ( n == 0 )
                             printf ( "%-20sRunning ", testStr );
@@ -1283,7 +1306,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                 printf ( "%-20s%sData mismatch at $%.6X: %.04X should be %.04X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        add, 
+                                        add.address, 
                                         rd16, 
                                         d16,
                                         NORMAL );
@@ -1326,9 +1349,11 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                     printf ( "Test %d\n", testNumber );
                     printf ( "%-20s[WORD] Writing to RAM unaligned... \n", testStr );
 
+                    add.address = startAdd + 1;
+
                     clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-                    for ( uint32_t n = 1, add = startAdd + 1; add < length - 2; n += 2, add += 2) 
+                    for ( uint32_t n = 1; add.address < length - 2; n += 2, add.address += 2) 
                     {
                         if ( n == 1 )
                             printf ( "%-20sRunning ", testStr );
@@ -1336,8 +1361,8 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                         d16 = *( (uint16_t *) &garbagePtr [n] );
 
                         write8 ( add, (d16 & 0x00FF) );
-                        write8 ( add + 1, (d16 >> 8) );                      
-                        rd16 = be16toh ( (read8 (add) << 8) | read8 (add + 1) );
+                        write8 ( (t_a32)(add.address + 1), (d16 >> 8) );                      
+                        rd16 = be16toh ( (read8 (add) << 8) | read8 ( (t_a32)(add.address + 1) ) );
 
                         if ( d16 != rd16 ) 
                         {
@@ -1350,7 +1375,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                 printf ( "%-20s%sData mismatch at $%.6X: %.04X should be %.04X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        add, 
+                                        add.address, 
                                         rd16, 
                                         d16,
                                         NORMAL );
@@ -1393,9 +1418,11 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                     printf ( "Test %d\n", testNumber );
                     printf ( "%-20s[LONG] Writing to RAM aligned... \n", testStr );
 
+                    add.address = startAdd;
+
                     clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-                    for ( uint32_t n = 0, add = startAdd; add < length - 4; n += 4, add += 4) 
+                    for ( uint32_t n = 0; add.address < length - 4; n += 4, add.address += 4) 
                     {
                         if ( n == 0 )
                                 printf ( "%-20sRunning ", testStr );
@@ -1416,7 +1443,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                 printf ( "%-20s%sData mismatch at $%.6X: %.08X should be %.08X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        add, 
+                                        add.address, 
                                         rd32, 
                                         d32,
                                         NORMAL );
@@ -1459,9 +1486,11 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                     printf ( "Test %d\n", testNumber );
                     printf ( "%-20s[LONG] Writing to RAM unaligned... \n", testStr );
 
+                    add.address = startAdd + 1;
+
                     clock_gettime ( CLOCK_REALTIME, &tmsStart );
 
-                    for ( uint32_t n = 1, add = startAdd + 1; add < length - 4; n += 4, add += 4) 
+                    for ( uint32_t n = 1; add.address < length - 4; n += 4, add.address += 4) 
                     {
                         if ( n == 1 )
                             printf ( "%-20sRunning ", testStr );
@@ -1469,12 +1498,12 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                         d32 = *( (uint32_t *) &garbagePtr [n] );
 
                         write8  ( add, (d32 & 0x0000FF) );
-                        write16 ( add + 1, htobe16 ( ( (d32 & 0x00FFFF00) >> 8) ) );
-                        write8  ( add + 3, (d32 & 0xFF000000) >> 24);
+                        write16 ( (t_a32)(add.address + 1), htobe16 ( ( (d32 & 0x00FFFF00) >> 8) ) );
+                        write8  ( (t_a32)(add.address + 3), (d32 & 0xFF000000) >> 24);
 
                         rd32  = read8 (add);
-                        rd32 |= (be16toh ( read16 (add + 1) ) << 8);
-                        rd32 |= (read8 (add + 3) << 24 );
+                        rd32 |= (be16toh ( read16 ( (t_a32)(add.address + 1)) ) << 8);
+                        rd32 |= (read8 ( (t_a32)(add.address + 3) ) << 24 );
 
                         if ( d32 != rd32 ) 
                         {
@@ -1487,7 +1516,7 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
                                 printf ( "%-20s%sData mismatch at $%.6X: %.08X should be %.08X%s\n", 
                                         testStr,
                                         REVERSE_VIDEO, 
-                                        add, 
+                                        add.address, 
                                         rd32, 
                                         d32,
                                         NORMAL );
@@ -1584,7 +1613,7 @@ void clearmem ( uint32_t length, uint32_t *duration, uint16_t pattern )
     
     for ( uint32_t n = 8; n < length; n += 2 ) {
 
-        write16 ( n, pattern );
+        write16 ( (t_a32)n, pattern );
 
         if ( n % (length / 64)  == 0 ) 
         {
@@ -1619,7 +1648,7 @@ void dump ( uint32_t ROMsize, uint32_t ROMaddress )
 
     for ( int i = 0; i < ROMsize; i++ )
     {
-        in = read8 ( ROMaddress + i) ;
+        in = read8 ( (t_a32)(ROMaddress + i) ) ;
 
         fputc ( in, out );
     }

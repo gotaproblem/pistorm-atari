@@ -57,22 +57,22 @@ Now the final steps to get things up and running, all of this is done from a com
 
 **Testing**
 It is recommended you run ataritest to confirm basic functionality.
-* cd pistorm-atari
-* sudo ./ataritest --memory tests=rw
+* `sudo ./ataritest --memory tests=rw`
 
 ataritest can do a lot more, like reading and writing (peek and poke), to Atari memory space, filling Atari memory with patterns.
 
 **Starting the Emulator**
-You can start the emulator with a basic default Atari config by typing `sudo ./emulator --config atari.cfg`.    
-**Important note:** Try not to edit the sample config file - `atari.cfg`. It is advised you create three directories above the pistorm-atari installation, for configurations, rom images and disk images. 
-* cd pistorm-atari
-* cd ..
-* mkdir configs
-* mkdir roms
-* mkdir dkimages
-* cp pistorm-atari/atari.cfg configs/ 
-* cd pistorm-atari
-Run the emulator using `sudo ./emulator --config ../configs/atari.cfg`. This way, you will never have any problems using `git pull` to update your PiStorm repo to the latest commit.
+You can start the emulator with the default Atari configuration by typing `sudo ./emulator --config configs/atari.cfg`.    
+**Important note:** Do not edit the default configuration file - `atari.cfg`. Instead, make a copy and save it in configs/.
+This way, you will never have any problems using `git pull` to update your PiStorm repo to the latest commit.
+Three sub-directories are present for Emulator run-time usage: They are, roms, dkimages and configs.
+* dkimages and roms contain compressed files
+* `cd roms`
+* `unzip roms.zip`
+* `cd ../dkimages`
+* `unzip disks.zip`
+* `cd ..`
+Run the emulator using `sudo ./emulator --config configs/atari.cfg`.
 
 To exit the emulator you can press `Ctrl+C`.
 

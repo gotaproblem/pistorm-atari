@@ -1116,6 +1116,8 @@ extern uint32 pmmu_translate_addr(m68ki_cpu_core *state, uint32 addr_in, uint16 
 
 // read immediate word using the instruction cache
 
+extern volatile int g_buserr;
+
 static inline uint32 m68ki_ic_readimm16(m68ki_cpu_core *state, uint32 address)
 {
 	if (state->cacr & M68K_CACR_EI)
@@ -1138,7 +1140,7 @@ static inline uint32 m68ki_ic_readimm16(m68ki_cpu_core *state, uint32 address)
 				uint32 data = m68ki_read_32(state, address & ~3);
 
 				//printf("m68k: doing cache fill at %08x (tag %08x idx %d)\n", address, tag, idx);
-
+				state->mmu_tmp_buserror_occurred = g_buserr;
 				// if no buserror occurred, validate the tag
 				if (!state->mmu_tmp_buserror_occurred)
 				{
@@ -1230,6 +1232,9 @@ static inline uint m68ki_read_imm_32(m68ki_cpu_core *state)
 	temp_val = MASK_OUT_ABOVE_32((temp_val << 16) | MASK_OUT_ABOVE_16(CPU_PREF_DATA));
 	REG_PC += 2;
 	CPU_PREF_DATA = m68ki_ic_readimm16(state, REG_PC);
+
+	state->mmu_tmp_buserror_occurred = g_buserr;
+	
 	CPU_PREF_ADDR = state->mmu_tmp_buserror_occurred ? ((uint32)~0) : REG_PC;
 
 	return temp_val;
@@ -1294,8 +1299,8 @@ static inline uint m68ki_read_8_fc(m68ki_cpu_core *state, uint address, uint fc)
 	}
 #endif
 
-	//return m68k_read_memory_8(ADDRESS_68K(address));
-	return m68k_read_memory_8 ( address );
+	return m68k_read_memory_8(ADDRESS_68K(address));
+	//return m68k_read_memory_8 ( address );
 }
 
 // M68KI_READ_16_FC
@@ -1336,8 +1341,8 @@ static inline uint m68ki_read_16_fc(m68ki_cpu_core *state, uint address, uint fc
 	}
 #endif
 
-	//return m68k_read_memory_16(ADDRESS_68K(address));
-	return m68k_read_memory_16 ( address );
+	return m68k_read_memory_16(ADDRESS_68K(address));
+	//return m68k_read_memory_16 ( address );
 }
 
 // M68KI_READ_32_FC
@@ -1381,8 +1386,8 @@ static inline uint m68ki_read_32_fc(m68ki_cpu_core *state, uint address, uint fc
 	}
 #endif
 
-	//return m68k_read_memory_32(ADDRESS_68K(address));
-	return m68k_read_memory_32 ( address );
+	return m68k_read_memory_32(ADDRESS_68K(address));
+	//return m68k_read_memory_32 ( address );
 }
 
 // M68KI_WRITE_8_FC
@@ -1422,8 +1427,8 @@ static inline void m68ki_write_8_fc(m68ki_cpu_core *state, uint address, uint fc
 	}
 #endif
 
-	//m68k_write_memory_8(ADDRESS_68K(address), value);
-	m68k_write_memory_8( address, value);
+	m68k_write_memory_8(ADDRESS_68K(address), value);
+	//m68k_write_memory_8( address, value);
 }
 
 // M68KI_WRITE_16_FC
@@ -1471,8 +1476,8 @@ static inline void m68ki_write_16_fc(m68ki_cpu_core *state, uint address, uint f
 	}
 #endif
 
-	//m68k_write_memory_16(ADDRESS_68K(address), value);
-	m68k_write_memory_16( address, value);
+	m68k_write_memory_16(ADDRESS_68K(address), value);
+	//m68k_write_memory_16( address, value);
 }
 
 // M68KI_WRITE_32_FC
@@ -1525,8 +1530,8 @@ static inline void m68ki_write_32_fc(m68ki_cpu_core *state, uint address, uint f
 	}
 #endif
 
-	//m68k_write_memory_32(ADDRESS_68K(address), value);
-	m68k_write_memory_32( address, value);
+	m68k_write_memory_32(ADDRESS_68K(address), value);
+	//m68k_write_memory_32( address, value);
 }
 
 #if M68K_SIMULATE_PD_WRITES

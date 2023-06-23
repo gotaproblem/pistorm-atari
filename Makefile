@@ -63,7 +63,7 @@ TARGET = $(EXENAME)$(EXE)
 DELETEFILES = $(MUSASHIGENCFILES) $(.OFILES) $(.OFILES:%.o=%.d) $(TARGET) $(MUSASHIGENERATOR)$(EXE)
 
 
-all: $(MUSASHIGENCFILES) $(MUSASHIGENHFILES) $(TARGET) #ataritest #zz9fulltest zz9readloop
+all: $(MUSASHIGENCFILES) $(MUSASHIGENHFILES) $(TARGET) ataritest #zz9fulltest zz9readloop
 
 clean:
 	rm -f $(DELETEFILES)

@@ -1270,7 +1270,7 @@ extern volatile int g_buserr;
 
 uint m68ki_read_imm16_addr_slowpath(m68ki_cpu_core *state, uint32_t pc, address_translation_cache *cache)
 {
-    uint32_t address = pc;//ADDRESS_68K(pc);
+    //uint32_t address = pc;//ADDRESS_68K(pc);
 	/*
     uint32_t pc_address_diff = pc - address;
 	for (int i = 0; i < state->read_ranges; i++) {
@@ -1306,7 +1306,7 @@ uint m68ki_read_imm16_addr_slowpath(m68ki_cpu_core *state, uint32_t pc, address_
 		CPU_PREF_DATA = m68ki_ic_readimm16(state, REG_PC);
 		//CPU_PREF_ADDR = state->mmu_tmp_buserror_occurred ? ((uint32)~0) : REG_PC;
 		CPU_PREF_ADDR = g_buserr ? ((uint32)~0) : REG_PC;
-		
+
 		// ignore bus error on prefetch
 		state->mmu_tmp_buserror_occurred = 0;
 		g_buserr = 0;

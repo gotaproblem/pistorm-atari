@@ -693,10 +693,10 @@ unsigned int m68k_read_memory_8 ( unsigned int address )
     return platform_res;
   }
 
-  if ( cpu_type == M68K_CPU_TYPE_68000 )
-    address &= 0x00ffffff;
+  //if ( cpu_type == M68K_CPU_TYPE_68000 )
+  //  address &= 0x00ffffff;
     
-  else
+  //else
     address = check_ff_st ( address );
 
   return ps_read_8 ( (t_a32)address );  
@@ -710,10 +710,10 @@ unsigned int m68k_read_memory_16 ( unsigned int address )
     return platform_res;
   }
 
-  if ( cpu_type == M68K_CPU_TYPE_68000 )
-    address &= 0x00ffffff;
+  //if ( cpu_type == M68K_CPU_TYPE_68000 )
+  //  address &= 0x00ffffff;
     
-  else
+  //else
     address = check_ff_st ( address );
 
   return ps_read_16 ( (t_a32)address );
@@ -727,10 +727,10 @@ unsigned int m68k_read_memory_32 ( unsigned int address )
     return platform_res;
   }
 
-  if ( cpu_type == M68K_CPU_TYPE_68000 )
-    address &= 0x00ffffff;
+  //if ( cpu_type == M68K_CPU_TYPE_68000 )
+  //  address &= 0x00ffffff;
     
-  else
+  //else
     address = check_ff_st (address);
 
   return ps_read_32 ( (t_a32)address );
