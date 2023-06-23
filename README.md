@@ -62,15 +62,18 @@ It is recommended you run ataritest to confirm basic functionality.
 ataritest can do a lot more, like reading and writing (peek and poke), to Atari memory space, filling Atari memory with patterns.
 
 **Starting the Emulator**
+
 You can start the emulator with the default Atari configuration by typing `sudo ./emulator --config configs/atari.cfg`.    
 **Important note:** Do not edit the default configuration file - `atari.cfg`. Instead, make a copy and save it in configs/.
 This way, you will never have any problems using `git pull` to update your PiStorm repo to the latest commit.
 Three sub-directories are present for Emulator run-time usage: They are, roms, dkimages and configs.
-* dkimages and roms contain compressed files 
+The roms/ directory contains a compressed file.
 * `cd roms`
 * `unzip roms.zip`
 * `cd ..`
+
 **The disk images are too large for GitHub. Please find the disk images at https://bbansolutions.co.uk**
+
 Download the disk image.zip file, copy to the PI4 pistorm-atari/dkimages directory. Uncomress the file to give two disk images.
 * `cd pistorm-atari`
 * `mkdir dkimages`
