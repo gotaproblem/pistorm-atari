@@ -16,27 +16,21 @@
 * Development is ongoing on an Atari STe, utilising an exxos PLLC adapter board to allow the fitting of the PiStorm interface. The ongoing work is a "proof-of-concept". If proven to offer acceptable performance, then bespoke hardware will be needed to allow installation within the confines of the Atari ST platform.
 * The Atari platform differs greatly to the Amiga platform. Atari uses FC lines and depends heavily upon bus arbitration and interrupts.
 * Initial development was on a PI3B, but performance was poor. A PI3A+ was tried and again the performance was poor. Finally, a PI4B was tried. Although initial performance was still poor in comparison to the Amiga, there was headroom for improvemnt. Over many months, performance has slowly increased, and at time of writing, performance is finally acceptable. 
-# Performance with the current use of Musashi as the 68k CPU emulator is somewhere around a 100-125MHz 68030.
-
 
 # Extended functionality
 
 A virtual IDE interface is included which allows for two disk drive images to be attached. The BBaN Solutions HDC has been tested extensively and offers good performance via the ACSI bus.
 * Atari ST ROM images can be loaded at initialisation. For example, the emulation can boot using TOS 1.4 (ST only), TOS 1.62, TOS 2.06 or even EMUTos
-* TT-RAM option can be added to increase performance
+* Alt-RAM/TT-RAM option can be added to increase performance
 * Additional interfaces will be added with time
 
-# Simple quickstart
+# Now to get up-and-running
+The following steps require basic knowledge of the linux operating system. Take your time!
 
-* Download Raspberry Pi OS from https://www.raspberrypi.org/software/operating-systems/, the Lite version is recommended as the windowing system of the Full version adds a lot of extra system load which may impact performance.
-* Write the Image to a SD Card. For development, a minimum of 32GB is recommended for the PiStorm binaries and required libraries, but if you wish to use large hard drive images or sometthing with it, go with a bigger card.
-* Install the PiStorm adapter in place of the orignal CPU in the system.
-  Make sure the PiStorm sits flush and correct in the socket.
-  Double check that all is properly in place and no pins are bent.
-* Connect an HDMI Display and a USB keyboard to the PiStorm. Using a USB Hub is possible, an externally powered hub is recommended.
-  Connect the Amiga to the PSU and PAL Monitor
-* Insert the SD into the Raspberry Pi, Power on the Amiga now. You should see a Rainbow colored screen on the HDMI Monitor and the PiStorm booting.
-
+* Download Raspberry Pi OS from https://www.raspberrypi.org/software/operating-systems/, we need the 32 bit Lite version.
+* Write the Image to an SD card. For development, a 32 GB SD card is recommended.
+* Connect an HDMI Display and a USB keyboard to the Pi4.
+* Insert the SD card into the Raspberry Pi4, and connect it to power. You should see a Rainbow colored screen on the HDMI Monitor followed by the booting sequence.
 * When the boot process is finished (on the first run it reboots automatically after resizing the filesystems to your SD) you should be greeted with the login prompt.
 * Log in as the default user, typically user: `pi` and password: `raspberry`. (The keyboard is set to US Layout on first boot!)
 * Run `sudo raspi-config`
@@ -45,9 +39,9 @@ A virtual IDE interface is included which allows for two disk drive images to be
 * Enable SSH at boot time
 * Exit raspi-config
 
-You can now reach the PiStorm over SSH, check your router web/settings page to find the IP of the PiStorm, or run `ifconfig` locally on the PiStorm from the console.
+You can now reach the Pi4 over SSH, check your router web/settings page to find the IP of the PiStorm, or run `ifconfig` locally on the Pi4 from the console.
 
-Now the final steps to get things up and running, all of this is done from a command prompt (terminal) either locally on the PiStorm or over ssh:
+Now the final steps to get things up and running, all of this is done from a command prompt (terminal) either locally on the Pi4 or over ssh:
 * `sudo apt-get update`
 * `sudo apt full-upgrade` (If you get mysterious 'not found' messages from running the line in the next step.)
 * `sudo apt-get install git libasound2-dev`
@@ -55,8 +49,38 @@ Now the final steps to get things up and running, all of this is done from a com
 * `cd pistorm-atari`
 * `make`
 
+Congrat yourself - You've gotten this far! Shutdown the linux operating system
+* `sudo halt`
+
+# Install the hardware
+**Power Caution**
+
+How do you intend to power this thing? There are two possibilities
+* 1 - power via the Atari
+This is okay for the final-cut, but for development, option 2 is suggested
+* 2 - power via USB
+If you are developing, which requires numerous power cycles, then this is the option for you. You will need to make sure USB power (5v) does not reach the PiStorm. The Pi4 GPIO header supplies 5v power on pins 2 and 4. These two pins need to be cut.
+As the Pi4 physically can not connect directly to the PiStorm, a header extension is needed - this is where you cut the pins - **do not cut the pins on the Raspberry Pi4 header.**
+
+* Attach the Pi4 to the PiStorm and install the PiStorm adapter in place of the orignal CPU in the Atari.
+  Make sure the PiStorm sits flush and correct in the socket.
+  Double check that all is properly in place and no pins are bent.
+
+# FPGA bitstream update :
+Before we can use the PiStorm, it needs to have firmware installed. 
+
+Install OpenOCD:
+`sudo apt-get install openocd`
+
+Run the FPGA update with `./flash.sh`, this will automatically detect your CPLD version and flash appropriately.
+
+If successful "Flashing successful!" will appear, if not it will fail with "Flashing failed" and `nprog_log.txt` will be created with more details.
+
+# Running
+
 **Testing**
-It is recommended you run ataritest to confirm basic functionality.
+
+As a confidence test, it is recommended you run ataritest to confirm basic functionality.
 * `sudo ./ataritest --memory tests=rw`
 
 ataritest can do a lot more, like reading and writing (peek and poke), to Atari memory space, filling Atari memory with patterns.
@@ -66,7 +90,7 @@ ataritest can do a lot more, like reading and writing (peek and poke), to Atari 
 You can start the emulator with the default Atari configuration by typing `sudo ./emulator --config configs/atari.cfg`.    
 **Important note:** Do not edit the default configuration file - `atari.cfg`. Instead, make a copy and save it in configs/.
 This way, you will never have any problems using `git pull` to update your PiStorm repo to the latest commit.
-Three sub-directories are present for Emulator run-time usage: They are, roms, dkimages and configs.
+Two sub-directories are present for Emulator run-time usage: They are, roms and configs.
 The roms/ directory contains a compressed file.
 * `cd roms`
 * `unzip roms.zip`
@@ -74,7 +98,7 @@ The roms/ directory contains a compressed file.
 
 **The disk images are too large for GitHub. Please find the disk images at https://bbansolutions.co.uk**
 
-Download the disk image.zip file, copy to the PI4 pistorm-atari/dkimages directory. Uncomress the file to give two disk images.
+Download the disk image.zip file, copy to the Pi4 pistorm-atari/dkimages directory. Uncompress the file to give two disk images.
 * `cd pistorm-atari`
 * `mkdir dkimages`
 * `cd dkimages`
@@ -85,11 +109,4 @@ Run the emulator using `sudo ./emulator --config configs/atari.cfg`.
 
 To exit the emulator you can press `Ctrl+C`.
 
-# FPGA bitstream update :
 
-Install OpenOCD:
-`sudo apt-get install openocd`
-
-Run the FPGA update with `./flash.sh`, this will automatically detect your CPLD version and flash appropriately.
-
-If successful "Flashing successful!" will appear, if not it will fail with "Flashing failed" and `nprog_log.txt` will be created with more details.

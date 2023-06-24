@@ -23,9 +23,9 @@ EXEPATH   = ./
 
 CC        = gcc
 
-PI4OPTS	  = -mcpu=cortex-a72 -mfloat-abi=hard -mfpu=neon-fp-armv8 -march=armv8-a+crc
+PI4OPTS	  = -mcpu=cortex-a72 #-mfloat-abi=hard -mfpu=neon-fp-armv8 -march=armv8-a+crc
 
-CFLAGS    = -I. $(PI4OPTS) -O4 
+CFLAGS    = -I. $(PI4OPTS) -O3
 
 TARGET    = $(EXENAME)
 
