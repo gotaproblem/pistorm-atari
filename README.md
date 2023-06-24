@@ -17,6 +17,10 @@
 * The Atari platform differs greatly to the Amiga platform. Atari uses FC lines and depends heavily upon bus arbitration and interrupts.
 * Initial development was on a PI3B, but performance was poor. A PI3A+ was tried and again the performance was poor. Finally, a PI4B was tried. Although initial performance was still poor in comparison to the Amiga, there was headroom for improvemnt. Over many months, performance has slowly increased, and at time of writing, performance is finally acceptable. 
 
+**NOTE**
+
+PiStorm must have 374 latches. Any other are known not to be compatible for the moment.
+
 # Extended functionality
 
 A virtual IDE interface is included which allows for two disk drive images to be attached. The BBaN Solutions HDC has been tested extensively and offers good performance via the ACSI bus.

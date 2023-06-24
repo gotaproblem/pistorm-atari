@@ -1179,11 +1179,11 @@ static inline uint m68ki_read_imm_16(m68ki_cpu_core *state)
 	uint32_t pc = REG_PC;
 
 	address_translation_cache *cache = &state->code_translation_cache;
-	//if(pc >= cache->lower && pc < cache->upper)
-	//{
-	//	REG_PC += 2;
-	//	return be16toh(((unsigned short *)(cache->offset + pc))[0]);
-	//}
+	if(pc >= cache->lower && pc < cache->upper)
+	{
+		REG_PC += 2;
+		return be16toh(((unsigned short *)(cache->offset + pc))[0]);
+	}
 
 	return m68ki_read_imm16_addr_slowpath(state, pc, cache);
 }
@@ -1277,20 +1277,20 @@ static inline uint m68ki_read_8_fc(m68ki_cpu_core *state, uint address, uint fc)
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,1);
 #endif
-/*
+
 	address_translation_cache *cache = &state->fc_read_translation_cache;
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		return cache->offset[address - cache->lower];
 	}
-
+	/*
 	for (int i = 0; i < state->read_ranges; i++) {
 		if(address >= state->read_addr[i] && address < state->read_upper[i]) {
 			SET_FC_TRANSLATION_CACHE_VALUES
 			return state->read_data[i][address - state->read_addr[i]];
 		}
 	}
-*/
+	*/
 #ifdef CHIP_FASTPATH
 	//if (!state->ovl && address < 0x200000) {
 	if (!state->ovl && address < FASTPATH_UPPER) 
@@ -1316,20 +1316,20 @@ static inline uint m68ki_read_16_fc(m68ki_cpu_core *state, uint address, uint fc
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,1);
 #endif
-/*
+
 	address_translation_cache *cache = &state->fc_read_translation_cache;
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		return be16toh(((unsigned short *)(cache->offset + (address - cache->lower)))[0]);
 	}
-
+	/*
 	for (int i = 0; i < state->read_ranges; i++) {
 		if(address >= state->read_addr[i] && address < state->read_upper[i]) {
 			SET_FC_TRANSLATION_CACHE_VALUES
 			return be16toh(((unsigned short *)(state->read_data[i] + (address - state->read_addr[i])))[0]);
 		}
 	}
-*/
+	*/
 #ifdef CHIP_FASTPATH
 	//if (!state->ovl && address < 0x200000) {
 	if (!state->ovl && address < FASTPATH_UPPER) 
@@ -1352,26 +1352,26 @@ static inline uint m68ki_read_32_fc(m68ki_cpu_core *state, uint address, uint fc
 	state->mmu_tmp_fc = fc;
 	state->mmu_tmp_rw = 1;
 	state->mmu_tmp_sz = M68K_SZ_LONG;
-	//m68ki_check_address_error_010_less(state, address, MODE_READ, fc); /* auto-disable (see m68kcpu.h) */
+	m68ki_check_address_error_010_less(state, address, MODE_READ, fc); /* auto-disable (see m68kcpu.h) */
 
 #if M68K_EMULATE_PMMU
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,1);
 #endif
-/*
+
 	address_translation_cache *cache = &state->fc_read_translation_cache;
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		return be32toh(((unsigned int *)(cache->offset + (address - cache->lower)))[0]);
 	}
-
+	/*
 	for (int i = 0; i < state->read_ranges; i++) {
 		if(address >= state->read_addr[i] && address < state->read_upper[i]) {
 			SET_FC_TRANSLATION_CACHE_VALUES
 			return be32toh(((unsigned int *)(state->read_data[i] + (address - state->read_addr[i])))[0]);
 		}
 	}
-*/
+	*/
 #ifdef CHIP_FASTPATH
 	//if (!state->ovl && address < 0x200000) {
 	if (!state->ovl && address < FASTPATH_UPPER) 

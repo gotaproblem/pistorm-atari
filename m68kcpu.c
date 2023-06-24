@@ -1270,7 +1270,7 @@ extern volatile int g_buserr;
 
 uint m68ki_read_imm16_addr_slowpath(m68ki_cpu_core *state, uint32_t pc, address_translation_cache *cache)
 {
-    //uint32_t address = pc;//ADDRESS_68K(pc);
+    uint32_t address = ADDRESS_68K(pc);
 	/*
     uint32_t pc_address_diff = pc - address;
 	for (int i = 0; i < state->read_ranges; i++) {
@@ -1287,7 +1287,7 @@ uint m68ki_read_imm16_addr_slowpath(m68ki_cpu_core *state, uint32_t pc, address_
 	state->mmu_tmp_fc = FLAG_S | FUNCTION_CODE_USER_PROGRAM;
 	state->mmu_tmp_rw = 1;
 	state->mmu_tmp_sz = M68K_SZ_WORD;
-	//m68ki_check_address_error(state, REG_PC, MODE_READ, FLAG_S | FUNCTION_CODE_USER_PROGRAM); /* auto-disable (see m68kcpu.h) */
+	m68ki_check_address_error(state, REG_PC, MODE_READ, FLAG_S | FUNCTION_CODE_USER_PROGRAM); /* auto-disable (see m68kcpu.h) */
 
 #if M68K_EMULATE_PREFETCH
 {
@@ -1295,17 +1295,18 @@ uint m68ki_read_imm16_addr_slowpath(m68ki_cpu_core *state, uint32_t pc, address_
 	if(REG_PC != CPU_PREF_ADDR)
 	{
 		CPU_PREF_DATA = m68ki_ic_readimm16(state, REG_PC);
-		//CPU_PREF_ADDR = state->mmu_tmp_buserror_occurred ? ((uint32)~0) : REG_PC;
-		CPU_PREF_ADDR = g_buserr ? ((uint32)~0) : REG_PC;
+		state->mmu_tmp_buserror_occurred = g_buserr;
+		CPU_PREF_ADDR = state->mmu_tmp_buserror_occurred ? ((uint32)~0) : REG_PC;
+		//CPU_PREF_ADDR = g_buserr ? ((uint32)~0) : REG_PC;
 	}
 	result = MASK_OUT_ABOVE_16(CPU_PREF_DATA);
 	REG_PC += 2;
-	//if (!state->mmu_tmp_buserror_occurred) {
-	if (!g_buserr) {
+	if (!state->mmu_tmp_buserror_occurred) {
+	//if (!g_buserr) {
 		// prefetch only if no bus error occurred in opcode fetch
 		CPU_PREF_DATA = m68ki_ic_readimm16(state, REG_PC);
-		//CPU_PREF_ADDR = state->mmu_tmp_buserror_occurred ? ((uint32)~0) : REG_PC;
-		CPU_PREF_ADDR = g_buserr ? ((uint32)~0) : REG_PC;
+		CPU_PREF_ADDR = state->mmu_tmp_buserror_occurred ? ((uint32)~0) : REG_PC;
+		//CPU_PREF_ADDR = g_buserr ? ((uint32)~0) : REG_PC;
 
 		// ignore bus error on prefetch
 		state->mmu_tmp_buserror_occurred = 0;

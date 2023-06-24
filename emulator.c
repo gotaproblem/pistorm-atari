@@ -37,17 +37,18 @@ volatile uint32_t old_level;
 
 volatile uint32_t last_irq = 8;
 volatile uint32_t last_last_irq = 8;
-volatile uint32_t iack = 0;
+//volatile uint32_t iack = 0;
 
 extern volatile int g_irq;
 extern volatile int g_buserr;
-extern volatile int g_beAddress;
-extern volatile int g_beMode;
+//extern volatile int g_beAddress;
+//extern volatile int g_beMode;
 
 volatile int peeking = 0;
 volatile int canpeek = 0;
 
-uint8_t end_signal = 0, load_new_config = 0;
+//uint8_t end_signal = 0, 
+uint8_t load_new_config = 0;
 
 int mem_fd;
 int mem_fd_gpclk;
@@ -81,7 +82,7 @@ volatile uint32_t do_reset=0;
 volatile uint32_t gotIntLevel;
 volatile uint32_t ipl;
 
-void call_berr(uint16_t status, uint32_t address, uint mode);
+//void call_berr(uint16_t status, uint32_t address, uint mode);
 static inline void m68k_execute_bef(m68ki_cpu_core *, int);
 
 volatile uint32_t g_vector;
@@ -98,6 +99,7 @@ int ATARI_VID_enabled = 1; // cryptodad Apr 2023
 int ATARI_VID_enabled = 0; 
 #endif
 
+#if (0)
 void *ipl_task ( void *args ) 
 {
   uint16_t old_irq = 0;
@@ -159,14 +161,14 @@ void *ipl_task ( void *args )
 
   return args;
 }
-
+#endif
 
 
 static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 {
-  address_translation_cache *junk;
+  //address_translation_cache *junk;
 	/* eat up any reset cycles */
-  /*
+  
 	if (RESET_CYCLES) 
   {
 	    int rc = RESET_CYCLES;
@@ -175,7 +177,7 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 	    if (num_cycles <= 0)
 		return;
 	}
-  */
+  
 
 	/* Set our pool of clock cycles available */
 	SET_CYCLES(num_cycles);
@@ -184,23 +186,25 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 	/* Make sure we're not stopped */
 	if ( !CPU_STOPPED )
 	{
-    m68ki_use_data_space ();
+    //m68ki_use_data_space ();
 
 		/* Main loop.  Keep going until we run out of clock cycles */
 		do
 		{
+      m68ki_use_data_space ();
+
 			/* Record previous program counter */
 			REG_PPC = REG_PC;
 
 			/* Read an instruction and call its handler */
-			//REG_IR = m68ki_read_imm_16 ( state );
-      REG_IR = m68ki_read_imm16_addr_slowpath ( state, REG_PC, junk );
+			REG_IR = m68ki_read_imm_16 ( state );
+      //REG_IR = m68ki_read_imm16_addr_slowpath ( state, REG_PC, junk );
 
 			m68ki_instruction_jump_table [REG_IR] (state);
 
 			if ( g_buserr ) 
       {
-printf ( "BUS ERROR\n" );
+//printf ( "BUS ERROR\n" );
 
         /* Record previous D/A register state (in case of bus error) */
         for ( int i = 0; i < 16; i++ )
@@ -273,6 +277,8 @@ cpu_loop:
 
     if ( g_irq )
     {
+      //m68ki_check_interrupts ( state );
+
       uint16_t status = ps_read_status_reg ();
 
       if ( status & 0x2 ) 
@@ -286,8 +292,8 @@ cpu_loop:
         m68k_pulse_reset ( state );
       }
 
-      else 
-      {
+      //else 
+      //{
         last_irq = status >> 13;
         
         if ( last_irq != 0 && last_irq != last_last_irq ) 
@@ -295,7 +301,7 @@ cpu_loop:
           last_last_irq = last_irq;
           m68k_set_irq ( last_irq );
         }
-      }
+      //}
 
       m68ki_check_interrupts ( state );
     }
@@ -307,8 +313,8 @@ cpu_loop:
       last_last_irq = 0;
     }
 
-    if (end_signal)
-      goto stop_cpu_emulation;
+    //if (end_signal)
+    //  goto stop_cpu_emulation;
   
 #ifdef DISASSEMBLE
     if ( debug )
@@ -350,8 +356,8 @@ int main ( int argc, char *argv[] )
   
   fc = 6;
   g_buserr = 0;
-  g_beAddress = 0;
-  g_beMode = 0;
+  //g_beAddress = 0;
+  //g_beMode = 0;
 
   // Some command line switch stuffles
   for (g = 1; g < argc; g++) 
@@ -403,9 +409,9 @@ int main ( int argc, char *argv[] )
       case PICFG_RELOAD:
         cfg = load_config_file(get_pistorm_cfg_filename());
         break;
-      case PICFG_DEFAULT:
-        cfg = load_config_file("default.cfg");
-        break;
+      //case PICFG_DEFAULT:
+      //  cfg = load_config_file("default.cfg");
+      //  break;
     }
   }
 
@@ -835,10 +841,10 @@ void m68k_write_memory_8 ( unsigned int address, unsigned int value )
   if (platform_write_check ( OP_TYPE_BYTE, address, value ) )
     return;
 
-  if ( cpu_type == M68K_CPU_TYPE_68000 )
-    address &= 0x00ffffff;
+  //if ( cpu_type == M68K_CPU_TYPE_68000 )
+  //  address &= 0x00ffffff;
     
-  else
+  //else
     address = check_ff_st ( address );
 
   ps_write_8 ( (t_a32)address, value );
@@ -850,10 +856,10 @@ void m68k_write_memory_16 ( unsigned int address, unsigned int value )
   if (platform_write_check ( OP_TYPE_WORD, address, value ) )
     return;
 
-  if ( cpu_type == M68K_CPU_TYPE_68000 )
-    address &= 0x00ffffff;
+  //if ( cpu_type == M68K_CPU_TYPE_68000 )
+  //  address &= 0x00ffffff;
     
-  else
+  //else
     address = check_ff_st ( address );
 
   ps_write_16 ( (t_a32)address, value );
@@ -865,10 +871,10 @@ void m68k_write_memory_32 ( unsigned int address, unsigned int value )
   if ( platform_write_check ( OP_TYPE_LONGWORD, address, value ) )
     return;
 
-  if ( cpu_type == M68K_CPU_TYPE_68000 )
-    address &= 0x00ffffff;
+  //if ( cpu_type == M68K_CPU_TYPE_68000 )
+  //  address &= 0x00ffffff;
 
-  else
+  //else
     address = check_ff_st ( address );
 
   ps_write_32 ( (t_a32)address, value );
@@ -882,14 +888,14 @@ void cpu_set_fc ( unsigned int _fc )
 }
 
 
-void call_berr ( uint16_t status, uint32_t address, uint mode ) 
-{
-  g_buserr = 1;
-}
+//void call_berr ( uint16_t status, uint32_t address, uint mode ) 
+//{
+//  g_buserr = 1;
+//}
 
 
 
-
+#if (0)
 /* cryptodad IDE */
 
 /* ATARI IDE interface expected @ 0x00f00000 */
@@ -1020,3 +1026,4 @@ misc_task ( void* vptr )
     }
   }
 }
+#endif
