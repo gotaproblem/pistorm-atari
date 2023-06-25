@@ -204,7 +204,7 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 
 			if ( g_buserr ) 
       {
-//printf ( "BUS ERROR\n" );
+//printf ( "BUS ERROR - REG_PC 0x%X, REG_PPC 0x%X\n", REG_PC, REG_PPC );
 
         /* Record previous D/A register state (in case of bus error) */
         for ( int i = 0; i < 16; i++ )
@@ -566,7 +566,7 @@ unsigned int garbage = 0;
 static inline unsigned int check_ff_st( unsigned int add ) 
 {
 	if( ( add & 0xFF000000 ) == 0xFF000000 ) 
-		add &= 0x00FFFFFF;
+    add &= 0x00FFFFFF;
 
 	return add;
 }
@@ -601,7 +601,7 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
   else if ( ATARI_VID_enabled && (addr >= 0xffff8200 && addr < 0xffff82c4) )
     addr &= 0x00ffffff;
 #endif
-  //if (ovl || (addr >= cfg->mapped_low && addr < cfg->mapped_high))
+  
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) )
   {
     if ( handle_mapped_read ( cfg, addr, &target, type ) != -1 ) 
@@ -694,18 +694,27 @@ unsigned int m68k_read_memory_32 ( unsigned int address )
 #else
 unsigned int m68k_read_memory_8 ( unsigned int address ) 
 {
-  if (platform_read_check ( OP_TYPE_BYTE, address, &platform_res ) ) 
+  if ( platform_read_check ( OP_TYPE_BYTE, address, &platform_res ) ) 
   {
     return platform_res;
   }
 
+  if ( !IDE_IDE_enabled && (address >= 0xfff00000 && address < 0xfffa0000) ) 
+  {
+    //printf ( "m68k_read_memory_8: addr 0x%X\n", address );
   //if ( cpu_type == M68K_CPU_TYPE_68000 )
   //  address &= 0x00ffffff;
-    
-  //else
+    g_buserr = 1;
+
+    return 0xff;
+  }
+
+  else
+  {
     address = check_ff_st ( address );
 
-  return ps_read_8 ( (t_a32)address );  
+    return ps_read_8 ( (t_a32)address );  
+  }
 }
 
 
@@ -751,7 +760,7 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   else if ( ATARI_VID_enabled && (addr >= 0xffff8200 && addr < 0xffff82c4) )
     addr &= 0x00ffffff;
 #endif
-  //if (ovl || (addr >= cfg->mapped_low && addr < cfg->mapped_high)) {
+
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) ) 
   {
     if ( handle_mapped_write ( cfg, addr, val, type ) != -1 ) 
@@ -844,10 +853,19 @@ void m68k_write_memory_8 ( unsigned int address, unsigned int value )
   //if ( cpu_type == M68K_CPU_TYPE_68000 )
   //  address &= 0x00ffffff;
     
-  //else
+  if ( !IDE_IDE_enabled && (address >= 0xfff00000 && address < 0xfffa0000) ) 
+  {
+    g_buserr = 1;
+
+    return;
+  }
+
+  else
+  {
     address = check_ff_st ( address );
 
-  ps_write_8 ( (t_a32)address, value );
+    ps_write_8 ( (t_a32)address, value );
+  }
 }
 
 

@@ -15,7 +15,6 @@
 #include <unistd.h>
 #include <time.h>
 #include <endian.h>
-//#include "platforms/shared/rtc.h"
 #include "config_file/config_file.h"
 #include "atari-registers.h"
 #include "platforms/atari/idedriver.h"
@@ -29,7 +28,7 @@
 
 #define DEBUG_IDE
 #ifdef DEBUG_IDE
-#define DEBUG printf
+#define DEBUG ; // printf
 #else
 #define DEBUG(...)
 #endif
@@ -66,49 +65,19 @@ void IDE_attach(uint8_t *dummy, uint32_t idx, uint32_t atarifd) {
 static struct ide_controller *atariide0 = NULL;
 #endif
 
-//uint8_t gary_cfg[8];
-
-//uint8_t ramsey_cfg = 0x08;
-//static uint8_t ramsey_id = RAMSEY_REV7;
-
-//int ataricounter;
-//static uint8_t IDE_cs, IDE_cs_mask, //IDE_cfg; // IDE_irq
 int atarifd;
-
-//uint8_t rtc_type = RTC_TYPE_RICOH;
-
 char *atari_image_file[IDE_MAX_HARDFILES];
-
-//uint8_t cdtv_mode = 0;
-//unsigned char cdtv_sram[32 * SIZE_KILO];
-
-//uint8_t IDE_a4k = 0xA0;
-//uint16_t IDE_a4k_irq = 0;
-//uint8_t IDE_a4k_int = 0;
-//uint8_t IDE_int = 0;
-
-//uint32_t IDE_IDE_mask = ~GDATA;
-//uint32_t IDE_IDE_base = GDATA;
 uint8_t IDE_IDE_enabled = 1;
 uint8_t IDE_emulation_enabled = 1;
-//uint8_t IDE_IDE_adj = 0;
 
 struct ide_controller *get_ide(int index) {
   if (index) {}
   return atariide0;
 }
 
-//void adjust_IDE_4000() {
-  //IDE_IDE_base = IDE_IDE_BASE_A4000;
-  //IDE_IDE_adj = 2;
-  //IDE_a4k_int = 1;
-  //printf ("IDE add set to 0x%x\n", IDE_IDE_base );
-//}
 
-//void adjust_IDE_1200() {
-//}
-
-void set_hard_drive_image_file_atari(uint8_t index, char *filename) {
+void set_hard_drive_image_file_atari(uint8_t index, char *filename) 
+{
   if (atari_image_file[index] != NULL)
     free(atari_image_file[index]);
   atari_image_file[index] = calloc(1, strlen(filename) + 1);
@@ -287,6 +256,7 @@ skip_idewrite8:;
 
 void writeIDE(unsigned int address, unsigned int value) {
 #if (1)
+  //printf ( "writeIDE: address 0x%X\n", address );  
   if (atariide0) {
     //if (address - IDEBASE == GDATA_OFFSET) {
       IDE_write16(atariide0, IDE_data, value);
@@ -342,7 +312,6 @@ void writeIDEL(unsigned int address, unsigned int value) {
 
     IDE_write16(atariide0, IDE_data, value >> 16) ;
     IDE_write16(atariide0, IDE_data, value & 0xffff);
-      
   }
 
   //DEBUG("Write Long to IDE Space 0x%06x (0x%06x)\n", address, value);
@@ -476,6 +445,7 @@ skip_ideread8:;
 
 uint16_t readIDE(unsigned int address) {
   uint16_t value;
+  printf ( "readIDE: address 0x%X\n", address );
   if (atariide0) {
 #if (1)
     if (address - IDEBASE == GDATA_OFFSET) {

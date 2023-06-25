@@ -27,13 +27,13 @@ inline int handle_mapped_read ( struct emulator_config *cfg, unsigned int addr, 
 {
   unsigned char *read_addr = NULL;
 
-  for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS; i++ ) 
-  //for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS && cfg->map_type[i] != MAPTYPE_NONE; i++ ) 
+  //for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS; i++ ) 
+  for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS && cfg->map_type[i] != MAPTYPE_NONE; i++ ) 
   {
     
-    if ( cfg->map_type[i] == MAPTYPE_NONE )
-      continue;
-    /*
+    //if ( cfg->map_type[i] == MAPTYPE_NONE )
+    //  continue;
+    
     if ( (cfg->map_type[i] == MAPTYPE_ROM || cfg->map_type[i] == MAPTYPE_RAM_WTC)) 
     {
       if ( cfg->map_mirror[i] != ( (unsigned int)-1) && CHKRANGE(addr, cfg->map_mirror[i], cfg->map_size[i] ) ) 
@@ -43,7 +43,7 @@ inline int handle_mapped_read ( struct emulator_config *cfg, unsigned int addr, 
         break;
       }
     }
-    */
+    
 
     if ( CHKRANGE_ABS ( addr, cfg->map_offset[i], cfg->map_high[i] ) ) 
     {
@@ -60,6 +60,7 @@ inline int handle_mapped_read ( struct emulator_config *cfg, unsigned int addr, 
          
           break;
         case MAPTYPE_REGISTER:
+          //printf ( "register read: addr 0x%X/n", addr );
           if (cfg->platform && cfg->platform->register_read) 
           {
             if (cfg->platform->register_read(addr, type, &target) != -1) {
@@ -103,13 +104,14 @@ inline int handle_mapped_write(struct emulator_config *cfg, unsigned int addr, u
   int res = -1;
   unsigned char *write_addr = NULL;
 
-  for (int i = 0; i < MAX_NUM_MAPPED_ITEMS; i++) 
+  for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS && cfg->map_type[i] != MAPTYPE_NONE; i++ ) 
+  //for (int i = 0; i < MAX_NUM_MAPPED_ITEMS; i++) 
   {
-    if (cfg->map_type[i] == MAPTYPE_NONE)
-      continue;
-    /*
+    //if (cfg->map_type[i] == MAPTYPE_NONE)
+    //  continue;
+    
     //else if (ovl && cfg->map_type[i] == MAPTYPE_RAM_WTC) {
-    else if ( cfg->map_type[i] == MAPTYPE_RAM_WTC) 
+    if ( cfg->map_type[i] == MAPTYPE_RAM_WTC) 
     {
       if (cfg->map_mirror[i] != ((unsigned int)-1) && CHKRANGE(addr, cfg->map_mirror[i], cfg->map_size[i])) 
       {
@@ -118,7 +120,7 @@ inline int handle_mapped_write(struct emulator_config *cfg, unsigned int addr, u
         goto write_value;
       }
     }
-    */
+    
     if ( CHKRANGE_ABS ( addr, cfg->map_offset[i], cfg->map_high[i] ) ) 
     {
       switch(cfg->map_type[i]) 
@@ -140,6 +142,7 @@ inline int handle_mapped_write(struct emulator_config *cfg, unsigned int addr, u
           goto write_value;
           break;
         case MAPTYPE_REGISTER:
+          //printf ( "register write: addr 0x%X, value 0x%X/n", addr, value );
           if (cfg->platform && cfg->platform->register_write) 
           {
             return cfg->platform->register_write(addr, value, type);

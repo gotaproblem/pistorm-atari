@@ -1305,6 +1305,7 @@ uint m68ki_read_imm16_addr_slowpath(m68ki_cpu_core *state, uint32_t pc, address_
 	//if (!g_buserr) {
 		// prefetch only if no bus error occurred in opcode fetch
 		CPU_PREF_DATA = m68ki_ic_readimm16(state, REG_PC);
+		state->mmu_tmp_buserror_occurred = g_buserr;
 		CPU_PREF_ADDR = state->mmu_tmp_buserror_occurred ? ((uint32)~0) : REG_PC;
 		//CPU_PREF_ADDR = g_buserr ? ((uint32)~0) : REG_PC;
 
