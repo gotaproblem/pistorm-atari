@@ -6,14 +6,17 @@
 #
 arm64bit=0
 #
-# HDMI set to 640x480 for RTG development
-#hdmi_group=2
-#hdmi_mode=4
+# HDMI set to 640x480 for ATARI development
+# supporting native resolutions 320x200, 640x200, 640x400
+hdmi_group=1
+#hdmi_mode=2            # 480p 60Hz 4:3
+#hdmi_mode=14           # 480p 60Hz 4:3 pixel doubling
+hdmi_mode=35            # 480p 60Hz 4:3 pixel quadrupling
+hdmi_pixel_encoding=2   # full RGB
 #
 # currently have to disable gpio irq
 dtoverlay=gpio-no-irq
 #
-# 
 arm_boost=1
 arm_freq=1500
 gpu_freq=750
