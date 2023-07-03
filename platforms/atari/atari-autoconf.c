@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 //#include "a314/a314.h"
-
+#if (0)
 #define Z2_Z2      0xC
 #define Z2_FAST    0x2
 #define Z2_BOOTROM 0x1
@@ -58,17 +58,9 @@ unsigned char ac_piscsi_rom[] = {
     0x0, 0x0, 0x0, 0x0, 0x0, 0x4, 0x2, 0x1, // 18/.../26, serial
     0x4, 0x0, 0x0, 0x0,                     // Optional BOOT ROM vector
 };
-
-void autoconfig_reset_all() {
+#endif
+void autoconfig_reset_all () 
+{
  // printf("[AUTOCONF] Resetting all autoconf data.\n");
-  for (int i = 0; i < AC_PIC_LIMIT; i++) {
-    ac_z2_type[i] = ACTYPE_NONE;
-    ac_z3_type[i] = ACTYPE_NONE;
-    ac_z2_index[i] = 0;
-    ac_z3_index[i] = 0;
-  }
-  ac_z3_pic_count = 0;
-  ac_z2_pic_count = 0;
-  ac_z2_current_pic = 0;
-  ac_z3_current_pic = 0;
+  
 }

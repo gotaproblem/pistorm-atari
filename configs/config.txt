@@ -1,0 +1,22 @@
+#
+# PiStorm-Atari
+# /boot/config.txt
+#
+# cryptodad
+#
+arm64bit=0
+#
+# HDMI set to 640x480 for RTG development
+#hdmi_group=2
+#hdmi_mode=4
+#
+# currently have to disable gpio irq
+dtoverlay=gpio-no-irq
+#
+# 
+arm_boost=1
+arm_freq=1500
+gpu_freq=750
+gpu_mem=16
+force_turbo=1
+initial_turbo=5

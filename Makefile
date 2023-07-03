@@ -9,7 +9,8 @@ MAINFILES        = emulator.c \
 				platforms/atari/atari-platform.c \
 				platforms/atari/atari-registers.c \
 				platforms/atari/IDE.c \
-				platforms/atari/idedriver.c
+				platforms/atari/idedriver.c \
+				platforms/atari/rtg.c
 
 MUSASHIFILES     = m68kcpu.c m68kdasm.c softfloat/softfloat.c softfloat/softfloat_fpsp.c
 MUSASHIGENCFILES = m68kops.c
@@ -25,7 +26,7 @@ CC        = gcc
 
 PI4OPTS	  = -mcpu=cortex-a72 #-mfloat-abi=hard -mfpu=neon-fp-armv8 -march=armv8-a+crc
 
-CFLAGS    = -I. $(PI4OPTS) -O3
+CFLAGS    = -I. $(PI4OPTS) -O3 -DRTG #-DT_CACHE_ON -DCACHE_ON
 
 TARGET    = $(EXENAME)
 
@@ -38,7 +39,7 @@ clean:
 	rm -f $(DELETEFILES)
 
 $(TARGET):  $(MUSAHIGENCFILES:%.c=%.o) $(.CFILES:%.c=%.o)
-	$(CC) -o $@ $^ $(CFLAGS)
+	$(CC) -o $@ $^ $(CFLAGS) -pthread
 
 ataritest: ataritest.c gpio/ps_protocol.c
 	$(CC) $^ -o $@ $(CFLAGS)

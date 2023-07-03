@@ -13,7 +13,7 @@
 # Project information
 
 * This fork is solely for the Atari platform. All Amiga code has been removed.
-* Development is ongoing on an Atari STe, utilising an exxos PLLC adapter board to allow the fitting of the PiStorm interface. The ongoing work is a "proof-of-concept". If proven to offer acceptable performance, then bespoke hardware will be needed to allow installation within the confines of the Atari ST platform.
+* Development is ongoing on an Atari STe, utilising an exxos PLLC adapter board to allow the fitting of the PiStorm interface. The ongoing work is a "proof-of-concept". If proven to offer acceptable performance, then bespoke hardware will be needed to allow installation within the confines of the Atari ST platform. **If you are lucky enough to own a Phoenix H5 board (exxos shop), then the PiStorm with Pi4 fits nicely :)**
 * The Atari platform differs greatly to the Amiga platform. Atari uses FC lines and depends heavily upon bus arbitration and interrupts.
 * Initial development was on a PI3B, but performance was poor. A PI3A+ was tried and again the performance was poor. Finally, a PI4B was tried. Although initial performance was still poor in comparison to the Amiga, there was headroom for improvemnt. Over many months, performance has slowly increased, and at time of writing, performance is finally acceptable. 
 
@@ -23,15 +23,15 @@ PiStorm must have 374 latches. Any other are known not to be compatible for the 
 
 # Extended functionality
 
-A virtual IDE interface is included which allows for two disk drive images to be attached. The BBaN Solutions HDC has been tested extensively and offers good performance via the ACSI bus.
-* Atari ST ROM images can be loaded at initialisation. For example, the emulation can boot using TOS 1.4 (ST only), TOS 1.62, TOS 2.06 or even EMUTos
+A virtual IDE interface is included which allows for two disk drive images to be attached. The BBaN Solutions HDC (available in the exxos shop), has been tested extensively and offers good performance via the ACSI bus.
+* Atari ST ROM images can be loaded at initialisation. For example, the emulation can boot using TOS 1.04 (ST only), TOS 1.06, TOS 1.62, TOS 2.06 or even EMUTos
 * Alt-RAM/TT-RAM option can be added to increase performance
 * Additional interfaces will be added with time
 
 # Now to get up-and-running
 The following steps require basic knowledge of the linux operating system. Take your time!
 
-* Download Raspberry Pi OS from https://www.raspberrypi.org/software/operating-systems/, we need the 32 bit Lite version.
+* Download Raspberry Pi OS from https://www.raspberrypi.org/software/operating-systems/, you need the 32 bit Lite version.
 * Write the Image to an SD card. For development, a 32 GB SD card is recommended.
 * Connect an HDMI Display and a USB keyboard to the Pi4.
 * Insert the SD card into the Raspberry Pi4, and connect it to power. You should see a Rainbow colored screen on the HDMI Monitor followed by the booting sequence.
@@ -53,7 +53,10 @@ Now the final steps to get things up and running, all of this is done from a com
 * `cd pistorm-atari`
 * `make`
 
-Congrat yourself - You've gotten this far! Shutdown the linux operating system
+Copy the boot configuration file:
+* `sudo cp configs/config.txt /boot/`
+
+Congratulate yourself - You've gotten this far! Shutdown the linux operating system
 * `sudo halt`
 
 # Install the hardware
@@ -92,24 +95,30 @@ ataritest can do a lot more, like reading and writing (peek and poke), to Atari 
 **Starting the Emulator**
 
 You can start the emulator with the default Atari configuration by typing `sudo ./emulator --config configs/atari.cfg`.    
-**Important note:** Do not edit the default configuration file - `atari.cfg`. Instead, make a copy and save it in configs/.
+**Important note:** Do not edit the default configuration file - `atari.cfg`. Instead, make a copy and save it in a directory outside 
+the pistorm-atari file structure - eg. ../configs/yours.cfg.
 This way, you will never have any problems using `git pull` to update your PiStorm repo to the latest commit.
 Two sub-directories are present for Emulator run-time usage: They are, roms and configs.
-The roms/ directory contains a compressed file.
-* `cd roms`
+The roms/ directory contains a compressed file - roms.zip. Copy the compressed file to a directory of your choice, outside 
+the pistorm-atari file structure - eg ../roms/
+* `cp roms/roms.zip ../roms/`
+* `cd ../roms`
 * `unzip roms.zip`
-* `cd ..`
+* `cd ../pistorm-atari`
+
+A couple of disk images have been created to help you get started. These are optional. You could of course run programmes off your 
+floppy disk drive and/or an attached ACSI bus device.
 
 **The disk images are too large for GitHub. Please find the disk images at https://bbansolutions.co.uk**
-
-Download the disk image.zip file, copy to the Pi4 pistorm-atari/dkimages directory. Uncompress the file to give two disk images.
-* `cd pistorm-atari`
+Make directory outside the pistorm-atari file structure - eg. ../dkimages
+Download the disks.zip file, copy to the Pi4. Uncompress the file to give two disk images.
+* `cd ../`
 * `mkdir dkimages`
 * `cd dkimages`
 * `unzip disks.zip`
-* `cd ..`
+* `cd ../pistorm-atari`
 
-Run the emulator using `sudo ./emulator --config configs/atari.cfg`.
+Run the emulator using `sudo ./emulator --config ../configs/your.cfg`.
 
 To exit the emulator you can press `Ctrl+C`.
 

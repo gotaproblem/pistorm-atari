@@ -8,7 +8,12 @@
 uint8_t atari_rtc_emulation_enabled = 1;
 extern uint8_t IDE_emulation_enabled;
 //extern uint8_t Blitter_enabled;
-
+extern volatile uint32_t RTG_ATARI_SCREEN_RAM;
+extern volatile uint8_t RTG_RES;
+extern volatile int RTGresChanged;
+extern int RTG_enabled;
+extern volatile uint16_t RTG_PAL_MODE;
+extern volatile uint16_t RTG_PALETTE_REG [16];
 
 void configure_rtc_emulation_atari(uint8_t enabled) {
     if (enabled == atari_rtc_emulation_enabled)
@@ -24,7 +29,7 @@ int handle_register_read_atari(unsigned int addr, unsigned char type, unsigned i
         //if (!atari_rtc_emulation_enabled && addr >= CLOCKBASE && addr < CLOCKBASE + CLOCKSIZE)
         //    return -1;
         
-    if (addr >= IDEBASE && addr < (IDEBASE + IDESIZE)) 
+    if ( addr >= IDEBASE && addr < (IDEBASE + IDESIZE) ) 
     {
         if (IDE_emulation_enabled) 
         {
@@ -61,30 +66,43 @@ int handle_register_read_atari(unsigned int addr, unsigned char type, unsigned i
     return -1;
 }
 
-int handle_register_write_atari(unsigned int addr, unsigned int value, unsigned char type) {
-    //printf ( "%s IDE write\n", __func__ );
-    if (IDE_emulation_enabled) {
+
+
+
+#define toRGB565(d) ( (uint16_t) ( (d & 0x0f00) << 4 | (d & 0x00f0) << 3 | (d & 0x000f) << 1 ) )
+
+
+
+int handle_register_write_atari(unsigned int addr, unsigned int value, unsigned char type) 
+{
+    //printf ( "%s REGISTER write address 0x%X, value 0x%X\n", __func__, addr, value );
+
+    if ( IDE_emulation_enabled ) 
+    {
         //if (!atari_rtc_emulation_enabled && addr >= CLOCKBASE && addr < CLOCKBASE + CLOCKSIZE)
         //    return -1;
-        if (addr >= IDEBASE && addr < (IDEBASE + IDESIZE)) {
-            switch(type) {
-            case OP_TYPE_BYTE:
-                writeIDEB(addr, value);
-                return 1;
-                break;
-            case OP_TYPE_WORD:
-                writeIDE(addr, value);
-                return 1;
-                break;
-            case OP_TYPE_LONGWORD:
-                writeIDEL(addr, value);
-                return 1;
-                break;
-            case OP_TYPE_MEM:
-                return -1;
-                break;
+        if ( addr >= IDEBASE && addr < (IDEBASE + IDESIZE) ) 
+        {
+            switch ( type ) 
+            {
+                case OP_TYPE_BYTE:
+                    writeIDEB(addr, value);
+                    return 1;
+                    break;
+                case OP_TYPE_WORD:
+                    writeIDE(addr, value);
+                    return 1;
+                    break;
+                case OP_TYPE_LONGWORD:
+                    writeIDEL(addr, value);
+                    return 1;
+                    break;
+                case OP_TYPE_MEM:
+                    return -1;
+                    break;
             }
         }
     }
+
     return -1;
 }

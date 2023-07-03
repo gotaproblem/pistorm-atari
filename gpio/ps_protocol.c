@@ -111,8 +111,8 @@ static void setup_io()
 #define PLLD_1MHZ   10 /* CORE clock / 512 */
 
 /* change these 2 settings to configure clock */
-#define PLL PLLD
-#define PLL_DIVISOR PLLD_25MHZ
+#define PLL PLLC
+#define PLL_DIVISOR PLLC_200MHZ // PLLD_25MHZ
 
 static void setup_gpclk() 
 {

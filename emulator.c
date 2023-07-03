@@ -1,7 +1,6 @@
 //#define DISASSEMBLE
 // SPDX-License-Identifier: MIT
 
-
 #include "platforms/platforms.h"
 #include "platforms/atari/IDE.h"
 #include "platforms/atari/idedriver.h"
@@ -12,7 +11,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sched.h>
+#ifdef RTG
+#include <pthread.h>
+#endif
 #include "m68kops.h"
+
 
 
 #define DEBUGPRINT 1
@@ -37,17 +41,10 @@ volatile uint32_t old_level;
 
 volatile uint32_t last_irq = 8;
 volatile uint32_t last_last_irq = 8;
-//volatile uint32_t iack = 0;
 
 extern volatile int g_irq;
 extern volatile int g_buserr;
-//extern volatile int g_beAddress;
-//extern volatile int g_beMode;
 
-volatile int peeking = 0;
-volatile int canpeek = 0;
-
-//uint8_t end_signal = 0, 
 uint8_t load_new_config = 0;
 
 int mem_fd;
@@ -55,6 +52,12 @@ int mem_fd_gpclk;
 volatile int irq;
 volatile int cpu_emulation_running = 0;
 volatile int passthrough = 0;
+
+#ifdef RTG
+extern void rtg ( int, uint32_t, uint32_t );
+extern volatile uint32_t RTG_ATARI_SCREEN_RAM;
+extern int RTG_enabled;
+#endif
 
 FILE *console = NULL;
 
@@ -166,7 +169,7 @@ void *ipl_task ( void *args )
 
 static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 {
-  //address_translation_cache *junk;
+  static address_translation_cache *junk;
 	/* eat up any reset cycles */
   
 	if (RESET_CYCLES) 
@@ -178,7 +181,6 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 		return;
 	}
   
-
 	/* Set our pool of clock cycles available */
 	SET_CYCLES(num_cycles);
 	m68ki_initial_cycles = num_cycles;
@@ -186,7 +188,7 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 	/* Make sure we're not stopped */
 	if ( !CPU_STOPPED )
 	{
-    //m68ki_use_data_space ();
+    //m68ki_use_data_space (); /* although this works here, with 68000 the blitter is not enabled ???
 
 		/* Main loop.  Keep going until we run out of clock cycles */
 		do
@@ -204,7 +206,7 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 
 			if ( g_buserr ) 
       {
-//printf ( "BUS ERROR - REG_PC 0x%X, REG_PPC 0x%X\n", REG_PC, REG_PPC );
+        //printf ( "BUS ERROR - REG_PC 0x%X, REG_PPC 0x%X\n", REG_PC, REG_PPC );
 
         /* Record previous D/A register state (in case of bus error) */
         for ( int i = 0; i < 16; i++ )
@@ -216,9 +218,8 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 			}
 
 			USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
-      
 		} 
-    while ( GET_CYCLES() > 0 );
+    while ( GET_CYCLES() > 0 );//&& !g_irq );
 
 		/* set previous PC to current PC for the next entry into the loop */
 		REG_PPC = REG_PC;
@@ -227,17 +228,12 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 	else
 		SET_CYCLES(0);
 
-	/* return how many clocks we used */
 	return;
 }
 
 
 
-
-/* cryptodad */
-int firstPass = 1;
 extern const char *cpu_types[];
-
 
 #ifdef DISASSEMBLE
 char disasm_buf[4096];
@@ -292,17 +288,14 @@ cpu_loop:
         m68k_pulse_reset ( state );
       }
 
-      //else 
-      //{
-        last_irq = status >> 13;
-        
-        if ( last_irq != 0 && last_irq != last_last_irq ) 
-        {
-          last_last_irq = last_irq;
-          m68k_set_irq ( last_irq );
-        }
-      //}
-
+      last_irq = status >> 13;
+      
+      if ( last_irq != 0 && last_irq != last_last_irq ) 
+      {
+        last_last_irq = last_irq;
+        m68k_set_irq ( last_irq );
+      }
+      
       m68ki_check_interrupts ( state );
     }
 
@@ -312,9 +305,6 @@ cpu_loop:
 
       last_last_irq = 0;
     }
-
-    //if (end_signal)
-    //  goto stop_cpu_emulation;
   
 #ifdef DISASSEMBLE
     if ( debug )
@@ -348,50 +338,49 @@ void sigint_handler(int sig_num)
 }
 
 
+
+extern void rtgInit ( void );
+extern void *rtgRender ( void* );
+
 int main ( int argc, char *argv[] ) 
 {
   int g;
-
-  ps_setup_protocol ();
-  
-  fc = 6;
-  g_buserr = 0;
-  //g_beAddress = 0;
-  //g_beMode = 0;
+  const struct sched_param priority = {99};
+#ifdef RTG
+  int err;
+  pthread_t rtg_tid;
+  RTG_enabled = 0;
+#endif
 
   // Some command line switch stuffles
-  for (g = 1; g < argc; g++) 
+  for ( g = 1; g < argc; g++ ) 
   {
-    if (strcmp(argv[g], "--config-file") == 0 || strcmp(argv[g], "--config") == 0) 
+    if ( strcmp ( argv[g], "--config-file") == 0 || strcmp(argv[g], "--config" ) == 0 ) 
     {
       if (g + 1 >= argc) 
       {
-        DEBUG_PRINTF ("%s switch found, but no config filename specified.\n", argv[g]);
+        DEBUG_PRINTF ( "%s switch found, but no config filename specified.\n", argv[g] );
       } 
       
       else 
       {
         g++;
-        FILE *chk = fopen(argv[g], "rb");
+        FILE *chk = fopen ( argv[g], "rb" );
 
-        if (chk == NULL) 
+        if ( chk == NULL ) 
         {
-          DEBUG_PRINTF ("Config file %s does not exist, please check that you've specified the path correctly.\n", argv[g]);
+          DEBUG_PRINTF ( "Config file %s does not exist, please check that you've specified the path correctly.\n", argv[g] );
         } 
         
         else 
         {
-          fclose(chk);
+          fclose ( chk );
           load_new_config = 1;
-          set_pistorm_cfg_filename(argv[g]);
+          set_pistorm_cfg_filename ( argv[g] );
         }
       }
     }
   }
-
-  ps_reset_state_machine ();
-  ps_pulse_reset ();
-  usleep (1500);
 
   if ( load_new_config ) 
   {
@@ -407,7 +396,7 @@ int main ( int argc, char *argv[] )
     {
       case PICFG_LOAD:
       case PICFG_RELOAD:
-        cfg = load_config_file(get_pistorm_cfg_filename());
+        cfg = load_config_file ( get_pistorm_cfg_filename () );
         break;
       //case PICFG_DEFAULT:
       //  cfg = load_config_file("default.cfg");
@@ -429,30 +418,31 @@ int main ( int argc, char *argv[] )
 
     if (cfg->loop_cycles) 
       loop_cycles = cfg->loop_cycles;
-
-    //if ( loop_cycles > 50 )
-    //  loop_cycles = 50;
     
     else if ( loop_cycles == 0 )
       loop_cycles = 12;
 
     if (!cfg->platform)
-      cfg->platform = make_platform_config("none", "generic");
+    {
+      cfg->platform = make_platform_config ( "atari", "st" );
+      printf ( "[CFG] Plaform not specified - using atari st\n" );
+    }
 
-    cfg->platform->platform_initial_setup(cfg);
+    cfg->platform->platform_initial_setup ( cfg );
   }
-
-  InitIDE ();
 
   signal ( SIGINT, sigint_handler );
 
   mlockall ( MCL_CURRENT );  // lock in memory to keep us from paging out
 
-  //priority = sched_get_priority_max ( SCHED_FIFO );
-  //sched_setscheduler ( 0, SCHED_FIFO, &priority ); /* causes near constant keyboard beeping */
-  //system("echo -1 >/proc/sys/kernel/sched_rt_runtime_us");
+  //sched_setscheduler ( 0, SCHED_FIFO, &priority );
 
+  InitIDE ();
+  #ifdef RTG
+  rtgInit ();
+  #endif
 
+  ps_setup_protocol ();
   ps_reset_state_machine ();
   ps_pulse_reset ();
   usleep (1500);
@@ -461,6 +451,9 @@ int main ( int argc, char *argv[] )
 	m68k_set_cpu_type ( &m68ki_cpu, cpu_type );
   m68k_set_int_ack_callback ( &cpu_irq_ack );
   cpu_pulse_reset ();
+
+  fc = 6;
+  g_buserr = 0;
 
   //pthread_t ipl_tid = 0, cpu_tid, ide_tid, misc_tid;
 
@@ -508,6 +501,23 @@ int main ( int argc, char *argv[] )
   }
 #endif
 
+#ifdef RTG
+  // create rtg task
+  if (  RTG_enabled )
+  {
+    err = pthread_create ( &rtg_tid, NULL, &rtgRender, NULL );
+
+    if ( err != 0 )
+      DEBUG_PRINTF ( "[ERROR] Cannot create RTG thread: [%s]", strerror (err) );
+
+    else 
+    {
+      pthread_setname_np ( rtg_tid, "pistorm: rtg" );
+      DEBUG_PRINTF ( "[MAIN] RTG thread created successfully\n" );
+    }
+  }
+#endif
+
   /* cryptodad optimisation - .cfg no mappings */
   if ( cfg->mapped_high == 0 && cfg-> mapped_low == 0 )
     passthrough = 1;
@@ -517,22 +527,13 @@ int main ( int argc, char *argv[] )
 
   cpu_emulation_running = 1;
 
-  DEBUG_PRINTF ( "\n[MAIN] Emulation Running [%s]\n", cpu_types [cpu_type - 1] );
+  DEBUG_PRINTF ( "[MAIN] Emulation Running [%s]\n", cpu_types [cpu_type - 1] );
 
   if ( passthrough )
     DEBUG_PRINTF ( "[MAIN] %s Native Performance\n", cpu_types [cpu_type - 1] );
 
   DEBUG_PRINTF ( "\n" );
 
-  // wait for cpu task to end before closing up and finishing
-  //pthread_join ( cpu_tid, NULL );  
-
-  //while ( !emulator_exiting ) 
-  //{
-  //  cpu_emulation_running = 0;
-  //  emulator_exiting = 1;
-  //  usleep (0);
-  //}
   cpu_task ();
 
   if ( load_new_config == 0 )
@@ -550,8 +551,6 @@ int main ( int argc, char *argv[] )
 
 void cpu_pulse_reset ( void ) 
 {
-	//m68ki_cpu_core *state = &m68ki_cpu;
-
   ps_pulse_reset ();
 }
 
@@ -615,83 +614,7 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
   return 0;
 }
 
-#if (0)
-unsigned int m68k_read_memory_8 ( unsigned int address ) 
-{
-  if ( !passthrough )
-  {
-    if ( platform_read_check ( OP_TYPE_BYTE, address, &platform_res ) ) 
-    {
-      return platform_res;
-    }
 
-    //if ( cpu_type != M68K_CPU_TYPE_68000 )
-      address = check_ff_st (address);
-  }
-
-  else if ( passthrough )//&& cpu_type != M68K_CPU_TYPE_68000 )
-  {
-    address = check_ff_st (address);
-  }
-
-  //address &= 0x00FFFFFF;
-
-  return ps_read_8 (address);  
-}
-
-
-unsigned int m68k_read_memory_16 ( unsigned int address ) 
-{
-  if ( !passthrough )
-  {
-    if ( platform_read_check ( OP_TYPE_WORD, address, &platform_res ) ) 
-    {
-      return platform_res;
-    }
-
-    //if ( cpu_type != M68K_CPU_TYPE_68000 )
-      address = check_ff_st (address);
-  }
-
-  else if ( passthrough )//&& cpu_type != M68K_CPU_TYPE_68000 )
-  {
-    address = check_ff_st (address);
-  }
-
-  //address &= 0x00FFFFFF;
-
-  return ps_read_16 (address);
-}
-
-
-unsigned int m68k_read_memory_32 ( unsigned int address )  
-{
-  if ( !passthrough )
-  {
-    if (platform_read_check ( OP_TYPE_LONGWORD, address, &platform_res ) ) 
-    {
-      return platform_res;
-    }
-
-    //if ( cpu_type != M68K_CPU_TYPE_68000 )
-      address = check_ff_st (address);
-  }
-
-  else if ( passthrough )//&& cpu_type != M68K_CPU_TYPE_68000 )
-  {
-    address = check_ff_st (address);
-  }
-
-  //if ( address == 0x00ff8604 || address == 0x00ff8606 )
-  //{
-  //  return ( ps_read_16 ( address ) << 16 ) | ps_read_16 ( address + 2 );
-  //}
-
-  //address &= 0x00FFFFFF;
-
-  return ps_read_32 (address);
-}
-#else
 unsigned int m68k_read_memory_8 ( unsigned int address ) 
 {
   if ( platform_read_check ( OP_TYPE_BYTE, address, &platform_res ) ) 
@@ -699,22 +622,9 @@ unsigned int m68k_read_memory_8 ( unsigned int address )
     return platform_res;
   }
 
-  if ( !IDE_IDE_enabled && (address >= 0xfff00000 && address < 0xfffa0000) ) 
-  {
-    //printf ( "m68k_read_memory_8: addr 0x%X\n", address );
-  //if ( cpu_type == M68K_CPU_TYPE_68000 )
-  //  address &= 0x00ffffff;
-    g_buserr = 1;
+  address = check_ff_st ( address );
 
-    return 0xff;
-  }
-
-  else
-  {
-    address = check_ff_st ( address );
-
-    return ps_read_8 ( (t_a32)address );  
-  }
+  return ps_read_8 ( (t_a32)address );  
 }
 
 
@@ -725,11 +635,7 @@ unsigned int m68k_read_memory_16 ( unsigned int address )
     return platform_res;
   }
 
-  //if ( cpu_type == M68K_CPU_TYPE_68000 )
-  //  address &= 0x00ffffff;
-    
-  //else
-    address = check_ff_st ( address );
+  address = check_ff_st ( address );
 
   return ps_read_16 ( (t_a32)address );
 }
@@ -742,20 +648,81 @@ unsigned int m68k_read_memory_32 ( unsigned int address )
     return platform_res;
   }
 
-  //if ( cpu_type == M68K_CPU_TYPE_68000 )
-  //  address &= 0x00ffffff;
-    
-  //else
-    address = check_ff_st (address);
+  address = check_ff_st ( address );
 
   return ps_read_32 ( (t_a32)address );
 }
+
+
+
+
+#ifdef RTG
+#include "platforms/atari/atari-registers.h"
+
+/* convert ST xRRR xGGG xBBB to RGB565 */
+//#define toRGB565(d) ( (uint16_t) ( (d & 0x0f00) << 3 | (d & 0x00f0) << 2 | (d & 0x000f) ) )
+
+/* convert STe RRRR GGGG BBBB to RGB565 */
+#define toRGB565(d) ( (uint16_t) ( (d & 0x0f00) << 4 | (d & 0x00f0) << 3 | (d & 0x000f) << 1 ) )
+
+#define SYS_VARS     0x00000420
+#define SYS_VARS_TOP 0x000005b4
+#define PALETTE_REGS 0xffff8240
+
+extern volatile uint16_t RTG_PAL_MODE;
+extern volatile uint8_t RTG_RES;
+extern volatile int RTGresChanged;
+extern volatile uint16_t RTG_PALETTE_REG [16];
 #endif
 
 static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32_t val ) 
 {
+#ifdef RTG
+  if ( RTG_enabled )
+  {
+    /* ATARI System Variables - do before anything else */
+    if ( addr >= SYS_VARS && addr < SYS_VARS_TOP )
+    {
+        /* check palmode word */
+        if ( addr == 0x448 )
+        {
+            RTG_PAL_MODE = val;
+        }
+
+        /* check sshiftmd word */
+        else if ( addr == 0x44c )
+        {
+            /* has resolution changed? */
+            if ( RTG_RES != val )
+            {
+                RTG_RES = val;
+                RTGresChanged = 1;
+            }
+        }
+
+        /* check v_bas_ad long */
+        else if ( addr == 0x44e )
+        {
+            RTG_ATARI_SCREEN_RAM = (uint32_t)val;
+        }
+    }
+
+    /* Palatte Registers - 16 off */
+    if ( addr >= PALETTE_REGS && addr < PALETTE_REGS + 0x20 )
+    {
+        RTG_PALETTE_REG [ (addr - PALETTE_REGS) >> 1 ] = toRGB565 ( (uint16_t)val );
+        //printf ( "palette change - REG %d = 0x%X to RGB565 0x%X\n", (addr - PALETTE_REGS) / 2, (uint16_t)value, toRGB565 ( (uint16_t)value)  );
+    }
+  }
+  if ( RTG_enabled && (addr >= RTG_ATARI_SCREEN_RAM && addr < (RTG_ATARI_SCREEN_RAM + 0x8000)) )
+  {
+    rtg ( type, addr, val );
+  }
+#endif 
+
   if ( IDE_IDE_enabled && (addr >= 0xfff00000 && addr < 0xfff00040) )
       addr &= 0x00ffffff;
+
 #if ATARI_VID
   else if ( ATARI_VID_enabled && (addr >= 0xffff8200 && addr < 0xffff82c4) )
     addr &= 0x00ffffff;
@@ -770,102 +737,16 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   return 0;
 }
 
-#if (0)
-void m68k_write_memory_8 ( unsigned int address, unsigned int value ) 
-{
-  if ( !passthrough )
-  {
-    if ( platform_write_check ( OP_TYPE_BYTE, address, value ) )
-      return;
-
-    //if ( cpu_type != M68K_CPU_TYPE_68000 )
-      address = check_ff_st (address);
-  }
-
-  else if ( passthrough )//&& cpu_type != M68K_CPU_TYPE_68000 )
-  {
-    address = check_ff_st (address);
-  }
-
-  //address &= 0x00FFFFFF;
-
-  ps_write_8 (address, value);
-}
 
 
-void m68k_write_memory_16 ( unsigned int address, unsigned int value ) 
-{
-  if ( !passthrough )
-  {
-    if ( platform_write_check ( OP_TYPE_WORD, address, value ) )
-      return;
-
-    //if ( cpu_type != M68K_CPU_TYPE_68000 )
-      address = check_ff_st (address);
-  }
-
-  else if ( passthrough )//&& cpu_type != M68K_CPU_TYPE_68000 )
-  {
-    address = check_ff_st (address);
-  }
-
-  //address &= 0x00FFFFFF;
-
-  ps_write_16 ( (t_a32)address, value );
-}
-
-
-void m68k_write_memory_32 ( unsigned int address, unsigned int value ) 
-{
-  if ( !passthrough )
-  {
-    if ( platform_write_check ( OP_TYPE_LONGWORD, address, value ) )
-      return;
-
-    //if ( cpu_type != M68K_CPU_TYPE_68000 )
-      address = check_ff_st (address);
-  }
-
-  else if ( passthrough )//&& cpu_type != M68K_CPU_TYPE_68000 )
-  {
-    address = check_ff_st (address);
-  }
-
-  //if ( address == 0x00ff8604 || address == 0x00ff8606 )
-  //{
-  //  ps_write_16 ( (t_a32)address, value >> 16 );
-  //  ps_write_16 ( (t_a32)(address + 2), value & 0x0000ffff );
-  //}
-
-  //else
-  //{
-  //  address &= 0x00FFFFFF;
-
-    ps_write_32 ( (t_a32)address, value);
-  //}
-}
-#else
 void m68k_write_memory_8 ( unsigned int address, unsigned int value ) 
 {
   if (platform_write_check ( OP_TYPE_BYTE, address, value ) )
     return;
+   
+  address = check_ff_st ( address );
 
-  //if ( cpu_type == M68K_CPU_TYPE_68000 )
-  //  address &= 0x00ffffff;
-    
-  if ( !IDE_IDE_enabled && (address >= 0xfff00000 && address < 0xfffa0000) ) 
-  {
-    g_buserr = 1;
-
-    return;
-  }
-
-  else
-  {
-    address = check_ff_st ( address );
-
-    ps_write_8 ( (t_a32)address, value );
-  }
+  ps_write_8 ( (t_a32)address, value );
 }
 
 
@@ -874,11 +755,7 @@ void m68k_write_memory_16 ( unsigned int address, unsigned int value )
   if (platform_write_check ( OP_TYPE_WORD, address, value ) )
     return;
 
-  //if ( cpu_type == M68K_CPU_TYPE_68000 )
-  //  address &= 0x00ffffff;
-    
-  //else
-    address = check_ff_st ( address );
+  address = check_ff_st ( address );
 
   ps_write_16 ( (t_a32)address, value );
 }
@@ -889,27 +766,16 @@ void m68k_write_memory_32 ( unsigned int address, unsigned int value )
   if ( platform_write_check ( OP_TYPE_LONGWORD, address, value ) )
     return;
 
-  //if ( cpu_type == M68K_CPU_TYPE_68000 )
-  //  address &= 0x00ffffff;
-
-  //else
-    address = check_ff_st ( address );
+  address = check_ff_st ( address );
 
   ps_write_32 ( (t_a32)address, value );
 }
-#endif
 
 
 void cpu_set_fc ( unsigned int _fc ) 
 {
 	fc = _fc;
 }
-
-
-//void call_berr ( uint16_t status, uint32_t address, uint mode ) 
-//{
-//  g_buserr = 1;
-//}
 
 
 

@@ -130,7 +130,7 @@ void InitIDE (void)
           //  IDE_attach(atariide0, i, atarifd);
           //  num_IDE_drives++;
           //}
-          DEBUG_PRINTF ("[HDD%d] HDD Image %s attached\n", i, atari_image_file[i]);
+          printf ("[HDD%d] HDD Image %s attached\n", i, atari_image_file[i]);
         }
       }
     }
@@ -445,7 +445,7 @@ skip_ideread8:;
 
 uint16_t readIDE(unsigned int address) {
   uint16_t value;
-  printf ( "readIDE: address 0x%X\n", address );
+  //printf ( "readIDE: address 0x%X\n", address );
   if (atariide0) {
 #if (1)
     if (address - IDEBASE == GDATA_OFFSET) {

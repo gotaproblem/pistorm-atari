@@ -39,7 +39,9 @@
 extern int handle_register_read_atari(unsigned int addr, unsigned char type, unsigned int *val);
 extern int handle_register_write_atari(unsigned int addr, unsigned int value, unsigned char type);
 
-
+#ifdef RTG
+extern int RTG_enabled;
+#endif
 
 extern const char *op_type_names[OP_TYPE_NUM];
 //extern uint8_t cdtv_mode;
@@ -186,14 +188,23 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val) {
         }
     }
 */
-    if CHKVAR("hdd0") {
-        if (val && strlen(val) != 0)
-            set_hard_drive_image_file_atari(0, val);
+    if CHKVAR ( "hdd0" ) 
+    {
+        if ( val && strlen ( val ) != 0 )
+            set_hard_drive_image_file_atari ( 0, val );
     }
-    if CHKVAR("hdd1") {
-        if (val && strlen(val) != 0)
-            set_hard_drive_image_file_atari(1, val);
+
+    if CHKVAR ( "hdd1" ) 
+    {
+        if ( val && strlen ( val ) != 0 )
+            set_hard_drive_image_file_atari ( 1, val );
     }
+#ifdef RTG
+    if CHKVAR ( "rtg" ) 
+    {
+        RTG_enabled = 1;
+    }
+#endif
 
 #ifdef PISCSI
     // PiSCSI stuff
@@ -243,48 +254,20 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val) {
         }
     }
 */
-/*
-    if CHKVAR("swap-df0-df")  {
-        if (val && strlen(val) != 0 && get_int(val) >= 1 && get_int(val) <= 3) {
-           swap_df0_with_dfx = get_int(val);
-           DEBUG_PRINTF ("[ATARI] DF0 and DF%d swapped.\n",swap_df0_with_dfx);
-        }
-    }
 
-    if CHKVAR("move-slow-to-chip") {
-        move_slow_to_chip = 1;
-        DEBUG_PRINTF ("[ATARI] Slow ram moved to Chip.\n");
-    }
-
-    if CHKVAR("force-move-slow-to-chip") {
-        force_move_slow_to_chip = 1;
-        DEBUG_PRINTF ("[ATARI] Forcing slowram move to chip, bypassing Agnus version check.\n");
-    }
-*/
 }
 
 void handle_reset_atari(struct emulator_config *cfg) {
   
     ac_waiting_for_physical_pic = 0;
 
-    //spoof_df0_id = 0;
 
     DEBUG_PRINTF ("[ATARI] Reset handler.\n");
 #ifdef PISCSI
     if ( piscsi_enabled )
         piscsi_refresh_drives ();
 #endif
-/*
-    if (move_slow_to_chip && !force_move_slow_to_chip) {
-      ps_write_16(VPOSW,0x00); // Poke poke... wake up Agnus!
-      int agnus_rev = ((ps_read_16(VPOSR) >> 8) & 0x6F);
-      if (agnus_rev != 0x20) {
-        move_slow_to_chip = 0;
-        DEBUG_PRINTF ("[ATARI] Requested move slow ram to chip but 8372 Agnus not found - Disabling.\n");
-      }
-    }
-*/
-    //atari_clear_emulating_irq();
+
     adjust_ranges_atari ( cfg );
 }
 
@@ -302,14 +285,6 @@ void shutdown_platform_atari(struct emulator_config *cfg) {
         piscsi_enabled = 0;
     }
 #endif
-
-    //mouse_hook_enabled = 0;
-    //kb_hook_enabled = 0;
-
-    //swap_df0_with_dfx = 0;
-    //spoof_df0_id = 0;
-    //move_slow_to_chip = 0;
-    //force_move_slow_to_chip = 0;
     
     ac_waiting_for_physical_pic = 0;
 

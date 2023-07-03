@@ -38,13 +38,13 @@ extern "C" {
 #endif
 
 #include "m68k.h"
-
 #include <limits.h>
 #include <endian.h>
-
-//#include <setjmp.h>
 #include <stdio.h>
 #include "gpio/ps_protocol.h"
+
+//#define CACHE_ON // cryptodad
+//#define T_CACHE_ON //cryptodad
 
 /* ======================================================================== */
 /* ==================== ARCHITECTURE-DEPENDANT DEFINES ==================== */
@@ -1179,12 +1179,14 @@ static inline uint m68ki_read_imm_16(m68ki_cpu_core *state)
 	uint32_t pc = REG_PC;
 
 	address_translation_cache *cache = &state->code_translation_cache;
+
+#ifdef CACHE_ON // cryptodad
 	if(pc >= cache->lower && pc < cache->upper)
 	{
 		REG_PC += 2;
 		return be16toh(((unsigned short *)(cache->offset + pc))[0]);
 	}
-
+#endif
 	return m68ki_read_imm16_addr_slowpath(state, pc, cache);
 }
 
@@ -1277,20 +1279,22 @@ static inline uint m68ki_read_8_fc(m68ki_cpu_core *state, uint address, uint fc)
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,1);
 #endif
-
 	address_translation_cache *cache = &state->fc_read_translation_cache;
+#ifdef CACHE_ON  // cryptodad
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		return cache->offset[address - cache->lower];
 	}
-	/*
+#endif
+#ifdef T_CACHE_ON
 	for (int i = 0; i < state->read_ranges; i++) {
 		if(address >= state->read_addr[i] && address < state->read_upper[i]) {
 			SET_FC_TRANSLATION_CACHE_VALUES
 			return state->read_data[i][address - state->read_addr[i]];
 		}
 	}
-	*/
+#endif
+
 #ifdef CHIP_FASTPATH
 	//if (!state->ovl && address < 0x200000) {
 	if (!state->ovl && address < FASTPATH_UPPER) 
@@ -1318,18 +1322,21 @@ static inline uint m68ki_read_16_fc(m68ki_cpu_core *state, uint address, uint fc
 #endif
 
 	address_translation_cache *cache = &state->fc_read_translation_cache;
+#ifdef CACHE_ON  // cryptodad
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		return be16toh(((unsigned short *)(cache->offset + (address - cache->lower)))[0]);
 	}
-	/*
+#endif
+#ifdef T_CACHE_ON
 	for (int i = 0; i < state->read_ranges; i++) {
 		if(address >= state->read_addr[i] && address < state->read_upper[i]) {
 			SET_FC_TRANSLATION_CACHE_VALUES
 			return be16toh(((unsigned short *)(state->read_data[i] + (address - state->read_addr[i])))[0]);
 		}
 	}
-	*/
+#endif
+
 #ifdef CHIP_FASTPATH
 	//if (!state->ovl && address < 0x200000) {
 	if (!state->ovl && address < FASTPATH_UPPER) 
@@ -1358,20 +1365,22 @@ static inline uint m68ki_read_32_fc(m68ki_cpu_core *state, uint address, uint fc
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,1);
 #endif
-
 	address_translation_cache *cache = &state->fc_read_translation_cache;
+#ifdef CACHE_ON  // cryptodad
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		return be32toh(((unsigned int *)(cache->offset + (address - cache->lower)))[0]);
 	}
-	/*
+#endif
+#ifdef T_CACHE_ON
 	for (int i = 0; i < state->read_ranges; i++) {
 		if(address >= state->read_addr[i] && address < state->read_upper[i]) {
 			SET_FC_TRANSLATION_CACHE_VALUES
 			return be32toh(((unsigned int *)(state->read_data[i] + (address - state->read_addr[i])))[0]);
 		}
 	}
-	*/
+#endif
+
 #ifdef CHIP_FASTPATH
 	//if (!state->ovl && address < 0x200000) {
 	if (!state->ovl && address < FASTPATH_UPPER) 
@@ -1402,14 +1411,15 @@ static inline void m68ki_write_8_fc(m68ki_cpu_core *state, uint address, uint fc
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,0);
 #endif
-/*
-	address_translation_cache *cache = &state->fc_write_translation_cache;
+	address_translation_cache *cache = &state->fc_read_translation_cache;
+#ifdef CACHE_ON  // cryptodad
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		cache->offset[address - cache->lower] = (unsigned char)value;
 		return;
 	}
-
+#endif
+#ifdef T_CACHE_ON
 	for (int i = 0; i < state->write_ranges; i++) {
 		if(address >= state->write_addr[i] && address < state->write_upper[i]) {
 			SET_FC_WRITE_TRANSLATION_CACHE_VALUES
@@ -1417,7 +1427,8 @@ static inline void m68ki_write_8_fc(m68ki_cpu_core *state, uint address, uint fc
 			return;
 		}
 	}
-*/
+#endif
+
 #ifdef CHIP_FASTPATH
 	//if (!state->ovl && address < 0x200000) {
 	if (!state->ovl && address < FASTPATH_UPPER) 
@@ -1444,14 +1455,15 @@ static inline void m68ki_write_16_fc(m68ki_cpu_core *state, uint address, uint f
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,0);
 #endif
-/*
-	address_translation_cache *cache = &state->fc_write_translation_cache;
+	address_translation_cache *cache = &state->fc_read_translation_cache;
+#ifdef CACHE_ON  // cryptodad
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		((short *)(cache->offset + (address - cache->lower)))[0] = htobe16(value);
 		return;
 	}
-
+#endif
+#ifdef T_CACHE_ON
 	for (int i = 0; i < state->write_ranges; i++) {
 		if(address >= state->write_addr[i] && address < state->write_upper[i]) {
 			SET_FC_WRITE_TRANSLATION_CACHE_VALUES
@@ -1459,7 +1471,8 @@ static inline void m68ki_write_16_fc(m68ki_cpu_core *state, uint address, uint f
 			return;
 		}
 	}
-*/
+#endif
+
 #ifdef CHIP_FASTPATH
 	//if (!state->ovl && address < 0x200000) {
 	if (!state->ovl && address < FASTPATH_UPPER) 
@@ -1493,14 +1506,15 @@ static inline void m68ki_write_32_fc(m68ki_cpu_core *state, uint address, uint f
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,0);
 #endif
-/*
-	address_translation_cache *cache = &state->fc_write_translation_cache;
+	address_translation_cache *cache = &state->fc_read_translation_cache;
+#ifdef CACHE_ON // cryptodad
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		((int *)(cache->offset + (address - cache->lower)))[0] = htobe32(value);
 		return;
 	}
-
+#endif
+#ifdef T_CACHE_ON
 	for (int i = 0; i < state->write_ranges; i++) {
 		if(address >= state->write_addr[i] && address < state->write_upper[i]) {
 			SET_FC_WRITE_TRANSLATION_CACHE_VALUES
@@ -1508,7 +1522,8 @@ static inline void m68ki_write_32_fc(m68ki_cpu_core *state, uint address, uint f
 			return;
 		}
 	}
-*/
+#endif
+
 #ifdef CHIP_FASTPATH
 	//if (!state->ovl && address < 0x200000) 
 	if (!state->ovl && address < FASTPATH_UPPER) 
