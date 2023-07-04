@@ -12,8 +12,6 @@
  */
 
 #include <stdint.h>
-
-
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +23,10 @@
 #include <signal.h>
 #include <sys/time.h>
 #include "../../config_file/config_file.h"
+
+#ifdef RAYLIB
+#include "raylib_pi4_test/raylib.h"
+#endif
 
 // 'global' variables to store screen info
 static int fbfd;
@@ -53,6 +55,7 @@ extern volatile int cpu_emulation_running;
  *  $337, $737, $377, $000      lt. blue, lt. magenta, lt. cyan, black
  */
 
+#ifndef RAYLIB
 /* 4 colour pallete */
 enum 
 {
@@ -74,6 +77,7 @@ enum
     BLACK      = 0
 
 } palette;
+#endif
 
 #define ATARI_VRAM_BASE   0x003f8000 /* 4MB machine - will get changed at detection */
 #define VRAM ((640 * 400) / 8)    /* 32 KB 640 * 400 = 8 pixels per word */
@@ -84,6 +88,7 @@ enum
 
 #define RGBalpha 0x0000 
 
+#ifndef RAYLIB
 uint16_t palette4 [4] = {
    WHITE, RED, LT_GREEN, BLACK
 };
@@ -116,6 +121,7 @@ void draw ( int res )
     uint8_t plane0, plane1, plane2, plane3;
     int x, y;
     int zoomX, zoomY;
+    uint16_t *drawXY;
     int X_SCALE, Y_SCALE;
     int ABPP;
     volatile uint16_t *sptr =(volatile uint16_t *)screen;
@@ -124,22 +130,22 @@ void draw ( int res )
     if ( res == HI_RES )
     {
         ABPP = 1;
-        X_SCALE = 1;
+        X_SCALE = 2;
         Y_SCALE = 1;
     }
 
     else if ( res == MED_RES )
     {
         ABPP = 2;
-        X_SCALE = 1;
-        Y_SCALE = 1;
+        X_SCALE = 2;
+        Y_SCALE = 2;
     }
 
     else if ( res == LOW_RES )
     {
         ABPP = 4;
-        X_SCALE = 2;
-        Y_SCALE = 1;
+        X_SCALE = 4;
+        Y_SCALE = 2;
     }
 
     /* VRAM = 32 KB so divide by 2 for 16 bit WORDS */
@@ -150,20 +156,24 @@ void draw ( int res )
             for ( int n = 0; n < 16; n++ )
             {
                 plane0 = ( be16toh ( sptr [ address ] ) >> ( 15 - n ) ) & 1; 
-                
-                x = pixel % 640;
-                y = pixel / 640;
+                x      = pixel % 640;
+                y      = pixel / 640;
+                zoomY  = y * Y_SCALE;
+                zoomX  = x * X_SCALE;
+                drawXY = fbptr + zoomX + (zoomY * finfo.line_length); 
 
-                zoomY = y * Y_SCALE;
-                zoomX = x * X_SCALE;
+                //*( drawXY ) = plane0 == 1 ? BLACK : WHITE; 
 
-                *( fbptr + zoomX + (zoomY * finfo.line_length) ) = plane0 == 1 ? BLACK : WHITE; 
+                //if ( X_SCALE > 1 )
+                //    memcpy ( drawXY + 1, drawXY, X_SCALE - 1 );
 
-                if ( X_SCALE > 1 )
-                    memcpy ( fbptr + zoomX + zoomY, fbptr + zoomX + zoomY, X_SCALE );
+                //if ( Y_SCALE > 1 )
+                 //   memcpy ( drawXY + finfo.line_length, drawXY, 640 * (Y_SCALE - 1) );
+                for ( int X = 0; X < X_SCALE; X++ )
+                    *( drawXY + X ) = plane0 == 1 ? BLACK : WHITE; 
 
-                if ( Y_SCALE > 1 )
-                    memcpy ( fbptr + zoomX + zoomY, fbptr + zoomX + zoomY, 640 * Y_SCALE );
+                for ( int Y = 1; Y < Y_SCALE; Y++ )
+                    *( drawXY + (Y * finfo.line_length) ) = plane0 == 1 ? BLACK : WHITE; 
 
                 pixel++;
             }    
@@ -175,21 +185,17 @@ void draw ( int res )
             {
                 plane0 = ( be16toh ( sptr [ address ] ) >> ( 15 - n ) ) & 1; 
                 plane1 = ( be16toh ( sptr [ address + 1 ] ) >> ( 15 - n ) ) & 1; 
-                
-                x = pixel % 640;
-                y = pixel / 640;
+                x      = pixel % 640;
+                y      = pixel / 640;
+                zoomY  = y * Y_SCALE;
+                zoomX  = x * X_SCALE;
+                drawXY = fbptr + zoomX + (zoomY * finfo.line_length); 
 
-                zoomY = y * Y_SCALE;
-                zoomX = x * X_SCALE;
-            
-                *( fbptr + zoomX + (zoomY * finfo.line_length) ) = 
-                            RTG_PALETTE_REG [plane1 << 1 | plane0]; 
+                for ( int X = 0; X < X_SCALE; X++ )
+                    *( drawXY + X ) = RTG_PALETTE_REG [plane1 << 1 | plane0]; 
 
-                if ( X_SCALE > 1 )
-                    memcpy ( fbptr + zoomX + zoomY, fbptr + zoomX + zoomY, X_SCALE );
-
-                if ( Y_SCALE > 1 )
-                    memcpy ( fbptr + zoomX + zoomY, fbptr + zoomX + zoomY, 640 * Y_SCALE );
+                for ( int Y = 1; Y < Y_SCALE; Y++ )
+                    *( drawXY + (Y * finfo.line_length) ) = RTG_PALETTE_REG [plane1 << 1 | plane0]; 
 
                 pixel++; 
             }
@@ -203,21 +209,17 @@ void draw ( int res )
                 plane1 = ( be16toh ( sptr [ address + 1 ] ) >> ( 15 - n ) ) & 1; 
                 plane2 = ( be16toh ( sptr [ address + 2 ] ) >> ( 15 - n ) ) & 1; 
                 plane3 = ( be16toh ( sptr [ address + 3 ] ) >> ( 15 - n ) ) & 1; 
-
-                x = pixel % 320;
-                y = pixel / 320;
-
-                zoomY = y * Y_SCALE;
-                zoomX = x * X_SCALE;
+                x      = pixel % 320;
+                y      = pixel / 320;
+                zoomY  = y * Y_SCALE;
+                zoomX  = x * X_SCALE;
+                drawXY = fbptr + zoomX + (zoomY * finfo.line_length); 
               
-                *( fbptr + zoomX + (zoomY * finfo.line_length) ) = 
-                            RTG_PALETTE_REG [ plane3 << 3 | plane2 << 2 | plane1 << 1 | plane0]; 
-
-                if ( X_SCALE > 1 )
-                    memcpy ( fbptr + zoomX + zoomY, fbptr + zoomX + zoomY, X_SCALE );
-
-                if ( Y_SCALE > 1 )
-                    memcpy ( fbptr + zoomX + zoomY, fbptr + zoomX + zoomY, 320 * Y_SCALE );
+                for ( int X = 0; X < X_SCALE; X++ )
+                    *( drawXY + X ) = RTG_PALETTE_REG [plane3 << 3 | plane2 << 2 | plane1 << 1 | plane0]; 
+                
+                for ( int Y = 1; Y < Y_SCALE; Y++ )
+                    *( drawXY + (Y * finfo.line_length) ) = RTG_PALETTE_REG [plane3 << 3 | plane2 << 2 | plane1 << 1 | plane0]; 
 
                 pixel++;
             }  
@@ -306,9 +308,9 @@ void *rtgRender ( void* vptr )
 
             else if ( thisRES == HI_RES )
             {
-#if (1)
-                //vinfo.xres = 1280;
-                //vinfo.yres = 800;
+#if (0)
+                vinfo.xres = 1280;
+                vinfo.yres = 800;
                 vinfo.xres_virtual = 640;
                 vinfo.yres_virtual = 400;
                 vinfo.bits_per_pixel = 16;
@@ -327,12 +329,13 @@ void *rtgRender ( void* vptr )
 
             for ( int i = 0; i < screensize / (vinfo.bits_per_pixel / 8); i++ ) 
             {
-                *(uint16_t *)( ( fbptr + i ) ) = RGBalpha | BLACK;
+                *(uint16_t *)( ( fbptr + i ) ) = WHITE;
             }
 
             RTGresChanged = 0;
         }
 
+        /* draw the screen */
         draw ( thisRES );
 
         /* 50 Hz 20000 (20ms), 60 Hz 16666 (16.6ms), 70 Hz 14285 (14.2ms) */
@@ -343,13 +346,112 @@ void *rtgRender ( void* vptr )
         {
             usleep ( 100 );
 
-            wait = wait - 100;
+            wait -= 100;
         }
     }
 }
+#endif
 
 
-void *rtg ( int size, uint32_t address, uint32_t data ) 
+#ifdef RAYLIB
+extern struct emulator_config *cfg;
+
+void *rtgRender ( void* vptr )
+{
+
+    const int windowWidth = 640;
+    const int windowHeight = 480;
+
+    // Enable config flags for resizable window and vertical synchro
+    SetConfigFlags(FLAG_VSYNC_HINT);
+    InitWindow(windowWidth, windowHeight, "raylib [core] example - window scale letterbox");
+    SetWindowMinSize(320, 240);
+
+    int gameScreenWidth = 640;
+    int gameScreenHeight = 480;
+
+    // Render texture initialization, used to hold the rendering result so we can easily resize it
+    RenderTexture2D target = LoadRenderTexture(gameScreenWidth, gameScreenHeight);
+    SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);  // Texture scale filter to use
+
+    SetTargetFPS(60);                   // Set our game to run at 60 frames-per-second
+    //--------------------------------------------------------------------------------------
+
+	uint8_t red, green, blue;
+
+
+	uint16_t *src = (uint16_t *)( cfg->map_data [3] );
+    //uint16_t *src = (uint16_t *)screen;
+    
+	uint16_t *dst;
+
+	Image raylib_fb;
+	raylib_fb.format = PIXELFORMAT_UNCOMPRESSED_R5G6B5;
+
+	raylib_fb.width = 640;
+	raylib_fb.height = 480;
+
+	raylib_fb.mipmaps = 1;
+	raylib_fb.data = src;
+
+	Texture raylib_texture;
+
+	raylib_texture = LoadTextureFromImage(raylib_fb);
+
+	dst = malloc( raylib_fb.width * raylib_fb.height * 2 );
+
+
+    // Main game loop
+    uint16_t *srcptr;
+    uint16_t *dstptr;
+
+
+    while ( !WindowShouldClose () && cpu_emulation_running )        // Detect window close button or ESC key
+    {
+	srcptr = src;
+	dstptr = dst;
+    memcpy ( src, (void*)screen, 32 *1024 );
+	for( unsigned long l = 0 ; l < ( raylib_fb.width * raylib_fb.height ) ; l++ )
+		*dstptr++ = be16toh(*srcptr++);
+        UpdateTexture(raylib_texture, dst );
+
+        BeginDrawing();
+		DrawTexture( raylib_texture, 0, 0, WHITE );
+        EndDrawing();
+        //--------------------------------------------------------------------------------------
+    }
+
+    // De-Initialization
+    //--------------------------------------------------------------------------------------
+    UnloadRenderTexture(target);        // Unload render texture
+
+    CloseWindow();                      // Close window and OpenGL context
+    //--------------------------------------------------------------------------------------
+
+}
+
+
+void rtg ( int size, uint32_t address, uint32_t data ) 
+{
+    if ( size == OP_TYPE_BYTE )
+    {
+        *(uint8_t *)( screen + (address - RTG_ATARI_SCREEN_RAM) ) = data & 0xff;
+    }
+
+    else if ( size == OP_TYPE_WORD )
+    {
+        *(uint16_t *)( screen + (address - RTG_ATARI_SCREEN_RAM) ) = be16toh ( data & 0xffff );
+    }
+
+    else if ( size == OP_TYPE_LONGWORD )
+    {
+        *(uint32_t *)( screen + (address - RTG_ATARI_SCREEN_RAM) ) = be32toh ( data );
+    }
+}
+#endif
+
+#ifndef RAYLIB
+void rtg ( int size, uint32_t address, uint32_t data ) 
 {
    // while ( RTGresChanged )
     //;
@@ -369,7 +471,7 @@ void *rtg ( int size, uint32_t address, uint32_t data )
         *(uint32_t *)( screen + (address - RTG_ATARI_SCREEN_RAM) ) = be32toh ( data );
     }
 }
-
+#endif
 
 
 void rtgInit ( void )
@@ -379,13 +481,13 @@ void rtgInit ( void )
     /* check .cfg has setvar rtg */
     if ( !RTG_enabled )
         return;
-
+#ifndef RAYLIB
     // Open the file for reading and writing
     fbfd = open ( "/dev/fb0", O_RDWR );
 
     if ( !fbfd ) 
     {
-        printf ( "%sError: cannot open framebuffer device.\n", func );
+        printf ( "%sFATAL: cannot open framebuffer device.\n", func );
         return;
     }
 
@@ -398,14 +500,14 @@ void rtgInit ( void )
         return;
     }
 
-    printf ( "%sHDMI resolution %dx%d, %dbpp\n", func, vinfo.xres, vinfo.yres, vinfo.bits_per_pixel );
+    //printf ( "%sHDMI resolution %dx%d, %dbpp\n", func, vinfo.xres, vinfo.yres, vinfo.bits_per_pixel );
 
     /* /boot/config.txt - do not configure hdmi - leave to auto detect */
     /* need xres and yres doubled to handle HI_RES for some reason */
-    //vinfo.xres = 1280;
-    //vinfo.yres = 800;
-    vinfo.xres_virtual = 320;
-    vinfo.yres_virtual = 200;
+    vinfo.xres = 1280;
+    vinfo.yres = 800;
+    vinfo.xres_virtual = 640;
+    vinfo.yres_virtual = 400;
     vinfo.bits_per_pixel = 16;
 
     if ( ioctl ( fbfd, FBIOPUT_VSCREENINFO, &vinfo ) )
@@ -435,16 +537,15 @@ void rtgInit ( void )
         return;
     }
 
-    
-    int i;
     fbptr = (uint16_t *)fbp;
 
     //printf ( "screen RAM size is 0x%X\n", screensize );
     //printf ( "screen line length is %d\n", finfo.line_length );
+#endif
 
     if ( ( screen = (volatile uint8_t *)calloc ( (640 * 400) / 8, 1 ) ) == NULL )
     {
-        printf ( "%sFATAL - failed to allocate memory to screen\n", func );
+        printf ( "%sFATAL - failed to allocate memory to screen buffer\n", func );
         return;
     }
 
