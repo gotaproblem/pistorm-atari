@@ -89,6 +89,8 @@ this code that are retained.
 #include <sunmath.h>
 #endif
 
+#include <stdbool.h>
+
 
 /* This 'flag' type must be able to hold at least 0 and 1. It should
  * probably be replaced with 'bool' but the uses would need to be audited
@@ -96,7 +98,7 @@ this code that are retained.
  */
 
 typedef uint64_t flag;
-typedef uint8_t bool;
+//typedef uint8_t bool;
 
 #define LIT64( a ) a##ULL
 

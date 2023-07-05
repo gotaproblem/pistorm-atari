@@ -96,11 +96,15 @@ ataritest can do a lot more, like reading and writing (peek and poke), to Atari 
 
 You can start the emulator with the default Atari configuration by typing `sudo ./emulator --config configs/atari.cfg`.    
 **Important note:** Do not edit the default configuration file - `atari.cfg`. Instead, make a copy and save it in a directory outside 
-the pistorm-atari file structure - eg. ../configs/yours.cfg.
+the pistorm-atari file structure - eg. ../configs/myatari.cfg.
 This way, you will never have any problems using `git pull` to update your PiStorm repo to the latest commit.
 Two sub-directories are present for Emulator run-time usage: They are, roms and configs.
 The roms/ directory contains a compressed file - roms.zip. Copy the compressed file to a directory of your choice, outside 
 the pistorm-atari file structure - eg ../roms/
+* `mkdir ../roms`
+* `mkdir ../dkimages`
+* `mkdir ../configs`
+* `cp configs/atari.cfg ../configs`
 * `cp roms/roms.zip ../roms/`
 * `cd ../roms`
 * `unzip roms.zip`
@@ -110,16 +114,34 @@ A couple of disk images have been created to help you get started. These are opt
 floppy disk drive and/or an attached ACSI bus device.
 
 **The disk images are too large for GitHub. Please find the disk images at https://bbansolutions.co.uk**
-Make directory outside the pistorm-atari file structure - eg. ../dkimages
-Download the disks.zip file, copy to the Pi4. Uncompress the file to give two disk images.
-* `cd ../`
-* `mkdir dkimages`
-* `cd dkimages`
+Download the disks.zip file, copy to the Pi4 dkimages/ directory. Uncompress the file to give two disk images.
+* `cd ../dkimages`
 * `unzip disks.zip`
 * `cd ../pistorm-atari`
 
-Run the emulator using `sudo ./emulator --config ../configs/your.cfg`.
+Run the emulator using `sudo ./emulator --config ../configs/myatari.cfg`.
 
 To exit the emulator you can press `Ctrl+C`.
+
+# RTG Graphics - Raylib
+Enhanced video modes are available for an OS such as Mint. To use this feature, a couple of changes are needed.
+* 1. copy the configs/config.txt file to /boot/
+* `sudo cp configs/config.txt /boot/config.txt`
+* A reboot is needed after this
+* `sudo reboot`
+* 2. Changes to the emulator configuration file are needed
+* edit your .cfg file and uncomment (remove the preceding hash), the following two lines
+* #setvar rtg
+* #map type=ram address=0x00B00000 size=0x100000 id=RTG
+
+**A mint specific configuration file is now included in the repository**
+* Make a copy of configs/mint.cfg
+* `cp configs/mint.cfg ../configs/`
+
+Finally, perform a rebuild
+* `make clean`
+* `make`
+
+
 
 

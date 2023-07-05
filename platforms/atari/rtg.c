@@ -20,8 +20,14 @@
 #include <linux/fb.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
+
+#ifdef RAYLIB
+#include <pthread.h>
 #include <signal.h>
-#include <sys/time.h>
+#endif
+
+//#include <signal.h>
+//#include <sys/time.h>
 #include "../../config_file/config_file.h"
 
 #ifdef RAYLIB
@@ -124,6 +130,7 @@ void draw ( int res )
     uint16_t *drawXY;
     int X_SCALE, Y_SCALE;
     int ABPP;
+    uint16_t *startingX;
     volatile uint16_t *sptr =(volatile uint16_t *)screen;
 
     
@@ -153,6 +160,10 @@ void draw ( int res )
     {
         if ( res == HI_RES )
         {
+            y      = pixel / 640;
+            zoomY  = y * Y_SCALE;
+            startingX = fbptr + (pixel % 640) * X_SCALE + (zoomY * finfo.line_length);
+
             for ( int n = 0; n < 16; n++ )
             {
                 plane0 = ( be16toh ( sptr [ address ] ) >> ( 15 - n ) ) & 1; 
@@ -162,47 +173,46 @@ void draw ( int res )
                 zoomX  = x * X_SCALE;
                 drawXY = fbptr + zoomX + (zoomY * finfo.line_length); 
 
-                //*( drawXY ) = plane0 == 1 ? BLACK : WHITE; 
-
-                //if ( X_SCALE > 1 )
-                //    memcpy ( drawXY + 1, drawXY, X_SCALE - 1 );
-
-                //if ( Y_SCALE > 1 )
-                 //   memcpy ( drawXY + finfo.line_length, drawXY, 640 * (Y_SCALE - 1) );
                 for ( int X = 0; X < X_SCALE; X++ )
                     *( drawXY + X ) = plane0 == 1 ? BLACK : WHITE; 
 
-                for ( int Y = 1; Y < Y_SCALE; Y++ )
-                    *( drawXY + (Y * finfo.line_length) ) = plane0 == 1 ? BLACK : WHITE; 
-
                 pixel++;
             }    
+
+            if ( Y_SCALE > 1 )
+                memcpy ( startingX + 1 + finfo.line_length, startingX, 640 * (Y_SCALE - 1) );
         }
 
         if ( res == MED_RES )
         {
+            y      = pixel / 640;
+            zoomY  = y * Y_SCALE;
+            startingX = fbptr + (pixel % 640) * X_SCALE + (zoomY * finfo.line_length);
+
             for ( int n = 0; n < 16; n++ )
             {
                 plane0 = ( be16toh ( sptr [ address ] ) >> ( 15 - n ) ) & 1; 
                 plane1 = ( be16toh ( sptr [ address + 1 ] ) >> ( 15 - n ) ) & 1; 
                 x      = pixel % 640;
-                y      = pixel / 640;
-                zoomY  = y * Y_SCALE;
                 zoomX  = x * X_SCALE;
                 drawXY = fbptr + zoomX + (zoomY * finfo.line_length); 
 
                 for ( int X = 0; X < X_SCALE; X++ )
                     *( drawXY + X ) = RTG_PALETTE_REG [plane1 << 1 | plane0]; 
 
-                for ( int Y = 1; Y < Y_SCALE; Y++ )
-                    *( drawXY + (Y * finfo.line_length) ) = RTG_PALETTE_REG [plane1 << 1 | plane0]; 
-
                 pixel++; 
             }
+
+            if ( Y_SCALE > 1 )
+                memcpy ( startingX + 1 + finfo.line_length, startingX, 640 * (Y_SCALE - 1) );
         }
 
         else if ( res == LOW_RES )
         {
+            y      = pixel / 320;
+            zoomY  = y * Y_SCALE;
+            startingX = fbptr + (pixel % 320) * X_SCALE + (zoomY * finfo.line_length);
+
             for ( int n = 0; n < 16; n++ )
             {
                 plane0 = ( be16toh ( sptr [ address ] ) >> ( 15 - n ) ) & 1; 
@@ -210,19 +220,17 @@ void draw ( int res )
                 plane2 = ( be16toh ( sptr [ address + 2 ] ) >> ( 15 - n ) ) & 1; 
                 plane3 = ( be16toh ( sptr [ address + 3 ] ) >> ( 15 - n ) ) & 1; 
                 x      = pixel % 320;
-                y      = pixel / 320;
-                zoomY  = y * Y_SCALE;
                 zoomX  = x * X_SCALE;
                 drawXY = fbptr + zoomX + (zoomY * finfo.line_length); 
               
                 for ( int X = 0; X < X_SCALE; X++ )
                     *( drawXY + X ) = RTG_PALETTE_REG [plane3 << 3 | plane2 << 2 | plane1 << 1 | plane0]; 
-                
-                for ( int Y = 1; Y < Y_SCALE; Y++ )
-                    *( drawXY + (Y * finfo.line_length) ) = RTG_PALETTE_REG [plane3 << 3 | plane2 << 2 | plane1 << 1 | plane0]; 
 
                 pixel++;
             }  
+
+            if ( Y_SCALE > 1 )
+                memcpy ( startingX + 1 + finfo.line_length, startingX, 320 * (Y_SCALE - 1) );
         }  
     }
 }
@@ -329,7 +337,7 @@ void *rtgRender ( void* vptr )
 
             for ( int i = 0; i < screensize / (vinfo.bits_per_pixel / 8); i++ ) 
             {
-                *(uint16_t *)( ( fbptr + i ) ) = WHITE;
+                *(uint16_t *)( ( fbptr + i ) ) = 0x39e7; //0x7bef;
             }
 
             RTGresChanged = 0;
@@ -358,6 +366,11 @@ extern struct emulator_config *cfg;
 
 void *rtgRender ( void* vptr )
 {
+    sigset_t set;
+
+    sigemptyset ( &set );
+    sigaddset ( &set, SIGINT );
+    pthread_sigmask ( SIG_BLOCK, &set, NULL );
 
     const int windowWidth = 640;
     const int windowHeight = 480;
@@ -410,7 +423,7 @@ void *rtgRender ( void* vptr )
     {
 	srcptr = src;
 	dstptr = dst;
-    memcpy ( src, (void*)screen, 32 *1024 );
+    
 	for( unsigned long l = 0 ; l < ( raylib_fb.width * raylib_fb.height ) ; l++ )
 		*dstptr++ = be16toh(*srcptr++);
         UpdateTexture(raylib_texture, dst );
@@ -428,6 +441,9 @@ void *rtgRender ( void* vptr )
     CloseWindow();                      // Close window and OpenGL context
     //--------------------------------------------------------------------------------------
 
+    cpu_emulation_running = 0;
+    
+    printf ( "[RTG] thread terminated\n" );
 }
 
 

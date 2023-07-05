@@ -41,6 +41,7 @@ extern "C" {
 #include <limits.h>
 #include <endian.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include "gpio/ps_protocol.h"
 
 //#define CACHE_ON // cryptodad

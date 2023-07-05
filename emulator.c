@@ -19,6 +19,7 @@
 
 
 
+
 #define DEBUGPRINT 1
 #if DEBUGPRINT
 #define DEBUG_PRINTF(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
@@ -247,8 +248,13 @@ void *cpu_task()
   g_buserr = 0;	
   int debug = 0;
 
-cpu_loop:
-  
+
+  while ( !cpu_emulation_running )
+    ;
+
+//cpu_loop:
+  while ( cpu_emulation_running )
+  {
 #ifdef DISASSEMBLE
     if ( m68k_get_reg(NULL, M68K_REG_PC) == 0x00e00f98 && debug == 0 ) 
     {
@@ -310,31 +316,35 @@ cpu_loop:
     if ( debug )
       usleep ( 250000 );
 #endif
-  goto cpu_loop;
-
+  //goto cpu_loop;
+  }
 stop_cpu_emulation:
   DEBUG_PRINTF ("[CPU] End of CPU thread\n");
   return (void *)NULL;
 }
 
 
-void sigint_handler(int sig_num) 
+void sigint_handler ( int sig_num ) 
 {
+  cpu_emulation_running = 0;
+  
   DEBUG_PRINTF ( "\n[MAIN] Exiting\n" );
   
-  if (mem_fd)
-    close(mem_fd);
+  if ( mem_fd )
+    close ( mem_fd );
 
-  if (cfg->platform->shutdown) {
-    cfg->platform->shutdown(cfg);
+  if ( cfg->platform->shutdown ) 
+  {
+    cfg->platform->shutdown ( cfg );
   }
 
-  while (!emulator_exiting) {
+  while ( !emulator_exiting ) 
+  {
     emulator_exiting = 1;
-    usleep(0);
+    usleep ( 0 );
   }
 
-  exit(0);
+  exit ( 0 );
 }
 
 
@@ -348,7 +358,7 @@ int main ( int argc, char *argv[] )
   const struct sched_param priority = {99};
 #ifdef RTG
   int err;
-  pthread_t rtg_tid;
+  pthread_t rtg_tid, cpu_tid;
   RTG_enabled = 0;
 #endif
 
@@ -455,37 +465,6 @@ int main ( int argc, char *argv[] )
   fc = 6;
   g_buserr = 0;
 
-  //pthread_t ipl_tid = 0, cpu_tid, ide_tid, misc_tid;
-
-  //int err;
-
-  //if ( ipl_tid == 0 ) 
-  //{
-    //err = pthread_create ( &ipl_tid, NULL, &ipl_task, NULL );
-
-    //if ( err != 0 )
-    //  printf ( "[ERROR] Cannot create IPL thread: [%s]", strerror (err) );
-
-    //else 
-    //{
-    //  pthread_setname_np ( ipl_tid, "pistorm: ipl" );
-    //  printf ( "[MAIN] IPL thread created successfully\n" );
-    //}
-  //}
-
-  // create cpu task
-
- // err = pthread_create ( &cpu_tid, NULL, &cpu_task, NULL );
-
-  //if ( err != 0 )
-  //  printf ( "[ERROR] Cannot create CPU thread: [%s]", strerror (err) );
-
-  //else 
-  //{
-  //  pthread_setname_np ( cpu_tid, "pistorm: cpu" );
-  //  printf ( "[MAIN] CPU thread created successfully\n" );
-  //}
-
 #ifdef MISC_TASK
   // create miscellaneous task
 
@@ -502,19 +481,37 @@ int main ( int argc, char *argv[] )
 #endif
 
 #ifdef RTG
+  err = pthread_create ( &cpu_tid, NULL, &cpu_task, NULL );
+
+  if ( err != 0 )
+    printf ( "[ERROR] Cannot create CPU thread: [%s]", strerror ( err ) );
+
+  else 
+  {
+    pthread_setname_np ( cpu_tid, "pistorm: cpu" );
+    printf ( "[MAIN] CPU thread created successfully\n" );
+  }
+
   // create rtg task
   if (  RTG_enabled )
   {
-    err = pthread_create ( &rtg_tid, NULL, &rtgRender, NULL );
-
-    if ( err != 0 )
-      DEBUG_PRINTF ( "[ERROR] Cannot create RTG thread: [%s]", strerror (err) );
-
-    else 
+#ifdef RAYLIB
+    if ( cfg->map_data [3] ) // cryptodad - this will need work - can't rely on it being map[3]
     {
-      pthread_setname_np ( rtg_tid, "pistorm: rtg" );
-      DEBUG_PRINTF ( "[MAIN] RTG thread created successfully\n" );
+#endif
+      err = pthread_create ( &rtg_tid, NULL, &rtgRender, NULL );
+
+      if ( err != 0 )
+        DEBUG_PRINTF ( "[ERROR] Cannot create RTG thread: [%s]", strerror (err) );
+
+      else 
+      {
+        pthread_setname_np ( rtg_tid, "pistorm: rtg" );
+        DEBUG_PRINTF ( "[MAIN] RTG thread created successfully\n" );
+      }
+#ifdef RAYLIB
     }
+#endif
   }
 #endif
 
@@ -534,16 +531,24 @@ int main ( int argc, char *argv[] )
 
   DEBUG_PRINTF ( "\n" );
 
+#ifndef RAYLIB
   cpu_task ();
+#else
+  if (  RTG_enabled )
+    pthread_join ( rtg_tid, NULL );
 
-  if ( load_new_config == 0 )
+  else
+    pthread_join ( cpu_tid, NULL );
+#endif
+
+  //if ( load_new_config == 0 )
     DEBUG_PRINTF ("[MAIN] All threads appear to have concluded; ending process\n");
 
-  if ( mem_fd )
-    close ( mem_fd );
+  //if ( mem_fd )
+  //  close ( mem_fd );
 
-  if ( cfg->platform->shutdown )
-    cfg->platform->shutdown(cfg);
+  //if ( cfg->platform->shutdown )
+  //  cfg->platform->shutdown(cfg);
 
   return 0;
 }
@@ -677,6 +682,7 @@ extern volatile uint16_t RTG_PALETTE_REG [16];
 
 static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32_t val ) 
 {
+
 #ifdef RTG
   if ( RTG_enabled )
   {
