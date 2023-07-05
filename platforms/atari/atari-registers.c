@@ -69,9 +69,6 @@ int handle_register_read_atari(unsigned int addr, unsigned char type, unsigned i
 
 
 
-#define toRGB565(d) ( (uint16_t) ( (d & 0x0f00) << 4 | (d & 0x00f0) << 3 | (d & 0x000f) << 1 ) )
-
-
 
 int handle_register_write_atari(unsigned int addr, unsigned int value, unsigned char type) 
 {

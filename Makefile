@@ -29,7 +29,7 @@ RAYLIB    = -I./raylib_pi4_test -L./raylib_pi4_test -lraylib -lGLESv2 -lEGL -ldr
 #PI4OPTS	  = -mcpu=cortex-a72
 PI4OPTS	  = -march=armv8-a -mfloat-abi=hard -mfpu=neon-fp-armv8
 
-CFLAGS    = -I. $(PI4OPTS) $(RAYLIB) -O3 -DRTG -DRAYLIB #-DT_CACHE_ON -DCACHE_ON
+CFLAGS    = -I. $(PI4OPTS) $(RAYLIB) -O3 -DRTG -DRAYLIB -DT_CACHE_ON #-DCACHE_ON
 
 TARGET    = $(EXENAME)
 

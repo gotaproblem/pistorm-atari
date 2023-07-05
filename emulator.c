@@ -496,7 +496,8 @@ int main ( int argc, char *argv[] )
   if (  RTG_enabled )
   {
 #ifdef RAYLIB
-    if ( cfg->map_data [3] ) // cryptodad - this will need work - can't rely on it being map[3]
+    int ix = get_named_mapped_item ( cfg, "RTG" );
+    if ( cfg->map_data [ix] )
     {
 #endif
       err = pthread_create ( &rtg_tid, NULL, &rtgRender, NULL );
@@ -684,6 +685,7 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
 {
 
 #ifdef RTG
+#if (0)
   if ( RTG_enabled )
   {
     /* ATARI System Variables - do before anything else */
@@ -724,6 +726,7 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   {
     rtg ( type, addr, val );
   }
+  #endif
 #endif 
 
   if ( IDE_IDE_enabled && (addr >= 0xfff00000 && addr < 0xfff00040) )

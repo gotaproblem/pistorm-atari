@@ -363,6 +363,7 @@ void *rtgRender ( void* vptr )
 
 #ifdef RAYLIB
 extern struct emulator_config *cfg;
+extern int get_named_mapped_item ( struct emulator_config *cfg, char *name );
 
 void *rtgRender ( void* vptr )
 {
@@ -372,73 +373,74 @@ void *rtgRender ( void* vptr )
     sigaddset ( &set, SIGINT );
     pthread_sigmask ( SIG_BLOCK, &set, NULL );
 
+    /*
+     * VGA  640x480
+     * SVGA 800x600
+     * XGA  1024x768
+     * SXGA 1280x1024
+     * UXGA 1600x1200
+     * FHD  1920x1080
+     * 
+     */
     const int windowWidth = 640;
     const int windowHeight = 480;
 
     // Enable config flags for resizable window and vertical synchro
-    SetConfigFlags(FLAG_VSYNC_HINT);
+    //SetConfigFlags(FLAG_VSYNC_HINT);
     InitWindow(windowWidth, windowHeight, "raylib [core] example - window scale letterbox");
-    SetWindowMinSize(320, 240);
+    //SetWindowMinSize(320, 240);
 
-    int gameScreenWidth = 640;
-    int gameScreenHeight = 480;
+    //int gameScreenWidth = 640;
+    //int gameScreenHeight = 480;
 
     // Render texture initialization, used to hold the rendering result so we can easily resize it
-    RenderTexture2D target = LoadRenderTexture(gameScreenWidth, gameScreenHeight);
-    SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);  // Texture scale filter to use
+    RenderTexture2D target = LoadRenderTexture ( windowWidth, windowHeight );
+    //SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);  // Texture scale filter to use
 
     SetTargetFPS(60);                   // Set our game to run at 60 frames-per-second
     //--------------------------------------------------------------------------------------
 
-	uint8_t red, green, blue;
-
-
-	uint16_t *src = (uint16_t *)( cfg->map_data [3] );
-    //uint16_t *src = (uint16_t *)screen;
-    
+    int ix = get_named_mapped_item ( cfg, "RTG" );
+	uint16_t *src = (uint16_t *)( cfg->map_data [ix] );
 	uint16_t *dst;
-
+    Texture raylib_texture;
 	Image raylib_fb;
-	raylib_fb.format = PIXELFORMAT_UNCOMPRESSED_R5G6B5;
-
-	raylib_fb.width = 640;
-	raylib_fb.height = 480;
-
-	raylib_fb.mipmaps = 1;
-	raylib_fb.data = src;
-
-	Texture raylib_texture;
-
-	raylib_texture = LoadTextureFromImage(raylib_fb);
-
-	dst = malloc( raylib_fb.width * raylib_fb.height * 2 );
-
-
-    // Main game loop
     uint16_t *srcptr;
     uint16_t *dstptr;
 
+	raylib_fb.format = PIXELFORMAT_UNCOMPRESSED_R5G6B5;
+	raylib_fb.width = windowWidth;
+	raylib_fb.height = windowHeight;
+	raylib_fb.mipmaps = 1;
+	raylib_fb.data = src;
 
-    while ( !WindowShouldClose () && cpu_emulation_running )        // Detect window close button or ESC key
+    dst = malloc ( raylib_fb.width * raylib_fb.height * 2 );
+
+	raylib_texture = LoadTextureFromImage ( raylib_fb );
+
+    // Detect window close button or ESC key
+    while ( !WindowShouldClose () && cpu_emulation_running )        
     {
-	srcptr = src;
-	dstptr = dst;
+        srcptr = src;
+        dstptr = dst;
     
-	for( unsigned long l = 0 ; l < ( raylib_fb.width * raylib_fb.height ) ; l++ )
-		*dstptr++ = be16toh(*srcptr++);
-        UpdateTexture(raylib_texture, dst );
+	    for( unsigned long l = 0 ; l < ( raylib_fb.width * raylib_fb.height ) ; l++ )
+		    *dstptr++ = be16toh ( *srcptr++ );
 
-        BeginDrawing();
-		DrawTexture( raylib_texture, 0, 0, WHITE );
-        EndDrawing();
-        //--------------------------------------------------------------------------------------
+        UpdateTexture ( raylib_texture, dst );
+
+        BeginDrawing ();
+		DrawTexture ( raylib_texture, 0, 0, WHITE );
+        EndDrawing ();
+        //BeginTextureMode ( target );
+        //EndTextureMode ();
     }
 
     // De-Initialization
     //--------------------------------------------------------------------------------------
-    UnloadRenderTexture(target);        // Unload render texture
+    UnloadRenderTexture ( target );        // Unload render texture
 
-    CloseWindow();                      // Close window and OpenGL context
+    CloseWindow ();                      // Close window and OpenGL context
     //--------------------------------------------------------------------------------------
 
     cpu_emulation_running = 0;
