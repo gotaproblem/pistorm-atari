@@ -17,13 +17,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
+#ifndef RAYLIB
 #include <linux/fb.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
-
+#endif
 #ifdef RAYLIB
 #include <pthread.h>
 #include <signal.h>
+#include <sched.h>
 #endif
 
 //#include <signal.h>
@@ -35,6 +37,7 @@
 #endif
 
 // 'global' variables to store screen info
+#ifndef RAYLIB
 static int fbfd;
 uint16_t *fbp = 0;
 struct fb_var_screeninfo vinfo;
@@ -42,6 +45,7 @@ struct fb_fix_screeninfo finfo;
 size_t screensize = 0;
 uint16_t *fbptr;
 volatile uint8_t *screen;
+#endif
 
 int RTG_enabled = 0;
 volatile int RTGresChanged;
@@ -361,17 +365,33 @@ void *rtgRender ( void* vptr )
 #endif
 
 
+
+
 #ifdef RAYLIB
+
+
 extern struct emulator_config *cfg;
 extern int get_named_mapped_item ( struct emulator_config *cfg, char *name );
+extern void cpu2 ( void );
 
-void *rtgRender ( void* vptr )
+void *rtgRender ( void *vptr )
 {
     sigset_t set;
 
     sigemptyset ( &set );
     sigaddset ( &set, SIGINT );
     pthread_sigmask ( SIG_BLOCK, &set, NULL );
+
+    cpu2 ();
+
+    int prio = sched_get_priority_max ( SCHED_FIFO );
+	struct sched_param param;
+	param.sched_priority = prio;
+	sched_setscheduler ( 0, SCHED_FIFO, &param );
+	// This permits realtime processes to use 100% of a CPU, but on a
+	// RPi that starves the kernel. Without this there are latencies
+	// up to 50 MILLISECONDS.
+	system ( "echo -1 >/proc/sys/kernel/sched_rt_runtime_us" );
 
     /*
      * VGA  640x480
@@ -397,11 +417,12 @@ void *rtgRender ( void* vptr )
     RenderTexture2D target = LoadRenderTexture ( windowWidth, windowHeight );
     //SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);  // Texture scale filter to use
 
-    SetTargetFPS(60);                   // Set our game to run at 60 frames-per-second
+    SetTargetFPS(24);                   // Set our game to run at 60 frames-per-second
     //--------------------------------------------------------------------------------------
 
     int ix = get_named_mapped_item ( cfg, "RTG" );
 	uint16_t *src = (uint16_t *)( cfg->map_data [ix] );
+    //uint16_t *src = (uint16_t*)screen;
 	uint16_t *dst;
     Texture raylib_texture;
 	Image raylib_fb;
@@ -412,7 +433,7 @@ void *rtgRender ( void* vptr )
 	raylib_fb.width = windowWidth;
 	raylib_fb.height = windowHeight;
 	raylib_fb.mipmaps = 1;
-	raylib_fb.data = src;
+	raylib_fb.data = src; //(uint16_t *)screen;
 
     dst = malloc ( raylib_fb.width * raylib_fb.height * 2 );
 
@@ -448,24 +469,29 @@ void *rtgRender ( void* vptr )
     printf ( "[RTG] thread terminated\n" );
 }
 
-
+#if (0)
 void rtg ( int size, uint32_t address, uint32_t data ) 
 {
     if ( size == OP_TYPE_BYTE )
     {
-        *(uint8_t *)( screen + (address - RTG_ATARI_SCREEN_RAM) ) = data & 0xff;
+        printf ( "BYTE\n" );
+        *(uint8_t *)( screen + (address - 0x00b00000) ) = data & 0xff;
     }
 
     else if ( size == OP_TYPE_WORD )
     {
-        *(uint16_t *)( screen + (address - RTG_ATARI_SCREEN_RAM) ) = be16toh ( data & 0xffff );
+        //printf ( "WORD\n" );
+        *(uint16_t *)( screen + (address - 0x00b00000) ) = be16toh ( data & 0xffff );
     }
 
     else if ( size == OP_TYPE_LONGWORD )
     {
-        *(uint32_t *)( screen + (address - RTG_ATARI_SCREEN_RAM) ) = be32toh ( data );
+       // printf ( "LONG\n" );
+        *(uint32_t *)( screen + (address - 0x00b00000) ) = be32toh ( data );
     }
 }
+#endif
+
 #endif
 
 #ifndef RAYLIB
@@ -559,7 +585,7 @@ void rtgInit ( void )
 
     //printf ( "screen RAM size is 0x%X\n", screensize );
     //printf ( "screen line length is %d\n", finfo.line_length );
-#endif
+
 
     if ( ( screen = (volatile uint8_t *)calloc ( (640 * 400) / 8, 1 ) ) == NULL )
     {
@@ -570,6 +596,13 @@ void rtgInit ( void )
     RTG_ATARI_SCREEN_RAM = ATARI_VRAM_BASE;
     RTG_RES = LOW_RES;
     RTGresChanged = 1;
+#else
+    //if ( ( screen = (volatile uint8_t *)calloc ( (640 * 480) * 2, 2 ) ) == NULL )
+    //{
+    //    printf ( "%sFATAL - failed to allocate memory to screen buffer\n", func );
+    //    return;
+    //}
+#endif
 }
 
 

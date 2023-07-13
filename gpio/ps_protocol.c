@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include "ps_protocol.h"
-#include "m68k.h"
+#include "../m68k.h"
 //#include "bcm2835.h"
 
 
@@ -36,10 +36,6 @@ unsigned int gpfsel0_o;
 unsigned int gpfsel1_o;
 unsigned int gpfsel2_o;
 
-//int g_irq;
-void ps_berrInit ( void );
-
-void (*callback_berr) (uint16_t status, uint32_t address, int mode) = NULL;
 
 uint8_t fc;
 
@@ -47,19 +43,9 @@ uint8_t fc;
 #define CHECK_BERR(x) (!(x & 0x20) )
 #define CHECK_PIN_IN_PROGRESS(x) ((x & 0x01))
 
-void set_berr_callback ( void(*ptr) (uint16_t,uint32_t,int) ) 
-{
-	callback_berr = ptr;
-}
 
 static void setup_io() 
 {
-  //if ( ! bcm2835_init () )
-  //{
-  //    printf ( "%s bcm_init () failed\n", __func__ );
-  //    return;
-  //}
-
   int fd = open("/dev/mem", O_RDWR | O_SYNC);
  if (fd < 0) {
     printf("Unable to open /dev/mem. Run as root using sudo?\n");
@@ -112,7 +98,7 @@ static void setup_io()
 
 /* change these 2 settings to configure clock */
 #define PLL PLLC
-#define PLL_DIVISOR PLLC_200MHZ // PLLD_25MHZ
+#define PLL_DIVISOR PLLC_200MHZ //PLLD_25MHZ
 
 static void setup_gpclk() 
 {
@@ -147,28 +133,7 @@ void ps_setup_protocol ()
   *(gpio + 0) = GPFSEL0_INPUT;
   *(gpio + 1) = GPFSEL1_INPUT;
   *(gpio + 2) = GPFSEL2_INPUT;
-
-  /* cryptodad */
-  //ps_berrInit ();
-
-  //bcm2835_init ();
-  //gpioBASE = bcm2835_regbase ( BCM2835_REGBASE_GPIO );
-
-  //printf ( "gpio = 0x%08x, gpioBASE = 0x%08x\n", gpio, gpioBASE );
 }
-
-#if (0)
-/* cryptodad TODO - why is this extra check needed if _PI_RESET is already signalling a BERR ??? */
-/* cryptodad 6th April 2023 if this status check is not performed, can get segmentation faults */
-void check_berr ( uint32_t address, int mode ) 
-{
-  uint16_t status = ps_read_status_reg ();
-
-  if ( (status & STATUS_BIT_BERR) && callback_berr )  
-      callback_berr ( status, address, mode ); 
-  //callback_berr ( STATUS_BIT_BERR, address, mode ); 
-}
-#endif
 
 
 /* cryptodad */
@@ -189,86 +154,34 @@ gpio + 28 = GPLEN   GPIO Pin Low Detect Enable 0
 gpio + 31 = GPAREN  GPIO Pin Asysnchronous Rising Edge Detect Enable 0
 gpio + 34 = GPAFEN  GPIO Pin Asysnchronous Falling Edge Detect Enable 0
 */
-//#define TXN_END 0xffffec
-#define TXN_END (0xffffff00 | (1 << PIN_WR) | (1 << PIN_RD) | (REG_ADDR_HI << PIN_A0) | (REG_ADDR_LO << PIN_A0))
+#define TXN_END 0xffffec
+//#define TXN_END (0x00ffff00 | (1 << PIN_WR) | (1 << PIN_RD) | (REG_ADDR_HI << PIN_A0) | (REG_ADDR_LO << PIN_A0))
 
-#define BERR_POLL 1
-#define PIN_BERR PIN_RESET
-#define ARM_BERR_INT 
 
-//extern void call_berr ( uint16_t, uint32_t, uint );
 volatile int g_irq;
 volatile int g_buserr;
-volatile int g_beAddress;
-volatile int g_beMode;
+
 
 #ifdef STATS
 t_stats RWstats;
 #endif
 
-void ps_berrInit ( void )
-{
-  uint32_t *gpioPtr = (uint32_t *)(gpio + 16);
-  //uint32_t gpioStatus = *gpioPtr;
-
-  *(gpio + 34) = ( 1 << PIN_BERR ); // enable asynchronous falling edge detection for bus-error
-  //*(gpio + 22) = ( 1 << PIN_TXN_IN_PROGRESS ); // enable asynchronous falling edge detection for txn
-  //*(gpio + 34) = ( 1 << PIN_BERR ) | ( 1 << PIN_TXN_IN_PROGRESS );
-
-  *gpioPtr = ( 1 << PIN_BERR ); // clear edge detection
-  //*gpioPtr = ( 1 << PIN_TXN_IN_PROGRESS ); // clear edge detection
-  //*gpioPtr = ( 1 << PIN_BERR ) | ( 1 << PIN_TXN_IN_PROGRESS );
-}
-
-void ps_berrIAK ( uint32_t address, int mode )
-{
-  uint32_t l;
-
-  while ( ( l = *(gpio + 13) ) & (1 << PIN_TXN_IN_PROGRESS) )
-    ;
-
-  if ( mode == 1 )
-    *(gpio + 10) = TXN_END;
-
-  if ( CHECK_BERR(l) )// do we have a bus error?
-  {
-    //check_berr ( address, mode );
-  }
-}
-
-#define OLDWAY
-//#define CMD_SET (1 << 7)
-//#define CMD_READ 1
-//#define CMD_WRITE 2
-//#define CMD_CLR (1 << 7)
-//#define TXN_END 0xffffec //(0xffff00 | (1 << PIN_WR) | (1 << PIN_RD) | (1 << PIN_RESET) | (REG_ADDR_HI << PIN_A0) | (REG_ADDR_LO << PIN_A0))
-//#define TXN_END (0xffffff00 | (1 << PIN_WR) | (1 << PIN_RD) | (REG_ADDR_HI << PIN_A0) | (REG_ADDR_LO << PIN_A0))
 
 #define CMD_REG_DATA  (REG_DATA << PIN_A0)
 #define CMD_ADDR_LO   (REG_ADDR_LO << PIN_A0)
 #define CMD_ADDR_HI   (REG_ADDR_HI << PIN_A0)
 
-#define NOP asm("nop") // asm("nop"); asm("nop"); asm("nop");
+#define NOP asm("nop")
 
 
 inline
-//void ps_write_16 ( uint32_t address, uint16_t data )
 void ps_write_16 ( t_a32 address, uint16_t data ) 
 {
   static uint32_t l;
 
-  //while ( *(gpio + 13) & 1 );
-  //g_irq = 0;
-
   *(gpio + 0) = GPFSEL0_OUTPUT;
   *(gpio + 1) = GPFSEL1_OUTPUT;
   *(gpio + 2) = GPFSEL2_OUTPUT;
-
-#ifdef OLDWAY
-  *(gpio + 7) = ( data << 8 ) | CMD_REG_DATA | (1 << PIN_WR);
-  *(gpio + 7) = 1 << PIN_WR;
-  *(gpio + 10) = 1 << PIN_WR;
-  *(gpio + 10) = TXN_END;
 
   *(gpio + 7) = ( address.lo << 8 ) | CMD_ADDR_LO | (1 << PIN_WR);
   *(gpio + 7) = 1 << PIN_WR;
@@ -279,34 +192,21 @@ void ps_write_16 ( t_a32 address, uint16_t data )
   *(gpio + 7) = 1 << PIN_WR;
   *(gpio + 10) = 1 << PIN_WR;
   *(gpio + 10) = TXN_END;
-#else
-  *(gpio + 7) = CMD_SET;
-  *(gpio + 7) = packet [0];
-  *(gpio + 10) = CMD_CLR;
-  *(gpio + 7) = CMD_SET;
-  *(gpio + 7) = packet [1];
-  *(gpio + 10) = CMD_CLR;
-#endif  
+
+  *(gpio + 7) = ( data << 8 ) | CMD_REG_DATA | (1 << PIN_WR);
+  *(gpio + 7) = 1 << PIN_WR;
+  *(gpio + 10) = 1 << PIN_WR;
+  *(gpio + 10) = TXN_END; 
   
   *(gpio + 0) = GPFSEL0_INPUT;
   *(gpio + 1) = GPFSEL1_INPUT;
   *(gpio + 2) = GPFSEL2_INPUT;
 
-#if BERR_POLL
-	while ( ( l = *(gpio + 13) ) & 1 ) // wait for firmware to signal command completed
+	while ( ( l = *(gpio + 13) ) & 1 )
     ;
-
-  //if ( CHECK_IRQ (l) )
-  //  g_irq = 1;
-
-	//if ( CHECK_BERR (l) )
-  //  g_buserr = 1;
 
   g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
-#else
-  ps_berrIAK ( address, 0 );
-#endif
 
 #ifdef STATS
   RWstats.w16++;  
@@ -316,14 +216,8 @@ void ps_write_16 ( t_a32 address, uint16_t data )
 
 inline
 void ps_write_8 ( t_a32 address, uint16_t data ) 
-//void ps_write_8 ( uint32_t address, uint16_t data ) 
 {
   static uint32_t l;
-  //uint16_t alo = address;// & 0xffff;
-  //uint16_t ahi = address >> 16;
-
-  //while ( *(gpio + 13) & 1 );
-  //g_irq = 0;
 
   if ((address.lo & 1) == 0)
     data <<= 8;
@@ -335,10 +229,11 @@ void ps_write_8 ( t_a32 address, uint16_t data )
   *(gpio + 1) = GPFSEL1_OUTPUT;
   *(gpio + 2) = GPFSEL2_OUTPUT;
 
-  *(gpio + 7) = data << 8 | CMD_REG_DATA | (1 << PIN_WR);
-  *(gpio + 7) = 1 << PIN_WR;
-  *(gpio + 10) = 1 << PIN_WR;
-  *(gpio + 10) = TXN_END;
+  //*(gpio + 7) = 1; /* start command PI_TXN_IN_PROGRESS */
+  //*(gpio + 7) = data << 8 | CMD_REG_DATA | (1 << PIN_WR);// | (1 << PIN_TXN_IN_PROGRESS);
+  //*(gpio + 7) = 1 << PIN_WR;
+  //*(gpio + 10) = 1 << PIN_WR;
+  //*(gpio + 10) = TXN_END;
 
   *(gpio + 7) = (address.lo << 8) | CMD_ADDR_LO | (1 << PIN_WR);
   *(gpio + 7) = 1 << PIN_WR;
@@ -350,26 +245,20 @@ void ps_write_8 ( t_a32 address, uint16_t data )
   *(gpio + 10) = 1 << PIN_WR;
   *(gpio + 10) = TXN_END;
 
+  *(gpio + 7) = data << 8 | CMD_REG_DATA | (1 << PIN_WR);
+  *(gpio + 7) = 1 << PIN_WR;
+  *(gpio + 10) = 1 << PIN_WR;
+  *(gpio + 10) = TXN_END;
+
   *(gpio + 0) = GPFSEL0_INPUT;
   *(gpio + 1) = GPFSEL1_INPUT;
   *(gpio + 2) = GPFSEL2_INPUT;
 
-#if BERR_POLL
 	while ( ( l = *(gpio + 13) ) & 1 )
     ;
 
-  //if ( CHECK_IRQ (l) )
-  //  g_irq = 1;
-
-	//if ( CHECK_BERR (l) )
-		//check_berr ( address, 0 );
-  //  g_buserr = 1;
-
   g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
-#else
-  ps_berrIAK ( address, 0 );
-#endif
 
 #ifdef STATS
   RWstats.w8++;
@@ -379,23 +268,16 @@ void ps_write_8 ( t_a32 address, uint16_t data )
 
 inline
 void ps_write_32 ( t_a32 address, uint32_t value )  
-//void ps_write_32 ( uint32_t address, uint32_t value ) 
 {
   ps_write_16 ( address, value >> 16 );
   ps_write_16 ( (t_a32)(address.address + 2), value );
 }
 
-//#define NOP asm("nop"); asm("nop");
-
 
 inline
-//uint16_t ps_read_16 ( uint32_t address ) 
 uint16_t ps_read_16 ( t_a32 address ) 
 {
 	static uint32_t l;
-
-  //while ( *(gpio + 13) & 1 );
- // g_irq = 0;
 
   *(gpio + 0) = GPFSEL0_OUTPUT;
   *(gpio + 1) = GPFSEL1_OUTPUT;
@@ -417,24 +299,13 @@ uint16_t ps_read_16 ( t_a32 address )
 
   *(gpio + 7) = (REG_DATA << PIN_A0) | (1 << PIN_RD);
 
-#if BERR_POLL
   while ( ( l = *(gpio + 13) ) & (1 << PIN_TXN_IN_PROGRESS) )
     ;
 
  	*(gpio + 10) = TXN_END;
 
-  //if ( CHECK_IRQ (l) )
-  //  g_irq = 1;
-
-	//if ( CHECK_BERR (l) )
-  //  g_buserr = 1;
-
   g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
-
-#else
-  ps_berrIAK ( address, 1 );
-#endif
 
 #ifdef STATS
   RWstats.r16++;
@@ -445,14 +316,8 @@ uint16_t ps_read_16 ( t_a32 address )
 
 inline
 uint8_t ps_read_8 ( t_a32 address ) 
-//uint8_t ps_read_8 ( uint32_t address ) 
 {
   static uint32_t l;
-  //uint16_t alo = address;// & 0xffff;
-  //uint16_t ahi = address >> 16;
-
-  //while ( *(gpio + 13) & 1 );
-  //g_irq = 0;
   
   *(gpio + 0) = GPFSEL0_OUTPUT;
   *(gpio + 1) = GPFSEL1_OUTPUT;
@@ -474,24 +339,13 @@ uint8_t ps_read_8 ( t_a32 address )
 
   *(gpio + 7) = (REG_DATA << PIN_A0) | (1 << PIN_RD);
 
-#if BERR_POLL
   while ( ( l = *(gpio + 13) ) & (1 << PIN_TXN_IN_PROGRESS) )
     ;
 
   *(gpio + 10) = TXN_END;
 
-  //if ( CHECK_IRQ (l) )
-  //  g_irq = 1;
-
-	//if ( CHECK_BERR (l) )
-  //  g_buserr = 1;
-
   g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
-
-#else
-  ps_berrIAK ( address, 1 );
-#endif
 
 #ifdef STATS
   RWstats.r8++;
@@ -506,7 +360,6 @@ uint8_t ps_read_8 ( t_a32 address )
 
 
 uint32_t ps_read_32 ( t_a32 address ) 
-//uint32_t ps_read_32 ( uint32_t address ) 
 {
   return ( ps_read_16 ( address ) << 16 ) | ps_read_16 ( (t_a32)(address.address + 2) );
 }
@@ -514,8 +367,6 @@ uint32_t ps_read_32 ( t_a32 address )
 
 void ps_write_status_reg(unsigned int value) 
 {
-  //while ( *(gpio + 13) & 1 );
-
   *(gpio + 0) = GPFSEL0_OUTPUT;
   *(gpio + 1) = GPFSEL1_OUTPUT;
   *(gpio + 2) = GPFSEL2_OUTPUT;
@@ -552,46 +403,21 @@ uint16_t ps_read_status_reg ()
   RWstats.rstatus++;
 #endif
 
-  return value >> 8;// & 0xffff;
+  return value >> 8;
 }
 
 
 void ps_reset_state_machine () 
 {
-  ps_write_status_reg(STATUS_BIT_INIT);
-  usleep(1500);
-  ps_write_status_reg(0);
-  usleep(100);
+  ps_write_status_reg ( STATUS_BIT_INIT );
+  usleep ( 1500 );
+  ps_write_status_reg ( 0 );
+  usleep ( 100 );
 }
 
 void ps_pulse_reset () 
 {
-  ps_write_status_reg(0);
-  usleep(100000);
-  ps_write_status_reg(STATUS_BIT_RESET);
+  ps_write_status_reg ( 0 );
+  usleep ( 100000 );
+  ps_write_status_reg ( STATUS_BIT_RESET );
 }
-
-#if (0)
-unsigned int ps_get_ipl_zero() {
-  unsigned int value = *(gpio + 13);
-  while ((value=*(gpio + 13)) & (1 << PIN_TXN_IN_PROGRESS)) {}
-  return value & (1 << PIN_IPL_ZERO);
-}
-
-#define INT2_ENABLED 1
-
-void ps_update_irq() {
-  unsigned int ipl = 0;
-
-  if (!ps_get_ipl_zero()) {
-    unsigned int status = ps_read_status_reg();
-    ipl = (status & 0xe000) >> 13;
-  }
-
-  /*if (ipl < 2 && INT2_ENABLED && emu_int2_req()) {
-    ipl = 2;
-  }*/
-
-  m68k_set_irq(ipl);
-}
-#endif

@@ -35,7 +35,7 @@ case $version in
 		;;
 	"0x020a20dd")
 		echo "EPM570 detected!"
-		./nprog_pi4.sh
+		./nprog_pi4-570.sh
 		;;
 	"0x020a50dd")
 		echo "MAXV240 detected!"

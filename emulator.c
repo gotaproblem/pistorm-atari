@@ -220,7 +220,7 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 
 			USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
 		} 
-    while ( GET_CYCLES() > 0 );//&& !g_irq );
+    while ( GET_CYCLES() > 0 ); //&& !g_irq );
 
 		/* set previous PC to current PC for the next entry into the loop */
 		REG_PPC = REG_PC;
@@ -348,6 +348,23 @@ void sigint_handler ( int sig_num )
 }
 
 
+#ifdef RAYLIB
+void cpu2 ( void )
+{
+  cpu_set_t cpuset;
+	CPU_ZERO ( &cpuset );
+	CPU_SET ( 2, &cpuset );
+	sched_setaffinity ( 0, sizeof (cpu_set_t), &cpuset );
+}
+
+void cpu3 ( void )
+{
+  cpu_set_t cpuset;
+	CPU_ZERO ( &cpuset );
+	CPU_SET ( 3, &cpuset );
+	sched_setaffinity ( 0, sizeof (cpu_set_t), &cpuset );
+}
+#endif
 
 extern void rtgInit ( void );
 extern void *rtgRender ( void* );
@@ -445,8 +462,6 @@ int main ( int argc, char *argv[] )
 
   mlockall ( MCL_CURRENT );  // lock in memory to keep us from paging out
 
-  //sched_setscheduler ( 0, SCHED_FIFO, &priority );
-
   InitIDE ();
   #ifdef RTG
   rtgInit ();
@@ -497,7 +512,7 @@ int main ( int argc, char *argv[] )
   {
 #ifdef RAYLIB
     int ix = get_named_mapped_item ( cfg, "RTG" );
-    if ( cfg->map_data [ix] )
+    if ( cfg->map_data [ix] ) // cryptodad - this will need work - can't rely on it being map[3]
     {
 #endif
       err = pthread_create ( &rtg_tid, NULL, &rtgRender, NULL );
@@ -531,6 +546,11 @@ int main ( int argc, char *argv[] )
     DEBUG_PRINTF ( "[MAIN] %s Native Performance\n", cpu_types [cpu_type - 1] );
 
   DEBUG_PRINTF ( "\n" );
+
+  sched_setscheduler ( 0, SCHED_FIFO, &priority );
+  system ( "echo -1 >/proc/sys/kernel/sched_rt_runtime_us" );
+  
+  cpu3 (); // anchor main task to cpu3 
 
 #ifndef RAYLIB
   cpu_task ();
@@ -607,6 +627,14 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
     addr &= 0x00ffffff;
 #endif
   
+  if ( addr >= 0xff8a00 && addr < 0xff8a3e )
+  {
+    printf ( "Blitter: read 0x%X\n", addr );
+
+    //*res = 0;
+    //return 1;
+  }
+
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) )
   {
     if ( handle_mapped_read ( cfg, addr, &target, type ) != -1 ) 
@@ -726,7 +754,11 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   {
     rtg ( type, addr, val );
   }
-  #endif
+#endif
+  //if ( RTG_enabled && (addr >= 0x00b00000 && addr < (0x00b00000 + 0x100000)) )
+  //{
+  //  rtg ( type, addr, val );
+  //}
 #endif 
 
   if ( IDE_IDE_enabled && (addr >= 0xfff00000 && addr < 0xfff00040) )
@@ -736,6 +768,13 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   else if ( ATARI_VID_enabled && (addr >= 0xffff8200 && addr < 0xffff82c4) )
     addr &= 0x00ffffff;
 #endif
+
+  if ( addr >= 0xff8a00 && addr < 0xff8a3e )
+  {
+    printf ( "Blitter: write 0x%X\n", addr );
+
+    //return 1;
+  }
 
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) ) 
   {

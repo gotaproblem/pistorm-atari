@@ -14,3 +14,5 @@
 /m68kops.h
 /emulator
 /ataritest
+/rtl/._*
+nprog_log.txt

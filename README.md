@@ -3,7 +3,7 @@
 
 # Join us on Discord
 
-* There's a Discord server dedicated to PiStorm Atari discussion and development, which you can join through this handy invite link: https://discord.gg/QFSQam5P
+* There's a Discord server dedicated to PiStorm Atari discussion and development, which you can join through this handy invite link: https://discord.gg/XFEBA8QDzQ
 
 * **IMPORTANT NOTE: Selling blank or complete PCBs or derivatives on eBay or elsewhere for excessive profit is frowned upon and may lead to forthcoming related projects being closed source.**
 * Even with the current global chip shortage (October 2021), components are not **so** expensive that you should pay up to a hundred dollars or Euros for a board.
@@ -77,7 +77,12 @@ As the Pi4 physically can not connect directly to the PiStorm, a header extensio
 Before we can use the PiStorm, it needs to have firmware installed. 
 
 Install OpenOCD:
-`sudo apt-get install openocd`
+**NOTE - v0.11 needed**
+Check your openocd version
+* `openocd -v`
+If you have version 0.12 or later, follow these instructions:
+* `sudo apt-get remove openocd`
+* `sudo apt-get install openocd=0.11.0~rc2-1`
 
 Run the FPGA update with `./flash.sh`, this will automatically detect your CPLD version and flash appropriately.
 

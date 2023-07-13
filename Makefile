@@ -17,8 +17,6 @@ MUSASHIGENCFILES = m68kops.c
 MUSASHIGENHFILES = m68kops.h
 MUSASHIGENERATOR = m68kmake
 
-EXEPATH   = ./
-
 .CFILES   = $(MAINFILES) $(MUSASHIFILES) $(MUSASHIGENCFILES)
 .OFILES   = $(.CFILES:%.c=%.o)
 
@@ -29,12 +27,11 @@ RAYLIB    = -I./raylib_pi4_test -L./raylib_pi4_test -lraylib -lGLESv2 -lEGL -ldr
 #PI4OPTS	  = -mcpu=cortex-a72
 PI4OPTS	  = -march=armv8-a -mfloat-abi=hard -mfpu=neon-fp-armv8
 
-CFLAGS    = -I. $(PI4OPTS) $(RAYLIB) -O3 -DRTG -DRAYLIB -DT_CACHE_ON #-DCACHE_ON
+CFLAGS    = -I. $(PI4OPTS) $(RAYLIB) -O3 -DRTG -DRAYLIB #-DT_CACHE_ON #-DCACHE_ON
 
 TARGET    = $(EXENAME)
 
 DELETEFILES = $(MUSASHIGENCFILES) $(.OFILES) $(.OFILES:%.o=%.d) $(TARGET) $(MUSASHIGENERATOR) ataritest
-
 
 all: $(MUSASHIGENCFILES) $(MUSASHIGENHFILES) $(TARGET) ataritest
 
@@ -48,9 +45,9 @@ ataritest: ataritest.c gpio/ps_protocol.c
 	$(CC) $^ -o $@ $(CFLAGS)
 
 $(MUSASHIGENCFILES) $(MUSASHIGENHFILES): $(MUSASHIGENERATOR) m68kcpu.h
-	$(EXEPATH)$(MUSASHIGENERATOR)
+	./$(MUSASHIGENERATOR)
 
-$(MUSASHIGENERATOR)$(EXE):  $(MUSASHIGENERATOR).c
+$(MUSASHIGENERATOR):  $(MUSASHIGENERATOR).c
 	$(CC) -o  $(MUSASHIGENERATOR)  $(MUSASHIGENERATOR).c -mcpu=cortex-a72
 
 -include $(.CFILES:%.c=%.d) $(MUSASHIGENCFILES:%.c=%.d) $(MUSASHIGENERATOR).d
