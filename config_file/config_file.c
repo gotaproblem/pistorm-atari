@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "rominfo.h"
 
 #define DEBUGPRINT 1
@@ -72,6 +73,16 @@ int get_config_item_type(char *cmd) {
   }
 
   return CONFITEM_NONE;
+}
+
+char *uppercase ( char *str )
+{
+  for ( int n = 0; n < strlen ( str ); n++ )
+  {
+    str [n] = toupper ( str [n] );
+  }
+
+  return str;
 }
 
 unsigned int get_m68k_cpu_type(char *name) {
@@ -376,7 +387,7 @@ skip_file_ops:
       break;
   }
 
-  DEBUG_PRINTF ("[CFG] [MAP %d] Added %s mapping for range %.8lX-%.8lX ID: %s\n", 
+  DEBUG_PRINTF ("[CFG] [MAP %d] Added %-8s mapping for range %.8lX-%.8lX ID: %s\n", 
     index, map_type_names[type], cfg->map_offset[index], cfg->map_high[index] - 1, 
     cfg->map_id[index] ? cfg->map_id[index] : "None");
 
@@ -388,10 +399,6 @@ skip_file_ops:
     fclose(in);
 }
 
-
-
-
-
 char cfg_filename[256];
 
 char *get_pistorm_cfg_filename() {
@@ -401,10 +408,6 @@ char *get_pistorm_cfg_filename() {
 void set_pistorm_cfg_filename(char *filename) {
     strcpy(cfg_filename, filename);
 }
-
-
-
-
 
 void free_config_file(struct emulator_config *cfg) {
   if (!cfg) {
@@ -585,10 +588,10 @@ struct emulator_config *load_config_file(char *filename) {
         memset(platform_name, 0x00, 128);
         memset(platform_sub, 0x00, 128);
         get_next_string(parse_line, platform_name, &str_pos, ' ');
-        DEBUG_PRINTF ("[CFG] Setting platform to %s", platform_name);
+        DEBUG_PRINTF ("[CFG] Setting platform to %s", uppercase ( platform_name ) );
         get_next_string(parse_line, platform_sub, &str_pos, ' ');
         if (strlen(platform_sub))
-          DEBUG_PRINTF (" (sub: %s)", platform_sub);
+          DEBUG_PRINTF (" (sub: %s)", uppercase ( platform_sub ) );
         DEBUG_PRINTF ("\n");
         cfg->platform = make_platform_config(platform_name, platform_sub);
         break;

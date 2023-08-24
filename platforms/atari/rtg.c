@@ -44,8 +44,13 @@ struct fb_var_screeninfo vinfo;
 struct fb_fix_screeninfo finfo;
 size_t screensize = 0;
 uint16_t *fbptr;
-volatile uint8_t *screen;
 #endif
+
+#ifdef RAYLIB
+volatile int vramLock = 0;
+#endif
+
+volatile uint8_t *screen;
 
 int RTG_enabled = 0;
 volatile int RTGresChanged;
@@ -373,25 +378,27 @@ void *rtgRender ( void* vptr )
 extern struct emulator_config *cfg;
 extern int get_named_mapped_item ( struct emulator_config *cfg, char *name );
 extern void cpu2 ( void );
+extern volatile uint32_t RTG_VSYNC;
 
 void *rtgRender ( void *vptr )
 {
     sigset_t set;
 
-    sigemptyset ( &set );
-    sigaddset ( &set, SIGINT );
-    pthread_sigmask ( SIG_BLOCK, &set, NULL );
+    //sigemptyset ( &set );
+    //sigaddset ( &set, SIGINT );
+    //pthread_sigmask ( SIG_BLOCK, &set, NULL );
 
-    cpu2 ();
+    //cpu2 ();
 
-    int prio = sched_get_priority_max ( SCHED_FIFO );
-	struct sched_param param;
-	param.sched_priority = prio;
-	sched_setscheduler ( 0, SCHED_FIFO, &param );
+    //int prio = sched_get_priority_max ( SCHED_FIFO );
+	//struct sched_param param;
+	//param.sched_priority = prio;
+	//sched_setscheduler ( 0, SCHED_FIFO, &param );
+
 	// This permits realtime processes to use 100% of a CPU, but on a
 	// RPi that starves the kernel. Without this there are latencies
 	// up to 50 MILLISECONDS.
-	system ( "echo -1 >/proc/sys/kernel/sched_rt_runtime_us" );
+	//system ( "echo -1 >/proc/sys/kernel/sched_rt_runtime_us" );
 
     /*
      * VGA  640x480
@@ -415,14 +422,13 @@ void *rtgRender ( void *vptr )
 
     // Render texture initialization, used to hold the rendering result so we can easily resize it
     RenderTexture2D target = LoadRenderTexture ( windowWidth, windowHeight );
-    //SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);  // Texture scale filter to use
+    SetTextureFilter ( target.texture, TEXTURE_FILTER_BILINEAR) ;  // Texture scale filter to use
 
-    SetTargetFPS(24);                   // Set our game to run at 60 frames-per-second
+    //SetTargetFPS (60);                   // Set our game to run at 60 frames-per-second
     //--------------------------------------------------------------------------------------
 
     int ix = get_named_mapped_item ( cfg, "RTG" );
 	uint16_t *src = (uint16_t *)( cfg->map_data [ix] );
-    //uint16_t *src = (uint16_t*)screen;
 	uint16_t *dst;
     Texture raylib_texture;
 	Image raylib_fb;
@@ -433,28 +439,47 @@ void *rtgRender ( void *vptr )
 	raylib_fb.width = windowWidth;
 	raylib_fb.height = windowHeight;
 	raylib_fb.mipmaps = 1;
-	raylib_fb.data = src; //(uint16_t *)screen;
+	raylib_fb.data = src;
 
     dst = malloc ( raylib_fb.width * raylib_fb.height * 2 );
 
 	raylib_texture = LoadTextureFromImage ( raylib_fb );
 
     // Detect window close button or ESC key
-    while ( !WindowShouldClose () && cpu_emulation_running )        
+    while ( !WindowShouldClose () )//&& cpu_emulation_running )        
     {
-        srcptr = src;
-        dstptr = dst;
+        
     
-	    for( unsigned long l = 0 ; l < ( raylib_fb.width * raylib_fb.height ) ; l++ )
-		    *dstptr++ = be16toh ( *srcptr++ );
+        /* 
+         * I think this is causing random emulator panics - certainly only seeing panics when 
+         * using raylib!
+         * need a way to stop writing to framebuffer when reading it here 
+         */
+        if ( vramLock == 0 )
+        {
+            srcptr = src;
+            dstptr = dst;
 
-        UpdateTexture ( raylib_texture, dst );
+	        for ( uint32_t l = 0; l < ( raylib_fb.width * raylib_fb.height ) && vramLock == 0; l++ )
+            {
+               // while ( vramLock == 1 )
+                //    if ( RTG_VSYNC == 0 )
+                //        break;
+                //if ( vramLock == 0 )
+                //{
+		            *dstptr++ = be16toh ( *srcptr++ );
+                //}
+            }
+
+            UpdateTexture ( raylib_texture, dst );
+        }
 
         BeginDrawing ();
-		DrawTexture ( raylib_texture, 0, 0, WHITE );
+            //UpdateTexture ( raylib_texture, dst );
+            DrawTexture ( raylib_texture, 0, 0, WHITE );
+            DrawFPS ( 550, 10 );
         EndDrawing ();
-        //BeginTextureMode ( target );
-        //EndTextureMode ();
+        
     }
 
     // De-Initialization
@@ -464,41 +489,16 @@ void *rtgRender ( void *vptr )
     CloseWindow ();                      // Close window and OpenGL context
     //--------------------------------------------------------------------------------------
 
+    free ( dst );
+    
     cpu_emulation_running = 0;
     
     printf ( "[RTG] thread terminated\n" );
 }
-
-#if (0)
-void rtg ( int size, uint32_t address, uint32_t data ) 
-{
-    if ( size == OP_TYPE_BYTE )
-    {
-        printf ( "BYTE\n" );
-        *(uint8_t *)( screen + (address - 0x00b00000) ) = data & 0xff;
-    }
-
-    else if ( size == OP_TYPE_WORD )
-    {
-        //printf ( "WORD\n" );
-        *(uint16_t *)( screen + (address - 0x00b00000) ) = be16toh ( data & 0xffff );
-    }
-
-    else if ( size == OP_TYPE_LONGWORD )
-    {
-       // printf ( "LONG\n" );
-        *(uint32_t *)( screen + (address - 0x00b00000) ) = be32toh ( data );
-    }
-}
 #endif
 
-#endif
-
-#ifndef RAYLIB
 void rtg ( int size, uint32_t address, uint32_t data ) 
 {
-   // while ( RTGresChanged )
-    //;
 
     if ( size == OP_TYPE_BYTE )
     {
@@ -515,7 +515,6 @@ void rtg ( int size, uint32_t address, uint32_t data )
         *(uint32_t *)( screen + (address - RTG_ATARI_SCREEN_RAM) ) = be32toh ( data );
     }
 }
-#endif
 
 
 void rtgInit ( void )
@@ -597,7 +596,7 @@ void rtgInit ( void )
     RTG_RES = LOW_RES;
     RTGresChanged = 1;
 #else
-    //if ( ( screen = (volatile uint8_t *)calloc ( (640 * 480) * 2, 2 ) ) == NULL )
+   // if ( ( screen = (volatile uint8_t *)calloc ( (640 * 480) * 2, 2 ) ) == NULL )
     //{
     //    printf ( "%sFATAL - failed to allocate memory to screen buffer\n", func );
     //    return;

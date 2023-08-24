@@ -2,73 +2,74 @@
 
 #include "config_file/config_file.h"
 #include "m68k.h"
-//#include "platforms/amiga/Gayle.h"
 #include <endian.h>
+#include <stdbool.h>
+#include "platforms/atari/et4000.h"
 
-#define CHKRANGE(a, b, c) a >= (unsigned int)b && a < (unsigned int)(b + c)
-#define CHKRANGE_ABS(a, b, c) a >= (unsigned int)b && a < (unsigned int) c
+//#define CHKRANGE(a, b, c) a >= (unsigned int)b && a < (unsigned int)(b + c)
+#define CHKRANGE_ABS(a, b, c) a >= (uint32_t)b && a < (uint32_t) c
 
 static unsigned int target;
-extern int ovl;
+//extern int ovl;
 
-extern const char *map_type_names[MAPTYPE_NUM];
-const char *op_type_names[OP_TYPE_NUM] = {
-  "BYTE",
-  "WORD",
-  "LONGWORD",
-  "MEM",
-};
+//extern const char *map_type_names[MAPTYPE_NUM];
+//const char *op_type_names[OP_TYPE_NUM] = {
+//  "BYTE",
+//  "WORD",
+//  "LONGWORD",
+//  "MEM",
+//};
 
-extern uint8_t IDE_IDE_enabled;
+//extern uint8_t IDE_IDE_enabled;
+
+#ifdef RAYLIB
+extern int RTG_enabled;
+extern volatile uint32_t RTG_VRAM_BASE;
+extern volatile uint32_t RTG_VRAM_SIZE;
+extern volatile int vramLock;
+#endif
+
+extern volatile uint32_t RTG_VSYNC;
 
 
-
-inline int handle_mapped_read ( struct emulator_config *cfg, unsigned int addr, unsigned int *val, unsigned char type ) 
+inline int handle_mapped_read ( struct emulator_config *cfg, uint32_t addr, uint32_t *val, unsigned char type ) 
 {
-  unsigned char *read_addr = NULL;
+  uint8_t *read_addr = NULL;
 
-  //for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS; i++ ) 
-  for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS && cfg->map_type[i] != MAPTYPE_NONE; i++ ) 
+  for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS && cfg->map_type [i] != MAPTYPE_NONE; i++ ) 
   {
-    
-    //if ( cfg->map_type[i] == MAPTYPE_NONE )
-    //  continue;
-    
-    if ( (cfg->map_type[i] == MAPTYPE_ROM || cfg->map_type[i] == MAPTYPE_RAM_WTC)) 
+    if ( CHKRANGE_ABS ( addr, cfg->map_offset [i], cfg->map_high [i] ) )
+    //if ( addr >= cfg->map_offset [i] && addr < cfg->map_high [i] )
     {
-      if ( cfg->map_mirror[i] != ( (unsigned int)-1) && CHKRANGE(addr, cfg->map_mirror[i], cfg->map_size[i] ) ) 
+      switch ( cfg->map_type [i] ) 
       {
-        read_addr = cfg->map_data[i] + ( (addr - cfg->map_mirror[i]) % cfg->rom_size[i] );
-        
-        break;
-      }
-    }
-    
-
-    if ( CHKRANGE_ABS ( addr, cfg->map_offset[i], cfg->map_high[i] ) ) 
-    {
-      switch(cfg->map_type[i]) {
         case MAPTYPE_ROM:
-          read_addr = cfg->map_data[i] + ((addr - cfg->map_offset[i]) % cfg->rom_size[i]);
-        
-          break;
         case MAPTYPE_RAM:
         case MAPTYPE_RAM_WTC:
         case MAPTYPE_RAM_NOALLOC:
         case MAPTYPE_FILE:
-          read_addr = cfg->map_data[i] + (addr - cfg->map_offset[i]);
+          //if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMBASE + NOVA_ET4000_VRAMSIZE )
+          //  while ( RTG_VSYNC )
+          //    ;
+
+          read_addr = cfg->map_data [i] + ( addr - cfg->map_offset [i] );
          
           break;
         case MAPTYPE_REGISTER:
-          //printf ( "register read: addr 0x%X/n", addr );
-          if (cfg->platform && cfg->platform->register_read) 
+          //if ( cfg->platform && cfg->platform->register_read ) 
+          //{
+          if ( cfg->platform->register_read ( addr, type, &target ) != -1 ) 
           {
-            if (cfg->platform->register_read(addr, type, &target) != -1) {
-              *val = target;
-              return 1;
-            }
+            *val = target;
+            //printf ( "*val = 0x%X\n", *val );
+            return 1;
           }
-       
+          //}
+          return -1;
+          break;
+
+        default:
+          return -1;
           break;
       }
     }
@@ -76,19 +77,19 @@ inline int handle_mapped_read ( struct emulator_config *cfg, unsigned int addr, 
 
   if ( read_addr == NULL )
     return -1;
-
-//read_value:;
-  switch(type) {
+#if (1)
+  switch ( type ) 
+  {
     case OP_TYPE_BYTE:
-      *val = read_addr[0];
+      *val = read_addr [0];
       return 1;
       break;
     case OP_TYPE_WORD:
-      *val = be16toh(((unsigned short *)read_addr)[0]);
+      *val = be16toh ( ( (uint16_t *)read_addr ) [0] );
       return 1;
       break;
     case OP_TYPE_LONGWORD:
-      *val = be32toh(((unsigned int *)read_addr)[0]);
+      *val = be32toh ( ( (uint32_t *)read_addr ) [0] );
       return 1;
       break;
     case OP_TYPE_MEM:
@@ -97,19 +98,43 @@ inline int handle_mapped_read ( struct emulator_config *cfg, unsigned int addr, 
   }
 
   return 1;
+#else
+  if ( type == OP_TYPE_BYTE )
+  {
+    *val = *read_addr;
+    return 1;
+  }
+
+  if ( type == OP_TYPE_WORD )
+  {
+    *val = be16toh ( *( (uint16_t *)read_addr ) );
+    return 1;
+  }
+
+  if ( type == OP_TYPE_LONGWORD )
+  {
+    *val = be32toh ( *( (uint32_t *)read_addr ) );
+    return 1;
+  }
+
+  return -1;
+#endif
 }
 
 
-inline int handle_mapped_write(struct emulator_config *cfg, unsigned int addr, unsigned int value, unsigned char type) {
+
+
+inline int handle_mapped_write ( struct emulator_config *cfg, uint32_t addr, uint32_t value, unsigned char type ) 
+{
   int res = -1;
-  unsigned char *write_addr = NULL;
+  uint8_t *write_addr = NULL;
 
   for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS && cfg->map_type[i] != MAPTYPE_NONE; i++ ) 
   //for (int i = 0; i < MAX_NUM_MAPPED_ITEMS; i++) 
   {
     //if (cfg->map_type[i] == MAPTYPE_NONE)
-    //  continue;
-    
+    //  break;
+#if (0)    
     //else if (ovl && cfg->map_type[i] == MAPTYPE_RAM_WTC) {
     if ( cfg->map_type[i] == MAPTYPE_RAM_WTC) 
     {
@@ -120,10 +145,10 @@ inline int handle_mapped_write(struct emulator_config *cfg, unsigned int addr, u
         goto write_value;
       }
     }
-    
+#endif
     if ( CHKRANGE_ABS ( addr, cfg->map_offset[i], cfg->map_high[i] ) ) 
     {
-      switch(cfg->map_type[i]) 
+      switch ( cfg->map_type [i] ) 
       {
         case MAPTYPE_ROM:
           return 1;
@@ -131,22 +156,36 @@ inline int handle_mapped_write(struct emulator_config *cfg, unsigned int addr, u
         case MAPTYPE_RAM:
         case MAPTYPE_RAM_NOALLOC:
         case MAPTYPE_FILE:
-          write_addr = cfg->map_data[i] + (addr - cfg->map_offset[i]);
-          res = 1;
+#ifdef RAYLIB
+          if ( RTG_enabled && RTG_VRAM_BASE && ( addr >= RTG_VRAM_BASE && addr < RTG_VRAM_BASE | RTG_VRAM_SIZE ) )
+          {
+            vramLock = 1;
+          }
+#endif
+          
+          //if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMBASE + NOVA_ET4000_VRAMSIZE )
+          //  while ( RTG_VSYNC )
+          //    ;
+          
+           // printf ( "mapped write 0x%X\n", addr );
+
+            write_addr = cfg->map_data [i] + ( addr - cfg->map_offset [i] );
+            res = 1;
+          
           goto write_value;
           break;
         case MAPTYPE_RAM_WTC:
           //printf("Some write to WTC RAM.\n");
-          write_addr = cfg->map_data[i] + (addr - cfg->map_offset[i]);
+          write_addr = cfg->map_data [i] + ( addr - cfg->map_offset [i] );
           res = -1;
           goto write_value;
           break;
         case MAPTYPE_REGISTER:
           //printf ( "register write: addr 0x%X, value 0x%X/n", addr, value );
-          if (cfg->platform && cfg->platform->register_write) 
-          {
-            return cfg->platform->register_write(addr, value, type);
-          }
+          //if ( cfg->platform && cfg->platform->register_write ) 
+          //{
+            return cfg->platform->register_write ( addr, value, type );
+          //}
           break;
       }
     }
@@ -154,25 +193,36 @@ inline int handle_mapped_write(struct emulator_config *cfg, unsigned int addr, u
 
   return res;
 
-write_value:;
-  switch(type) {
+write_value:
+  switch ( type ) 
+  {
     case OP_TYPE_BYTE:
       write_addr[0] = (unsigned char)value;
+      
+#ifndef RAYLIB
       return res;
+#endif
       break;
     case OP_TYPE_WORD:
-      ((short *)write_addr)[0] = htobe16(value);
+      ((uint16_t *)write_addr)[0] = htobe16 ( value );
+#ifndef RAYLIB
       return res;
+#endif
       break;
     case OP_TYPE_LONGWORD:
-      ((int *)write_addr)[0] = htobe32(value);
+      ((uint32_t *)write_addr)[0] = htobe32 ( value );
+#ifndef RAYLIB
       return res;
+#endif
       break;
     case OP_TYPE_MEM:
       return -1;
       break;
   }
 
-  // This should never actually happen.
+#ifdef RAYLIB
+  vramLock = 0;
+#endif
+  
   return res;
 }

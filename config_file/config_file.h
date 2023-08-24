@@ -79,8 +79,8 @@ struct emulator_config {
   unsigned char mouse_enabled, mouse_autoconnect, keyboard_enabled, keyboard_grab, keyboard_autoconnect;
 
   unsigned int loop_cycles;
-  unsigned int mapped_low, mapped_high;
-  unsigned int custom_low, custom_high;
+  uint32_t mapped_low, mapped_high;
+  uint32_t custom_low, custom_high;
 };
 
 struct platform_config {

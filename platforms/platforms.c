@@ -14,28 +14,31 @@
 #endif
 
 static char*platform_names[PLATFORM_NUM] = {
-    "none",
-    "amiga",
-    "mac68k",
-    "x68000",
-    "atari"
+    "generic",
+    //"amiga",
+    //"mac68k",
+    //"x68000",
+    "ATARI"
 };
 
-int get_platform_index(char *name) {
-    if (!name || strlen(name) == 0)
+int get_platform_index ( char *name ) 
+{
+    if ( !name || strlen ( name ) == 0 )
         return -1;
 
-    for (int i = 0; i < PLATFORM_NUM; i++) {
-        if (strcmp(name, platform_names[i]) == 0)
+    for ( int i = 0; i < PLATFORM_NUM; i++ ) 
+    {
+        if ( strcmp ( name, platform_names [i] ) == 0 )
             return i;
     }
+
     return -1;
 }
 
 //void create_platform_amiga(struct platform_config *cfg, char *subsys);
 void create_platform_atari(struct platform_config *cfg, char *subsys);
 //void create_platform_mac68k(struct platform_config *cfg, char *subsys);
-//void create_platform_dummy(struct platform_config *cfg, char *subsys);
+void create_platform_dummy(struct platform_config *cfg, char *subsys);
 
 struct platform_config *make_platform_config(char *name, char *subsys) {
     struct platform_config *cfg = NULL;
@@ -43,7 +46,7 @@ struct platform_config *make_platform_config(char *name, char *subsys) {
 
     if (platform_id == -1) {
         // Display a warning if no match is found for the config name, in case it was mistyped.
-        DEBUG_PRINTF ("No match found for platform name \'%s\', defaulting to none/generic.\n", name);
+        DEBUG_PRINTF ("No match found for platform name \'%s\', defaulting to generic.\n", name);
         platform_id = PLATFORM_NONE;
     }
     else {
@@ -51,13 +54,16 @@ struct platform_config *make_platform_config(char *name, char *subsys) {
     }
 
     cfg = (struct platform_config *)malloc(sizeof(struct platform_config));
+
     if (!cfg) {
         DEBUG_PRINTF ("Failed to allocate memory for new platform config!.\n");
         return NULL;
     }
+
     memset(cfg, 0x00, sizeof(struct platform_config));
 
-    switch(platform_id) {
+    switch(platform_id) 
+    {
         //case PLATFORM_AMIGA:
         //    create_platform_amiga(cfg, subsys);
         //    break;
@@ -67,10 +73,10 @@ struct platform_config *make_platform_config(char *name, char *subsys) {
         case PLATFORM_ATARI:
             create_platform_atari(cfg, subsys);
             break;
-        //case PLATFORM_NONE:
+        case PLATFORM_NONE:
         //case PLATFORM_X68000:
         default:
-            //create_platform_dummy(cfg, subsys);
+            create_platform_dummy(cfg, subsys);
             break;
     }
 

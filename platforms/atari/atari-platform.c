@@ -36,12 +36,13 @@
 #define DEBUG(...)
 #endif
 
-extern int handle_register_read_atari(unsigned int addr, unsigned char type, unsigned int *val);
-extern int handle_register_write_atari(unsigned int addr, unsigned int value, unsigned char type);
+extern int handle_register_read_atari ( uint32_t addr, unsigned char type, unsigned int *val);
+extern int handle_register_write_atari ( uint32_t addr, unsigned int value, unsigned char type);
 
-#ifdef RTG
+//#ifdef RTG
 extern int RTG_enabled;
-#endif
+//#endif
+extern int FPU68020_SELECTED;
 
 extern const char *op_type_names[OP_TYPE_NUM];
 //extern uint8_t cdtv_mode;
@@ -199,12 +200,18 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val) {
         if ( val && strlen ( val ) != 0 )
             set_hard_drive_image_file_atari ( 1, val );
     }
-#ifdef RTG
+
+//#ifdef RTG
     if CHKVAR ( "rtg" ) 
     {
         RTG_enabled = 1;
     }
-#endif
+//#endif
+    /* cryptodad allow selection of fpu for 68020 CPU */
+    if CHKVAR ( "68020fpu" )
+    {
+        FPU68020_SELECTED = 1;
+    }
 
 #ifdef PISCSI
     // PiSCSI stuff

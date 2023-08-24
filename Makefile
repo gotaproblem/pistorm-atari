@@ -10,7 +10,10 @@ MAINFILES        = emulator.c \
 				platforms/atari/atari-registers.c \
 				platforms/atari/IDE.c \
 				platforms/atari/idedriver.c \
-				platforms/atari/rtg.c
+				platforms/dummy/dummy-platform.c \
+				platforms/dummy/dummy-registers.c \
+				platforms/atari/et4000.c
+#				platforms/atari/rtg.c \
 
 MUSASHIFILES     = m68kcpu.c m68kdasm.c softfloat/softfloat.c softfloat/softfloat_fpsp.c
 MUSASHIGENCFILES = m68kops.c
@@ -22,12 +25,15 @@ MUSASHIGENERATOR = m68kmake
 
 CC        = gcc
 
-RAYLIB    = -I./raylib_pi4_test -L./raylib_pi4_test -lraylib -lGLESv2 -lEGL -ldrm -lgbm -lm
+RAYLIB    = -I./raylib-test -L./raylib-test -lraylib -lGLESv2 -lEGL -ldrm -lgbm -lm
 
-#PI4OPTS	  = -mcpu=cortex-a72
 PI4OPTS	  = -march=armv8-a -mfloat-abi=hard -mfpu=neon-fp-armv8
 
-CFLAGS    = -I. $(PI4OPTS) $(RAYLIB) -O3 -DRTG -DRAYLIB #-DT_CACHE_ON #-DCACHE_ON
+ifeq ($(USERAYLIB),YES)
+	CFLAGS = -I. $(PI4OPTS) -O3 $(RAYLIB) -DRTG -DRAYLIB #-DT_CACHE_ON -DCACHE_ON
+else
+	CFLAGS = -I. $(PI4OPTS) -O3 $(RAYLIB)
+endif
 
 TARGET    = $(EXENAME)
 
@@ -48,6 +54,6 @@ $(MUSASHIGENCFILES) $(MUSASHIGENHFILES): $(MUSASHIGENERATOR) m68kcpu.h
 	./$(MUSASHIGENERATOR)
 
 $(MUSASHIGENERATOR):  $(MUSASHIGENERATOR).c
-	$(CC) -o  $(MUSASHIGENERATOR)  $(MUSASHIGENERATOR).c -mcpu=cortex-a72
+	$(CC) -o  $(MUSASHIGENERATOR)  $(MUSASHIGENERATOR).c
 
 -include $(.CFILES:%.c=%.d) $(MUSASHIGENCFILES:%.c=%.d) $(MUSASHIGENERATOR).d

@@ -67,19 +67,22 @@ static struct ide_controller *atariide0 = NULL;
 
 int atarifd;
 char *atari_image_file[IDE_MAX_HARDFILES];
-uint8_t IDE_IDE_enabled = 1;
-uint8_t IDE_emulation_enabled = 1;
+uint8_t IDE_IDE_enabled;
+//uint8_t IDE_emulation_enabled = 1;
 
-struct ide_controller *get_ide(int index) {
-  if (index) {}
+struct ide_controller *get_ide ( int index ) 
+{
+  if ( index ) {}
+
   return atariide0;
 }
 
 
-void set_hard_drive_image_file_atari(uint8_t index, char *filename) 
+void set_hard_drive_image_file_atari ( uint8_t index, char *filename ) 
 {
   if (atari_image_file[index] != NULL)
     free(atari_image_file[index]);
+
   atari_image_file[index] = calloc(1, strlen(filename) + 1);
   strcpy(atari_image_file[index], filename);
 }
@@ -145,17 +148,21 @@ void InitIDE (void)
     //DEBUG_PRINTF ("No IDE drives mounted, disabling IDE component.\n");
     IDE_IDE_enabled = 0;
   }
+
+  else
+    IDE_IDE_enabled = 1;
 }
 
 static uint8_t IDE_action = 0;
 
-void writeIDEB(unsigned int address, unsigned int value) 
+void writeIDEB ( uint32_t address, unsigned int value ) 
 {
-  if (atariide0) 
+  if ( atariide0 ) 
   {
     //if (address >= IDEBASE && address < (IDEBASE + IDESIZE) ) {
 #if (1)
-      switch ((address - IDEBASE)){//IDE_IDE_base) - IDE_IDE_adj) {
+      switch ( address - IDEBASE ) 
+      {
         case GFEAT_OFFSET:
           //DEBUG_PRINTF ("Write to GFEAT: %.2X.\n", value);
           IDE_action = IDE_feature_w;
@@ -254,10 +261,12 @@ skip_idewrite8:;
   //DEBUG("Write Byte to IDE Space 0x%06x (0x%06x)\n", address, value);
 }
 
-void writeIDE(unsigned int address, unsigned int value) {
+void writeIDE ( uint32_t address, unsigned int value) 
+{
 #if (1)
   //printf ( "writeIDE: address 0x%X\n", address );  
-  if (atariide0) {
+  if ( atariide0 ) 
+  {
     //if (address - IDEBASE == GDATA_OFFSET) {
       IDE_write16(atariide0, IDE_data, value);
       return;
@@ -290,7 +299,8 @@ void writeIDE(unsigned int address, unsigned int value) {
   DEBUG("Write Word to IDE Space 0x%06x (0x%06x)\n", address, value);
 }
 
-void writeIDEL(unsigned int address, unsigned int value) {
+void writeIDEL ( uint32_t address, unsigned int value ) 
+{
   //if ((address & IDEMASK) == CLOCKBASE) {
     //if ((address & CLOCKMASK) >= 0x8000) {
       //if (cdtv_mode) {
@@ -306,25 +316,26 @@ void writeIDEL(unsigned int address, unsigned int value) {
     //put_rtc_byte(address, (value >> 24), rtc_type);
     //return;
   //}
-  if (address - IDEBASE == GDATA_OFFSET) {
-
+  if ( address - IDEBASE == GDATA_OFFSET ) 
+  {
     //printf ("IDE write long 0x%x\n", value);
 
-    IDE_write16(atariide0, IDE_data, value >> 16) ;
-    IDE_write16(atariide0, IDE_data, value & 0xffff);
+    IDE_write16 ( atariide0, IDE_data, value >> 16 ) ;
+    IDE_write16 ( atariide0, IDE_data, value & 0xffff );
   }
 
   //DEBUG("Write Long to IDE Space 0x%06x (0x%06x)\n", address, value);
 }
 
-uint8_t readIDEB(unsigned int address) {
-  if (atariide0) {
+uint8_t readIDEB ( uint32_t address ) 
+{
+  if ( atariide0 ) 
+  {
     uint8_t IDE_action = 0, IDE_val = 0;
 #if (1)
-    //if (address >= IDEBASE && address < (IDEBASE + IDESIZE) ) { //IDE_IDE_base && address < (IDE_IDE_base + 0x40) ) {
-
-      //printf ("IDE read byte\n");
-      switch ((address - IDEBASE) ) {//- IDE_IDE_adj) {
+      //printf ("IDE read byte at 0x%X\n", address );
+      switch ( address - IDEBASE ) 
+      {
         case GERROR_OFFSET:
           IDE_action = IDE_error_r;
           goto ideread8;
@@ -356,11 +367,13 @@ uint8_t readIDEB(unsigned int address) {
           //default:
           //  printf ( "%s: unserviced command = 0x%x\n", __func__, ((address - IDEBASE) ));//- IDE_IDE_adj) );
       }
-      goto skip_ideread8;
-ideread8:;
-      IDE_val = IDE_read8(atariide0, IDE_action);
+      //goto skip_ideread8;
+
+      return 0xFF;
+ideread8:
+      IDE_val = IDE_read8 ( atariide0, IDE_action );
       return IDE_val;
-skip_ideread8:;
+//skip_ideread8:
     //}
 /*
     switch (address) {
@@ -443,10 +456,12 @@ skip_ideread8:;
   return 0xFF;
 }
 
-uint16_t readIDE(unsigned int address) {
+uint16_t readIDE ( uint32_t address ) 
+{
   uint16_t value;
   //printf ( "readIDE: address 0x%X\n", address );
-  if (atariide0) {
+  if ( atariide0 ) 
+  {
 #if (1)
     if (address - IDEBASE == GDATA_OFFSET) {
       
@@ -485,7 +500,8 @@ uint16_t readIDE(unsigned int address) {
   return 0x8000;
 }
 
-uint32_t readIDEL(unsigned int address) {
+uint32_t readIDEL ( uint32_t address ) 
+{
   //if ((address & IDEMASK) == CLOCKBASE) {
     //if ((address & CLOCKMASK) >= 0x8000) {
       //if (cdtv_mode) {
@@ -497,7 +513,8 @@ uint32_t readIDEL(unsigned int address) {
     //DEBUG_PRINTF ("Longword read from RTC.\n");
     //return 0xffffffff; //((get_rtc_byte(address, rtc_type) << 24) | (get_rtc_byte(address + 1, rtc_type) << 16) | (get_rtc_byte(address + 2, rtc_type) << 8) | (get_rtc_byte(address + 3, rtc_type)));
   //}
-  if (address - IDEBASE == GDATA_OFFSET) {
+  if ( address - IDEBASE == GDATA_OFFSET ) 
+  {
 
    // printf ("IDE read long\n");
 
