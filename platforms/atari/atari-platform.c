@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdbool.h>
 #include "atari-autoconf.h"
 #include "atari-registers.h"
 //#include "atari-interrupts.h"
@@ -40,7 +41,7 @@ extern int handle_register_read_atari ( uint32_t addr, unsigned char type, unsig
 extern int handle_register_write_atari ( uint32_t addr, unsigned int value, unsigned char type);
 
 //#ifdef RTG
-extern int RTG_enabled;
+extern bool RTG_enabled;
 //#endif
 extern int FPU68020_SELECTED;
 
@@ -203,16 +204,13 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val) {
 
 //#ifdef RTG
     if CHKVAR ( "rtg" ) 
-    {
         RTG_enabled = 1;
-    }
+
 //#endif
     /* cryptodad allow selection of fpu for 68020 CPU */
     if CHKVAR ( "68020fpu" )
-    {
         FPU68020_SELECTED = 1;
-    }
-
+        
 #ifdef PISCSI
     // PiSCSI stuff
     if (CHKVAR("piscsi") && !piscsi_enabled) {

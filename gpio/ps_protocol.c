@@ -22,7 +22,9 @@
 #include "ps_protocol.h"
 #include "../m68k.h"
 //#include "bcm2835.h"
+#include <stdbool.h>
 
+extern bool RTG_enabled;
 
 volatile unsigned int *gpio;
 volatile unsigned int *gpclk;
@@ -84,8 +86,6 @@ static void setup_io()
 #define PLLC_100MHZ 7  /* ARM clock / 7 = 100 MHz */
 #define PLLC_50MHZ  8  /* ARM clock / 8 = 50 MHz */
 #define PLLC_25MHZ  9  /* ARM clock / 8 = 25 MHz */
-#define PLLC_12MHZ  10
-#define PLLC_6MHZ   25
  
 #define PLLD_200MHZ 2  /* CORE clock / 2 eg. 400 MHz / 2 = 200 MHz */
 #define PLLD_100MHZ 3  /* CORE clock / 4   */
@@ -156,10 +156,11 @@ gpio + 31 = GPAREN  GPIO Pin Asysnchronous Rising Edge Detect Enable 0
 gpio + 34 = GPAFEN  GPIO Pin Asysnchronous Falling Edge Detect Enable 0
 */
 #define TXN_END 0x00ffffec
+//#define TXN_END 0x00ffffcc//
 //#define TXN_END (0x00ffff00 | (1 << PIN_WR) | (1 << PIN_RD) | (REG_ADDR_HI << PIN_A0) | (REG_ADDR_LO << PIN_A0))
 
 
-volatile int g_irq;
+//volatile int g_irq;
 volatile int g_buserr;
 
 
@@ -180,7 +181,8 @@ void ps_write_16 ( uint32_t address, uint16_t data )
 {
   static uint32_t l;
 
-  g_irq       = 0;
+  //while ( *(gpio + 13) & 1 );
+  //g_irq       = 0;
 
   *(gpio + 0) = GPFSEL0_OUTPUT;
   *(gpio + 1) = GPFSEL1_OUTPUT;
@@ -207,12 +209,12 @@ void ps_write_16 ( uint32_t address, uint16_t data )
 
   /* wait for firmware to signal txn done */
 	while ( ( l = *(gpio + 13) ) & 1 )
-    if ( g_buserr = CHECK_BERR (l) )
-      break;
+    //if ( g_buserr = CHECK_BERR (l) )
+    //  break;
     ;
 
-  g_irq = CHECK_IRQ (l);
-  //g_buserr = CHECK_BERR (l);
+  //g_irq = CHECK_IRQ (l);
+  g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
   RWstats.w16++;  
@@ -225,13 +227,14 @@ void ps_write_8 ( uint32_t address, uint16_t data )
 {
   static uint32_t l;
 
+  //while ( *(gpio + 13) & 1 );
   if ((address & 1) == 0)
     data <<= 8;
 
   else
     data &= 0xff;
 
-  g_irq       = 0;
+  //g_irq       = 0;
 
   *(gpio + 0) = GPFSEL0_OUTPUT;
   *(gpio + 1) = GPFSEL1_OUTPUT;
@@ -257,12 +260,12 @@ void ps_write_8 ( uint32_t address, uint16_t data )
   *(gpio + 2) = GPFSEL2_INPUT;
 
 	while ( ( l = *(gpio + 13) ) & 1 )
-    if ( g_buserr = CHECK_BERR (l) )
-      break;
+    //if ( g_buserr = CHECK_BERR (l) )
+    // break;
     ;
 
-  g_irq = CHECK_IRQ (l);
-  //g_buserr = CHECK_BERR (l);
+  //g_irq = CHECK_IRQ (l);
+  g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
   RWstats.w8++;
@@ -283,7 +286,8 @@ uint16_t ps_read_16 ( uint32_t address )
 {
 	static uint32_t l;
 
-  g_irq       = 0;
+  //while ( *(gpio + 13) & 1 );
+  //g_irq       = 0;
 
   *(gpio + 0) = GPFSEL0_OUTPUT;
   *(gpio + 1) = GPFSEL1_OUTPUT;
@@ -305,12 +309,13 @@ uint16_t ps_read_16 ( uint32_t address )
 
   *(gpio + 7) = (REG_DATA << PIN_A0) | (1 << PIN_RD);
 
-  while ( ( l = *(gpio + 13) ) & (1 << PIN_TXN_IN_PROGRESS) )
+  //while ( ( l = *(gpio + 13) ) & (1 << PIN_TXN_IN_PROGRESS) )
+  while ( ( l = *(gpio + 13) ) & 1 )
     ;
 
  	*(gpio + 10) = TXN_END;
 
-  g_irq = CHECK_IRQ (l);
+  //g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -325,7 +330,8 @@ uint8_t ps_read_8 ( uint32_t address )
 {
   static uint32_t l;
   
-  g_irq       = 0;
+  //while ( *(gpio + 13) & 1 );
+  //g_irq       = 0;
 
   *(gpio + 0) = GPFSEL0_OUTPUT;
   *(gpio + 1) = GPFSEL1_OUTPUT;
@@ -347,12 +353,13 @@ uint8_t ps_read_8 ( uint32_t address )
 
   *(gpio + 7) = (REG_DATA << PIN_A0) | (1 << PIN_RD);
 
-  while ( ( l = *(gpio + 13) ) & (1 << PIN_TXN_IN_PROGRESS) )
+  //while ( ( l = *(gpio + 13) ) & (1 << PIN_TXN_IN_PROGRESS) )
+  while ( ( l = *(gpio + 13) ) & 1 )
     ;
 
   *(gpio + 10) = TXN_END;
 
-  g_irq = CHECK_IRQ (l);
+  //g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -393,13 +400,16 @@ void ps_write_status_reg(unsigned int value)
 #endif
 }
 
+
+
+
 inline
 uint16_t ps_read_status_reg () 
 {
   static uint32_t value;
 
-
-  while ( *(gpio + 13) & 1 );
+  //if ( RTG_enabled )
+    while ( *(gpio + 13) & 1 ); /* cryptodad - without this, get random Atari resets (see cpu_task () ) */
 
   *(gpio + 7) = (REG_STATUS << PIN_A0) | (1 << PIN_RD);
 

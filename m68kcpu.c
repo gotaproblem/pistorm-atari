@@ -1075,7 +1075,7 @@ void m68k_set_irq(unsigned int int_level)
 
 	/* A transition from < 7 to 7 always interrupts (NMI) */
 	/* Note: Level 7 can also level trigger like a normal IRQ */
-	if(old_level != 0x0700 && CPU_INT_LEVEL == 0x0700)
+	if ( old_level != 0x0700 && CPU_INT_LEVEL == 0x0700 )
 		m68ki_cpu.nmi_pending = TRUE;
 }
 
@@ -1296,17 +1296,20 @@ inline uint m68ki_read_imm16_addr_slowpath ( m68ki_cpu_core *state, uint32_t pc 
 #if M68K_EMULATE_PREFETCH
 {
 	uint result;
-	if(REG_PC != CPU_PREF_ADDR)
+	if ( REG_PC != CPU_PREF_ADDR )
 	{
 		CPU_PREF_DATA = m68ki_ic_readimm16(state, REG_PC);
 		//state->mmu_tmp_buserror_occurred = g_buserr;
 		//CPU_PREF_ADDR = state->mmu_tmp_buserror_occurred ? ((uint32)~0) : REG_PC;
 		CPU_PREF_ADDR = g_buserr ? ((uint32)~0) : REG_PC;
 	}
+
 	result = MASK_OUT_ABOVE_16(CPU_PREF_DATA);
 	REG_PC += 2;
+	
 	//if (!state->mmu_tmp_buserror_occurred) {
-	if (!g_buserr) {
+	if ( !g_buserr ) 
+	{
 		// prefetch only if no bus error occurred in opcode fetch
 		CPU_PREF_DATA = m68ki_ic_readimm16(state, REG_PC);
 		//state->mmu_tmp_buserror_occurred = g_buserr;

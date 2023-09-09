@@ -1,9 +1,10 @@
 #ifndef ET4000_H
 #define ET4000_H
 
-#define NOVA_ET4000_REGBASE 0x00D00000
+#define NOVA_ET4000_REGBASE  0x00D00000
 #define NOVA_ET4000_VRAMBASE 0x00C00000
 #define NOVA_ET4000_VRAMSIZE 0x00100000
+#define NOVA_ET4000_VRAMTOP  (NOVA_ET4000_VRAMBASE + NOVA_ET4000_VRAMSIZE)
 
 
 
@@ -215,8 +216,8 @@ const uint32_t vga_palette[VGA_PALETTE_LENGTH] = {
 };
 */
 
-extern int et4000read ( uint32_t, uint32_t*, int );
-extern int et4000write ( uint32_t, uint32_t, int );
+extern uint32_t et4000Read ( uint32_t, uint32_t*, int );
+extern uint32_t et4000Write ( uint32_t, uint32_t, int );
 extern int et4000Init ( void );
 
 #endif

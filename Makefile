@@ -12,8 +12,9 @@ MAINFILES        = emulator.c \
 				platforms/atari/idedriver.c \
 				platforms/dummy/dummy-platform.c \
 				platforms/dummy/dummy-registers.c \
-				platforms/atari/et4000.c
-#				platforms/atari/rtg.c \
+				platforms/atari/rtg.c
+#				platforms/atari/et4000.c
+
 
 MUSASHIFILES     = m68kcpu.c m68kdasm.c softfloat/softfloat.c softfloat/softfloat_fpsp.c
 MUSASHIGENCFILES = m68kops.c
@@ -32,7 +33,7 @@ PI4OPTS	  = -march=armv8-a -mfloat-abi=hard -mfpu=neon-fp-armv8
 ifeq ($(USERAYLIB),YES)
 	CFLAGS = -I. $(PI4OPTS) -O3 $(RAYLIB) -DRTG -DRAYLIB #-DT_CACHE_ON -DCACHE_ON
 else
-	CFLAGS = -I. $(PI4OPTS) -O3 $(RAYLIB)
+	CFLAGS = -I. $(PI4OPTS) -O3 -DRTG #-DT_CACHE_ON -DCACHE_ON
 endif
 
 TARGET    = $(EXENAME)

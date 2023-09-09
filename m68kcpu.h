@@ -1144,7 +1144,7 @@ static inline uint32 m68ki_ic_readimm16(m68ki_cpu_core *state, uint32 address)
 				if (state->cacr & M68K_CACR_FI)
 				{
 					return m68k_read_immediate_16(state, address);
-					//m68ki_set_fc(FLAG_S | FUNCTION_CODE_USER_PROGRAM);
+					//m68ki_set_fc ( FLAG_S | FUNCTION_CODE_USER_PROGRAM );
 					//return ps_read_16 ( ADDRESS_68K (address) );
 				}
 
@@ -1162,9 +1162,9 @@ static inline uint32 m68ki_ic_readimm16(m68ki_cpu_core *state, uint32 address)
 				}
 				else
 				{
-					//m68ki_set_fc(FLAG_S | FUNCTION_CODE_USER_PROGRAM);
-					//return ps_read_16 ( ADDRESS_68K (address) );
 					return m68k_read_immediate_16(state, address);
+					//m68ki_set_fc ( FLAG_S | FUNCTION_CODE_USER_PROGRAM );
+					//return ps_read_16 ( ADDRESS_68K (address) );
 				}
 			}
 
@@ -1181,6 +1181,8 @@ static inline uint32 m68ki_ic_readimm16(m68ki_cpu_core *state, uint32 address)
 		}
 	}
 	return m68k_read_immediate_16(state, address);
+	//m68ki_set_fc ( FLAG_S | FUNCTION_CODE_USER_PROGRAM );
+	//return ps_read_16 ( ADDRESS_68K (address) );
 }
 
 /* Handles all immediate reads, does address error check, function code setting,
@@ -1191,11 +1193,12 @@ uint m68ki_read_imm16_addr_slowpath ( m68ki_cpu_core *state, uint32_t pc );
 
 static inline uint m68ki_read_imm_16(m68ki_cpu_core *state)
 {
-	//uint32_t pc = REG_PC;
-
-	//address_translation_cache *cache = &state->code_translation_cache;
-
+	
 #ifdef CACHE_ON // cryptodad
+	uint32_t pc = REG_PC;
+
+	address_translation_cache *cache = &state->code_translation_cache;
+	
 	if(pc >= cache->lower && pc < cache->upper)
 	{
 		REG_PC += 2;
@@ -1963,11 +1966,19 @@ static inline void m68ki_set_sr_noint_nosp(m68ki_cpu_core *state, uint value)
 	m68ki_set_sm_flag_nosp(state, (value >> 11) & 6);
 }
 
+static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_level);
+extern volatile int g_irq;
+extern bool RTG_enabled;
 /* Set the status register and check for interrupts */
 static inline void m68ki_set_sr(m68ki_cpu_core *state, uint value)
 {
 	m68ki_set_sr_noint(state, value);
-	//m68ki_check_interrupts(state);
+	
+	//m68ki_check_interrupts(state); // cryptodad commented out for performance 
+
+	//if ( RTG_enabled )
+	//	m68ki_exception_interrupt ( state, 0 ); // cryptodad use this instead AND ONLY with 
+											// emulator.c m68k_execute_bef () - if ( GET_CYCLES () < 1 || g_irq )
 }
 
 
@@ -2036,13 +2047,13 @@ static inline void m68ki_stack_frame_0010(m68ki_cpu_core *state, uint sr, uint v
 /* Bus error stack frame (68000 only).
  */
 static inline void m68ki_stack_frame_buserr_orig(m68ki_cpu_core *state, uint sr)
+//static inline void m68ki_stack_frame_buserr ( m68ki_cpu_core *state, uint sr )
 {
-	printf("m68k_stack_frame_buserr()\n");
-	printf("Pushing REG_PC (%x)\n", REG_PC );
-        printf("Pushing sr (%x)\n", sr );
-        printf("Pushing REG_IR (%x)\n", REG_IR );
-        printf("Pushing m68ki_aerr_address (%x)\n", m68ki_aerr_address  );
-
+	//printf("m68k_stack_frame_buserr()\n");
+	//printf("Pushing REG_PC (%x)\n", REG_PC );
+	//printf("Pushing sr (%x)\n", sr );
+	//printf("Pushing REG_IR (%x)\n", REG_IR );
+	//printf("Pushing m68ki_aerr_address (%x)\n", m68ki_aerr_address  );
 
 	m68ki_push_32(state, REG_PC);
 	m68ki_push_16(state, sr);
@@ -2057,6 +2068,7 @@ static inline void m68ki_stack_frame_buserr_orig(m68ki_cpu_core *state, uint sr)
 }
 
 #define IDLE_DEBUG //printf
+#if (1)
 static inline void m68ki_stack_frame_buserr(m68ki_cpu_core *state, uint sr)
 {
 
@@ -2146,7 +2158,7 @@ static inline void m68ki_stack_frame_buserr(m68ki_cpu_core *state, uint sr)
 	IDLE_DEBUG("stacking INFO x%04x\n",m68ki_aerr_write_mode | CPU_INSTR_MODE | m68ki_aerr_fc);
     IDLE_DEBUG("NEW STACK x%08x\n",REG_SP);
 }	
-
+#endif
 
 
 
@@ -2457,7 +2469,7 @@ static inline void m68ki_exception_privilege_violation(m68ki_cpu_core *state)
 /* Exception for bus error */
 static inline void m68ki_exception_bus_error(m68ki_cpu_core *state)
 {
-	int i;
+	//int i;
 	/* If we were processing a bus error, address error, or reset,
 	 * this is a catastrophic failure.
 	 * Halt the CPU
@@ -2486,13 +2498,12 @@ static inline void m68ki_exception_bus_error(m68ki_cpu_core *state)
 	//}
 
 	uint sr = m68ki_init_exception(state);
-//	m68ki_stack_frame_1000(state, REG_PPC, sr, EXCEPTION_BUS_ERROR);
+	//m68ki_stack_frame_1000(state, REG_PPC, sr, EXCEPTION_BUS_ERROR); // 68010 only
 	m68ki_stack_frame_buserr(state, sr);
 
 	m68ki_jump_vector ( state, EXCEPTION_BUS_ERROR );
-//	longjmp(m68ki_bus_error_jmp_buf, 1);
+	//longjmp(m68ki_bus_error_jmp_buf, 1);
 	//longjmp(m68ki_aerr_trap, 2);
-
 }
 
 extern int cpu_log_enabled;
@@ -2647,15 +2658,21 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 	if(CPU_STOPPED)
 		return;
 
+
+	/* cryptodad moved this section here - ignores passed-in int_level */
 	if ( state->nmi_pending )
 	{
 		state->nmi_pending = FALSE;
 		int_level = 7;
 	}
 
-	else if ( CPU_INT_LEVEL <= FLAG_INT_MASK ) 
+	else if ( CPU_INT_LEVEL > FLAG_INT_MASK ) 
+		int_level = CPU_INT_LEVEL >> 8;
+
+	else
 		return;
-		//printf ( "Int level = 0x%X\n", int_level );
+	/* cryptodad end section */
+
 
 	/* Acknowledge the interrupt */
 	vector = m68ki_int_ack ( int_level );
@@ -2670,13 +2687,13 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 		vector = EXCEPTION_SPURIOUS_INTERRUPT;
 
 	/* cryptodad can never get here as vector is masked byte */
-	//else if(vector > 255)
-	//{
+	else if ( vector > 255 )
+	{
 	//	//M68K_DO_LOG_EMU((M68K_LOG_FILEHANDLE "%s at %08x: Interrupt acknowledge returned invalid vector $%x\n",
-	//	printf ( "%08x: Interrupt acknowledge returned invalid vector $%x\n",
-	//			 ADDRESS_68K(REG_PC), vector);
-	//	return;
-	//}
+		printf ( "PC: 0x%X: Interrupt acknowledge returned invalid vector $%x\n",
+				 ADDRESS_68K(REG_PC), vector );
+		return;
+	}
 
 	/* Start exception processing */
 	sr = m68ki_init_exception(state);
@@ -2722,7 +2739,7 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
  */
 static inline void m68ki_check_interrupts ( m68ki_cpu_core *state )
 {
-	//if ( CPU_INT_LEVEL == 0x0200 )
+	//if ( CPU_INT_LEVEL != 0x0600 )
 	//	return;
 
 	if ( state->nmi_pending )

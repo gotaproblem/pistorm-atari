@@ -1,4 +1,3 @@
-//#define DISASSEMBLE
 // SPDX-License-Identifier: MIT
 
 #include "platforms/platforms.h"
@@ -29,8 +28,12 @@
 #define DEBUG_PRINTF(fmt, ...) ;
 #endif
 
+//#define IPL_TASK
+
+
 void *ide_task ( void* );
 void *misc_task ( void* vptr );
+//void *ipl_task ( void* );
 
 extern char *get_pistorm_cfg_filename();
 extern void set_pistorm_cfg_filename (char *);
@@ -58,18 +61,22 @@ volatile int cpu_emulation_running = 0;
 volatile int passthrough = 0;
 
 //#ifdef RTG
-extern void rtg ( int, uint32_t, uint32_t );
+//extern void rtg ( int, uint32_t, uint32_t );
 //extern void rtg_raylib ( int, uint32_t, uint32_t );
 extern volatile uint32_t RTG_ATARI_SCREEN_RAM;
 extern volatile uint32_t RTG_VSYNC;
-//extern int RTG_enabled;
+extern volatile bool RTG_hold;
 //extern volatile uint32_t RTG_VRAM_BASE;
 //extern volatile uint32_t RTG_VRAM_SIZE;
 //#endif
+extern void *RTGbuffer;
 
-extern int RTG_enabled;
-volatile uint32_t RTG_VRAM_BASE;
+extern bool RTG_enabled;
+extern bool ET4000Initialised;
+extern volatile bool RTG_updated;
+volatile uint32_t RTG_VRAM_BASE = 0xffffffff;
 volatile uint32_t RTG_VRAM_SIZE;
+volatile bool RTG_RAMLOCK;
 
 FILE *console = NULL;
 
@@ -107,69 +114,78 @@ uint16_t irq_delay = 0;
 #define TIMEOUT 10000000ul; // arbitary value, so long as it's big enough
 
 #define ORIGINAL
+#define NOP asm("nop") // asm("nop"); asm("nop"); asm("nop")
 
 
-#if (0)
+
+
+volatile int g_last_irq;
+volatile int gpioLock;
+#ifdef IPL_TASK
+#define CHECK_IRQ(x) (!(x & 0x02) ) 
+volatile int g_iack;
+volatile int g_last_irq;
+volatile int gpioLock;
+
 void *ipl_task ( void *args ) 
 {
-  uint16_t old_irq = 0;
-  uint32_t value;
-  int watchdog;
-  uint32_t poweredOff;;
+  //uint16_t old_irq = 0;
+  uint32_t state;
+  //int watchdog;
+  //uint32_t poweredOff;;
 
-  irq         = 0;
-  iack        = 1;
-  poweredOff  = 0;
-  watchdog    = TIMEOUT;
+  
+  //poweredOff  = 0;
+  //watchdog    = TIMEOUT;
 
   usleep (1000000); // 1s delay to sync threads
+  g_iack = 0;
+  g_irq = 0;
 
   while ( cpu_emulation_running ) 
   {   
-    while ( ( ( value = *(gpio + 13) ) & (1 << PIN_TXN_IN_PROGRESS) ) && watchdog ) 
-    {
-      //NOP
-      watchdog--;
-    }
-
-    if ( watchdog )
-    {
-      if ( ! ( value & (1 << PIN_IPL_ZERO) ) )
+    if ( !g_irq )
+      state = *( gpio + 13 ); /* looking for TXN complete */
+    
+    /* TXN completed and no outstanding interrupt */
+    if ( (state & 1) && !g_irq )
+    {      
+      /* interrupt pending */
+      if ( CHECK_IRQ (state) )// && !gpioLock )
       {
-      // if (!iack && !irq)
-        if (!irq)
-        {
-          //if (!iack)
-          //  printf ( "missed int %d\n", last_irq );
-
-          irq = 1; 
-        }
+        //printf ( "ipl: state = 0x%X\n", state );
+        g_irq = 1;
+        //g_iack = 0;
+        state = 0;
+        printf ( "here 1, " );
+        
+        g_last_irq = ps_read_status_reg () >> 13;
+        printf ( "here 2 %d\n", g_last_irq );
+        if ( g_last_irq )
+        m68k_set_irq ( g_last_irq );
+       // g_iack = 1;
+        //m68ki_exception_interrupt ( state, 0 ); //CPU_INT_LEVEL >> 8 );
+       // printf ( "ipl: g_last_irq = 0x%X\n", g_last_irq );
       }
-
-      else 
-      {
-        if (irq)
-          irq = 0;
-      }  
     }
 
-    if ( !watchdog && !poweredOff )
+    else if ( g_irq )
     {
-      DEBUG_PRINTF ( "[ATARI] Powered OFF / Unresponsive\n" );
-      poweredOff  = 1;
+      //if ( g_iack )
+      //{
+        g_irq = 0;
+       // g_iack = 0;
+      //}
     }
-
-    else if ( poweredOff && watchdog )
-    {
-      DEBUG_PRINTF ( "[ATARI] Powered ON\n" );
-      poweredOff  = 0;
-      do_reset    = 1;
-    }
-
-    watchdog      = TIMEOUT;
+      
+   // for ( volatile int delay = 64; delay; delay-- )
+      NOP;
+    
   }
 
-  return args;
+  printf ( "[IPL] End of IPL thread\n" );
+
+  return NULL;
 }
 #endif
 
@@ -199,52 +215,35 @@ extern uint m68ki_read_imm16_addr_slowpath ( m68ki_cpu_core *state, uint32_t pc 
 
 static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 {
-	/* eat up any reset cycles */
-  /*
-	if (RESET_CYCLES) 
-  {
-	    int rc = RESET_CYCLES;
-	    RESET_CYCLES = 0;
-	    num_cycles -= rc;
-	    if (num_cycles <= 0)
-		return;
-	}
-  */
 	/* Set our pool of clock cycles available */
-	SET_CYCLES (num_cycles);
-	m68ki_initial_cycles = num_cycles;
+	SET_CYCLES ( num_cycles );
+	//m68ki_initial_cycles = num_cycles;
 
 	/* Make sure we're not stopped */
 	if ( !CPU_STOPPED )
 	{
 		/* Main loop.  Keep going until we run out of clock cycles */
-execute:
+execute:      
     m68ki_use_data_space ();
 
     REG_PPC = REG_PC;
-    //REG_IR = m68ki_read_imm_16 ( state );
     REG_IR = m68ki_read_imm16_addr_slowpath ( state, REG_PC );
-
+      
     m68ki_instruction_jump_table [REG_IR] (state);
 
     if ( g_buserr ) 
-      m68ki_exception_bus_error ( state ); 
-
-    USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
-  
-    //if ( GET_CYCLES () < 1 )
-    if ( GET_CYCLES () < 1 || g_irq )
     {
-      /* set previous PC to current PC for the next entry into the loop */
-		  REG_PPC = REG_PC;
-      return;
+      m68ki_exception_bus_error ( state ); 
+      //g_buserr = 0;
     }
-      
-    goto execute;
-	}
 
-	else
-		SET_CYCLES(0);
+    else
+      USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
+
+    if ( GET_CYCLES () > 0 ) // cryptodad make sure m68kcpu.h m68ki_set_sr() has relevent line commented out
+      goto execute;
+    //REG_PPC = REG_PC;
+	}
 
 	return;
 }
@@ -275,22 +274,18 @@ void sigint_handler ( int sig_num )
 
 
 extern const char *cpu_types[];
-extern volatile int RESOLUTION;
 
-#ifdef DISASSEMBLE
-char disasm_buf[4096];
-#endif
 
 void *cpu_task() 
 {
   const struct sched_param priority = {99};
   uint16_t status;
 	m68ki_cpu_core *state = &m68ki_cpu;
+
+
   state->gpio = gpio;
 	m68k_pulse_reset(state);
-  g_buserr = 0;	
 
-  
   usleep ( 1000000 );  
 
   //cpu3 (); // anchor task to cpu3 
@@ -302,55 +297,62 @@ void *cpu_task()
 
 run:
   m68k_execute_bef ( state, loop_cycles );
+#if (1)
+  status = ps_read_status_reg ();
+  g_last_irq = status >> 13;
 
-  //if ( !RTG_VSYNC )
+  if ( status & 0x2 ) 
   {
-    if ( g_irq )
+    M68K_END_TIMESLICE;
+
+    DEBUG_PRINTF ( "[CPU] Emulation reset\n");
+
+    usleep ( 1000000 ); 
+
+    m68k_pulse_reset ( state );
+  }
+
+  else
+  {
+    m68k_set_irq ( g_last_irq ); /* cryptodad NOTE this has to be called before m68ki_exception_interrupt () */
+    m68ki_check_interrupts ( state );
+  }
+
+#else
+  if ( g_irq )
+  {
+    status = ps_read_status_reg ();
+    last_irq = status >> 13;
+
+    if ( status & 0x2 ) 
     {
-      status = ps_read_status_reg ();
-      last_irq = status >> 13;
+      M68K_END_TIMESLICE;
 
-      if ( status & 0x2 ) 
-      {
-        M68K_END_TIMESLICE;
+      DEBUG_PRINTF ( "[CPU] Emulation reset\n");
 
-        DEBUG_PRINTF ( "[CPU] Emulation reset\n");
+      usleep ( 1000000 ); 
 
-        usleep ( 1000000 ); 
-
-        m68k_pulse_reset ( state );
-
-        RESOLUTION = 0;
-      }
-
-      else
-      {
-        /* ET4000 driver uses this */
-        //if ( last_irq == 4 )
-        //  RTG_VSYNC = 1;
-
-        //else
-        //  RTG_VSYNC = 0;
-
-        if ( last_irq != 0 && last_irq != last_last_irq ) 
-        {
-          m68k_set_irq ( last_irq );
-          last_last_irq = last_irq;
-        }
-        
-        m68ki_exception_interrupt ( state, CPU_INT_LEVEL >> 8 );
-      }
-
-      //m68ki_exception_interrupt ( state, CPU_INT_LEVEL >> 8 );
+      m68k_pulse_reset ( state );
     }
 
-    //else if ( !g_irq && last_last_irq != 0 ) 
-    else if ( last_last_irq != 0 ) 
+    if ( last_irq != 0 )//&& last_irq != last_last_irq ) 
     {
-      m68k_set_irq ( 0 );
-      last_last_irq = 0;
+      //last_last_irq = last_irq;
+      m68k_set_irq ( last_irq );
+
+      m68ki_check_interrupts ( state );
+      //g_irq = 0;
     }
   }
+
+  else if ( !g_irq )//&& last_last_irq != 0 ) 
+  {
+   // last_last_irq = 0;
+    m68k_set_irq ( 0 );
+  }
+  M68K_END_TIMESLICE;
+  //m68ki_check_interrupts ( state );
+#endif
 
   if ( !cpu_emulation_running )
   {
@@ -358,7 +360,8 @@ run:
 
     return (void *)NULL;
   }
-  goto run;
+
+  goto run; /* cryptodad - goto is faster than using a while () */
 }
 
 
@@ -372,7 +375,10 @@ int main ( int argc, char *argv[] )
 #ifdef RTG
   int err;
   pthread_t rtg_tid, cpu_tid;
+#else
+  pthread_t rtg_tid, cpu_tid;
 #endif
+
   RTG_enabled = 0;
   FPU68020_SELECTED = 0;
 
@@ -459,8 +465,6 @@ int main ( int argc, char *argv[] )
 
   mlockall ( MCL_CURRENT );  // lock in memory to keep us from paging out
 
-  
-
   ps_setup_protocol ();
   ps_reset_state_machine ();
   ps_pulse_reset ();
@@ -474,74 +478,38 @@ int main ( int argc, char *argv[] )
   fc = 6;
   g_buserr = 0;
 
-#ifdef MISC_TASK
-  // create miscellaneous task
+#ifdef IPL_TASK
+  pthread_t ipl_tid = 0;
 
-  err = pthread_create ( &misc_tid, NULL, &misc_task, NULL );
-
-  if ( err != 0 )
-    DEBUG_PRINTF ( "[ERROR] Cannot create MISCELLANEOUS thread: [%s]", strerror (err) );
-
-  else 
-  {
-    pthread_setname_np ( misc_tid, "pistorm: misc" );
-    DEBUG_PRINTF ( "[MAIN] MISCELLANEOUS thread created successfully\n" );
-  }
-#endif
-
-#if (0)
-#ifdef RTG
-  err = pthread_create ( &cpu_tid, NULL, &cpu_task, NULL );
+  err = pthread_create ( &ipl_tid, NULL, &ipl_task, NULL );
 
   if ( err != 0 )
-    printf ( "[ERROR] Cannot create CPU thread: [%s]", strerror ( err ) );
-
+    printf("[ERROR] Cannot create IPL thread: [%s]", strerror ( err ) );
+  
   else 
   {
-    pthread_setname_np ( cpu_tid, "pistorm: cpu" );
-    printf ( "[MAIN] CPU thread created successfully\n" );
-  }
-
-  // create rtg task
-  if (  RTG_enabled )
-  {
-#ifdef RAYLIB
-    int ix = get_named_mapped_item ( cfg, "RTG" );
-    if ( cfg->map_data [ix] ) // cryptodad - this will need work - can't rely on it being map[3]
-    {
-      RTG_VRAM_BASE = cfg->map_offset [ix];
-      RTG_VRAM_SIZE = cfg->map_size [ix];
-      printf ( "[MAIN] RTG_VRAM_BASE 0x%X, RTG_VRAM_SIZE 0x%X\n", RTG_VRAM_BASE, RTG_VRAM_SIZE );
-    }
-#endif
-    
-      err = pthread_create ( &rtg_tid, NULL, &rtgRender, NULL );
-
-      if ( err != 0 )
-        DEBUG_PRINTF ( "[ERROR] Cannot create RTG thread: [%s]", strerror (err) );
-
-      else 
-      {
-        pthread_setname_np ( rtg_tid, "pistorm: rtg" );
-        DEBUG_PRINTF ( "[MAIN] RTG thread created successfully\n" );
-      }
-//#ifdef RAYLIB
-    //}
-//#endif
+    pthread_setname_np ( ipl_tid, "pistorm: ipl" );
+    printf ( "[MAIN] IPL thread created successfully\n" );
   }
 #endif
-#else
 
   InitIDE ();
-  #ifdef RTG
-  rtgInit ();
-  #endif
+
   if ( RTG_enabled )
-    et4000Init ();
+  {
+    rtgInit ();
 
-  int err;
-  pthread_t rtg_tid, cpu_tid;
+    int ix = get_named_mapped_item ( cfg, "ET4000vram" );
 
+    if ( cfg->map_offset [ix] )
+    { 
+      et4000Init ();
+
+      RTG_VRAM_BASE = (uint32_t)RTGbuffer; 
+      RTG_VRAM_SIZE = cfg->map_size [ix];
+    }
+  }
+  
   err = pthread_create ( &cpu_tid, NULL, &cpu_task, NULL );
 
   if ( err != 0 )
@@ -553,7 +521,7 @@ int main ( int argc, char *argv[] )
     printf ( "[MAIN] CPU thread created successfully\n" );
   }
 
-  if ( RTG_enabled )
+  if ( RTG_enabled ) //&& ET4000Initialised )
   {
     err = pthread_create ( &rtg_tid, NULL, &rtgRender, NULL );
 
@@ -566,8 +534,6 @@ int main ( int argc, char *argv[] )
       DEBUG_PRINTF ( "[MAIN] RTG thread created successfully\n" );
     }
   }
-
-#endif
 
   /* cryptodad optimisation - .cfg no mappings */
   if ( cfg->mapped_high == 0 && cfg-> mapped_low == 0 )
@@ -583,37 +549,18 @@ int main ( int argc, char *argv[] )
   if ( passthrough )
     DEBUG_PRINTF ( "[MAIN] %s Native Performance\n", cpu_types [cpu_type - 1] );
 
-  if ( RTG_enabled )
-    DEBUG_PRINTF ( "[MAIN] Press ESC to terminate\n" );
-
-  else
-    DEBUG_PRINTF ( "[MAIN] Press CTRL-C to terminate\n" );
-
+  DEBUG_PRINTF ( "[MAIN] Press CTRL-C to terminate\n" );
   DEBUG_PRINTF ( "\n" );
 
   //sched_setscheduler ( 0, SCHED_FIFO, &priority );
   //system ( "echo -1 >/proc/sys/kernel/sched_rt_runtime_us" );
   //cpu3 (); // anchor main task to cpu3 
 
-
-#if (0)
-#ifndef RAYLIB
-  cpu_task ();
-#else
-  if (  RTG_enabled )
-    pthread_join ( rtg_tid, NULL );
-
-  else
-    pthread_join ( cpu_tid, NULL );
-#endif
-
-#else
   if ( RTG_enabled )
     pthread_join ( rtg_tid, NULL );
 
   else
     pthread_join ( cpu_tid, NULL );
-#endif
 
   DEBUG_PRINTF ("[MAIN] Emulation Ended\n");
 
@@ -630,7 +577,6 @@ void cpu_pulse_reset ( void )
 
 static uint32_t target = 0;
 static uint32_t platform_res, rres;
-unsigned int garbage = 0;
 
 
 /* return 24 bit address */
@@ -641,8 +587,6 @@ static inline uint32_t check_ff_st( uint32_t add )
 
 	return add;
 }
-
-
 
 
 /* levels 2 and 4 are video syncs, so thousands are coming in */
@@ -662,8 +606,6 @@ uint16_t cpu_irq_ack ( int level )
 }
 
 
-
-
 static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_t *res ) 
 {
   if ( IDE_IDE_enabled && (addr >= (0xFF000000 | IDEBASE) && addr < (0xFF000000 | IDETOP) ) )
@@ -678,6 +620,17 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
     //return 1;
   //}
 
+  if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGBASE + 0x400 )
+  {
+    RTG_RAMLOCK = true;
+
+    *res = et4000Read ( addr, res, type );
+
+    RTG_RAMLOCK = false;
+
+    return 1;
+  }
+
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) )
   {
     if ( handle_mapped_read ( cfg, addr, &target, type ) != -1 ) 
@@ -687,9 +640,7 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
       return 1;
     }
   }
-
-  //*res = 0;
-
+ 
   return 0;
 }
 
@@ -701,7 +652,6 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
     return platform_res;
   }
 
-  //address = check_ff_st ( address );
   if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
     address &= 0x00FFFFFF;
 
@@ -746,8 +696,6 @@ unsigned int m68k_read_memory_32 ( uint32_t address )
 }
 
 
-
-
 #ifdef RTG
 #include "platforms/atari/atari-registers.h"
 
@@ -767,20 +715,22 @@ extern volatile uint16_t RTG_PAL_MODE;
 extern volatile uint8_t RTG_RES;
 extern volatile int RTGresChanged;
 extern volatile uint16_t RTG_PALETTE_REG [16];
+extern void rtg ( int size, uint32_t address, uint32_t data );
 
-//#ifdef RAYLIB
-//extern volatile int vramLock;
-//#endif
-
+extern volatile bool ET4000enabled;
 #endif
+
 
 static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32_t val ) 
 {
+  if ( IDE_IDE_enabled && (addr >= (0xFF000000 | IDEBASE) && addr < (0xFF000000 | IDETOP) ) )
+    addr &= 0x00ffffff;
+
 #ifdef RTG
-  if ( RTG_enabled && !RTG_VRAM_BASE )
+  if ( !ET4000enabled )
   {
     /* ATARI System Variables - do before anything else */
-    if ( addr >= SYS_VARS && addr < SYS_VARS_TOP )
+    if ( RTG_enabled && addr >= SYS_VARS && addr < SYS_VARS_TOP )
     {
         /* check palmode word */
         if ( addr == 0x448 )
@@ -813,7 +763,7 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
     }
 
     /* Palatte Registers - 16 x 16 bit words */
-    else if ( addr >= PALETTE_REGS && addr < PALETTE_REGS + 0x20 )
+    else if ( RTG_enabled && addr >= PALETTE_REGS && addr < PALETTE_REGS + 0x20 )
     {
       //printf ( "palette change - type = %d REG %d = 0x%X to RGB565 0x%X\n", type, (addr - PALETTE_REGS) >> 1, (uint16_t)val, toRGB565 ( (uint16_t)val)  );
       if ( type == OP_TYPE_WORD )
@@ -826,42 +776,36 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
       }
     }
 
-    else if ( addr >= RTG_ATARI_SCREEN_RAM && addr < (RTG_ATARI_SCREEN_RAM + 0x8000) )
+    else if ( RTG_enabled && addr >= RTG_ATARI_SCREEN_RAM && addr < (RTG_ATARI_SCREEN_RAM + 0x8000) )
     {
       rtg ( type, addr, val );
 
       return 0;
     }
   }
-//#ifdef RAYLIB
-//  else if ( RTG_enabled && RTG_VRAM_BASE )
-//  {
-//    if ( addr >= RTG_VRAM_BASE && addr < RTG_VRAM_BASE | RTG_VRAM_SIZE )
-//    {
-//      vramLock = 1;
-//    }
-//  }
-//#endif
 
+  if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGBASE + 0x400 )
+  {
+    RTG_RAMLOCK = true;
+
+    et4000Write ( addr, val, type );
+
+    RTG_RAMLOCK = false;
+
+    return 1;
+  }
 #endif 
-
-  if ( IDE_IDE_enabled && (addr >= (0xFF000000 | IDEBASE) && addr < (0xFF000000 | IDETOP) ) )
-    addr &= 0x00ffffff;
 
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) ) 
   {
     if ( handle_mapped_write ( cfg, addr, val, type ) != -1 )
     {
-//#ifdef RAYLIB
-//      vramLock = 0;
-//#endif
       return 1;
     }
   }
 
   return 0;
 }
-
 
 
 void m68k_write_memory_8 ( uint32_t address, unsigned int value ) 
@@ -913,138 +857,3 @@ void cpu_set_fc ( unsigned int _fc )
 {
 	fc = _fc;
 }
-
-
-
-#if (0)
-/* cryptodad IDE */
-
-/* ATARI IDE interface expected @ 0x00f00000 */
-/* ATARI MFP (68901) @ 0x00fffa00 */
-/* MFP active edge register (0x00fffa03) - bit 5 = FDC/HDC interrupt */
-/* MFP interrupt enable register B (0x00fffa09) - bit 7 = FDC/HDC */
-/* MFP interrupt pending register B (0x00fffa0d) - bit 7 */
-void *
-ide_task ( void* vptr )
-{
-  uint32_t ideAddress = 0x00f00000;
-  uint32_t mappedAddress = ideAddress - cfg->mapped_low;
-  uint16_t *cmd;
-
-  usleep (1000000);
-
-  //cmd = (uint16_t*)lpcmd;
-
-  for ( int n = 0; n < 8; n++ )
-  {
-    if ( cfg->map_type [n] == MAPTYPE_REGISTER )
-    {
-      //printf ( "IDE mapping found - index %d\n", n );
-      //printf ( "mapped address is 0x%x\n", cfg->mapped_low );
-      //printf ( "mapped data is 0x%x\n", cfg->map_data [n] );
-      break;
-    }
-  }
-
-  while (1)
-  {
-    //if ( *cmd )
-    {
-     // printf ( "ide_task: cmd add 0x%x\n", *cmd );
-      usleep (10000);
-    }
-
-    usleep (1);
-  }
-}
-
-
-
-void *
-misc_task ( void* vptr )
-{
-  //uint32_t ideAddress = 0x00f00000;
-  //uint32_t vidAddress = 0x00ff8200;
-  //uint32_t mappedAddress = ideAddress - cfg->mapped_low;
-  //uint16_t *cmd;
-  //uint32_t vidbase = 0x0;
-  int c;
-  int d;
-  int doit = 0;
-
-  usleep (1000000);
-  //cmd = (uint16_t*)lpcmd;
-
-  ///for ( int n = 0; n < 8; n++ )
-  //{
-  //  if ( cfg->map_type [n] == MAPTYPE_REGISTER )
-  //  {
-      //printf ( "IDE mapping found - index %d\n", n );
-      //printf ( "mapped address is 0x%x\n", cfg->mapped_low );
-      //printf ( "mapped data is 0x%x\n", cfg->map_data [n] );
-  //    break;
-  //  }
-  //}
-
-
-  while (cpu_emulation_running)
-  {
-    read ( STDIN_FILENO, &c, 1 );
-    
-    if ( c == 'v' )
-    {
-      uint32_t vBase;
-      uint8_t vMode;
-
-      doit = 1;
-
-      while ( doit ) 
-      {
-        if ( ATARI_VID_enabled && canpeek )
-        {
-          peeking = 1;
-
-          vBase = ps_read_32 ( (t_a32)((uint32_t)0x44e) );
-          vMode = ps_read_16 ( (t_a32)((uint32_t)0x44c) ) >> 8;
-
-          peeking = 0;
-          doit = 0;
-        }
-      }
-
-      DEBUG_PRINTF ( "Video Base Address is 0x%08x\n", vBase );
-      DEBUG_PRINTF ( "Video Mode is %s\n", vMode == 1 ? "640x200" : vMode == 2 ? "640x400" : "320x200" );
-      //DEBUG_PRINTF ( "Video Sync Mode is %s\n", m68k_read_memory_8 ( vidAddress + 0x0a ) & 0x02 ? "60 Hz" : "50 Hz" );
-    }
-
-    else if ( c == 'g' )
-    {
-      uint8_t screenGrab [32000];
-      uint32_t n = 0;
-      FILE *fp;
-
-      fp = fopen ( "screendump", "w+" );
-
-      doit = 1;
-
-      while ( doit ) 
-      {
-        if ( ATARI_VID_enabled && canpeek )
-        {
-          peeking = 1;
-
-          for ( n = 0; n < 32000; n++ )
-            screenGrab [n] = ps_read_8 ( (t_a32)((uint32_t)0x3f8000 + n) );
-
-          peeking = 0;
-          doit = 0;
-        }
-      }
-
-      fwrite ( screenGrab, 32000, 1, fp );
-
-      //DEBUG_PRINTF ( "screen grabbed\n" );
-    }
-  }
-}
-#endif

@@ -11,7 +11,7 @@
 
 static unsigned int target;
 //extern int ovl;
-
+extern volatile int g_irq;
 //extern const char *map_type_names[MAPTYPE_NUM];
 //const char *op_type_names[OP_TYPE_NUM] = {
 //  "BYTE",
@@ -30,6 +30,7 @@ extern volatile int vramLock;
 #endif
 
 extern volatile uint32_t RTG_VSYNC;
+extern void *RTGbuffer;
 
 
 inline int handle_mapped_read ( struct emulator_config *cfg, uint32_t addr, uint32_t *val, unsigned char type ) 
@@ -48,11 +49,14 @@ inline int handle_mapped_read ( struct emulator_config *cfg, uint32_t addr, uint
         case MAPTYPE_RAM_WTC:
         case MAPTYPE_RAM_NOALLOC:
         case MAPTYPE_FILE:
-          //if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMBASE + NOVA_ET4000_VRAMSIZE )
-          //  while ( RTG_VSYNC )
-          //    ;
+        
+          //if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMTOP )
+          //{        
+           // read_addr = RTGbuffer + (addr - NOVA_ET4000_VRAMBASE);
+          //}
 
-          read_addr = cfg->map_data [i] + ( addr - cfg->map_offset [i] );
+          //else
+            read_addr = cfg->map_data [i] + ( addr - cfg->map_offset [i] );
          
           break;
         case MAPTYPE_REGISTER:
@@ -82,21 +86,23 @@ inline int handle_mapped_read ( struct emulator_config *cfg, uint32_t addr, uint
   {
     case OP_TYPE_BYTE:
       *val = read_addr [0];
-      return 1;
+      //return 1;
       break;
     case OP_TYPE_WORD:
       *val = be16toh ( ( (uint16_t *)read_addr ) [0] );
-      return 1;
+      //return 1;
       break;
     case OP_TYPE_LONGWORD:
       *val = be32toh ( ( (uint32_t *)read_addr ) [0] );
-      return 1;
+      //return 1;
       break;
     case OP_TYPE_MEM:
+      //RTG_VSYNC = 0;
       return -1;
       break;
   }
 
+  //RTG_VSYNC = 0;
   return 1;
 #else
   if ( type == OP_TYPE_BYTE )
@@ -162,15 +168,16 @@ inline int handle_mapped_write ( struct emulator_config *cfg, uint32_t addr, uin
             vramLock = 1;
           }
 #endif
-          
-          //if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMBASE + NOVA_ET4000_VRAMSIZE )
-          //  while ( RTG_VSYNC )
-          //    ;
-          
-           // printf ( "mapped write 0x%X\n", addr );
+          //if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMTOP )
+          //{
+           // write_addr = RTGbuffer + (addr - NOVA_ET4000_VRAMBASE);
+          //}
 
+           // printf ( "mapped write 0x%X\n", addr );
+          //else
             write_addr = cfg->map_data [i] + ( addr - cfg->map_offset [i] );
-            res = 1;
+
+          res = 1;
           
           goto write_value;
           break;
@@ -200,29 +207,32 @@ write_value:
       write_addr[0] = (unsigned char)value;
       
 #ifndef RAYLIB
-      return res;
+      //return res;
 #endif
       break;
     case OP_TYPE_WORD:
       ((uint16_t *)write_addr)[0] = htobe16 ( value );
 #ifndef RAYLIB
-      return res;
+      //return res;
 #endif
       break;
     case OP_TYPE_LONGWORD:
       ((uint32_t *)write_addr)[0] = htobe32 ( value );
 #ifndef RAYLIB
-      return res;
+      //return res;
 #endif
       break;
     case OP_TYPE_MEM:
-      return -1;
+      //RTG_VSYNC = 0;
+      //return -1;
+      res = -1;
       break;
   }
 
 #ifdef RAYLIB
   vramLock = 0;
 #endif
-  
+
+  //RTG_VSYNC = 0;
   return res;
 }

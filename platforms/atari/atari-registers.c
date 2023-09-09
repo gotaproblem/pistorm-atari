@@ -57,12 +57,12 @@ int handle_register_read_atari ( uint32_t addr, unsigned char type, uint32_t *va
         }
     }
 
-    if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGBASE + 0x8000 )
-    {
-        return et4000read ( addr, val, type );
+   // if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGBASE + 0x8000 )
+   // {
+    //    return et4000read ( addr, val, type );
         //printf ( "val = 0x%X\n", *val );
         //return 1;
-    }
+    //}
 /*
     else if ( addr >= BLITTERBASE && addr < (BLITTERBASE + BLITTERSIZE) ) 
     {
@@ -110,10 +110,10 @@ int handle_register_write_atari ( uint32_t addr, unsigned int value, unsigned ch
         }
     }
 
-    if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGBASE + 0x8000 )
-    {
-        return et4000write ( addr, value, type );
-    }
+    //if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGBASE + 0x8000 )
+    //{
+    //    return et4000write ( addr, value, type );
+    //}
 
     return -1;
 }

@@ -33,6 +33,7 @@
 #include "../../raylib-test/raylib.h"
 #include <pthread.h>
 //#include <endian.h>
+#include <sys/mman.h>
 
 
 //#define TRYDMA
@@ -121,10 +122,13 @@ static volatile nova_xcb_t nova_xcb;
 static volatile nova_xcb_t *xcb;
 static bool first;
 volatile bool ET4000enabled = false;
-int RTG_enabled;
+bool RTG_enabled;
+bool RTG_initialised;
+volatile bool RTG_hold;
+volatile bool RTG_updated;
 
 int ix;
-int ir [20];
+//int ir [20];
 /*
 enum 
 {
@@ -187,7 +191,9 @@ uint8_t RTG_PALETTE_REG [16] =
 extern struct emulator_config *cfg;
 extern int get_named_mapped_item ( struct emulator_config *cfg, char *name );
 extern void cpu2 ( void );
-//extern volatile uint32_t RTG_VSYNC;
+extern volatile int g_irq;
+extern volatile int g_iack;
+//extern volatile uint32_t last_irq;
 extern volatile int cpu_emulation_running;
 extern volatile int g_buserr;
 volatile uint32_t RTG_VSYNC;
@@ -247,12 +253,17 @@ const uint32_t vga_palette[VGA_PALETTE_LENGTH] = {
     0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
 };
 
+void *dst = NULL;
+void *RTGbuffer = NULL;
+void *lbuffer = NULL;
+
 void draw ( void )
 {
     int      windowWidth;
     int      windowHeight;
-    void     *dst = NULL;
+    //void     *dst = NULL;
     void     *src = NULL;
+    //void     *mapping = NULL;
     Texture  raylib_texture;
 	Image    raylib_fb;
     uint8_t  plane0, plane1, plane2, plane3;
@@ -261,7 +272,11 @@ void draw ( void )
     uint32_t pixel;
     int      SCREEN_SIZE;
     int      ix;
+    static   Rectangle srcrect, dstscale;
+    static   Vector2 origin;
 
+
+    //static int delay = 1800 * 1;
     
     ix = get_named_mapped_item ( cfg, "ET4000vram" );
 
@@ -275,7 +290,8 @@ void draw ( void )
     }
 
     raylib_fb.data = NULL;
-    src = (void*)cfg->map_data [ix];
+    //mapping = (void*)cfg->map_data [ix];
+    //src = RTGbuffer;
 
 reinit:
     /* RESOLUTION is set to zero in the et4000write () */
@@ -319,21 +335,23 @@ reinit:
                 /* res 256 colours */
                 if ( xcb->ts_index [7] == 0xF4 || ( GETRES () == 803 && xcb->ts_index [7] == 0xB4 ) ) 
                 {
-                    dst              = (uint16_t *)malloc ( windowWidth * windowHeight * sizeof (uint16_t) );
+                    //dst              = (uint16_t *)malloc ( windowWidth * windowHeight * sizeof (uint16_t) );
 
                     raylib_fb.format = PIXELFORMAT_UNCOMPRESSED_R5G6B5;
 
                     RESOLUTION       = 2; 
+                    //SCREEN_SIZE      = windowWidth * windowHeight * 2;
                 }
                 
                 /* res 32K/64K colours */
                 else
                 {
-                    dst              = (uint16_t *)malloc ( windowWidth * windowHeight * sizeof (uint16_t) );
+                    //dst              = (uint16_t *)malloc ( windowWidth * windowHeight * sizeof (uint16_t) );
 
                     raylib_fb.format = PIXELFORMAT_UNCOMPRESSED_R5G6B5;
 
                     RESOLUTION       = 4;
+                    //SCREEN_SIZE      = windowWidth * windowHeight * 2;
                 }
             }
 
@@ -343,26 +361,28 @@ reinit:
                 /* Monochrome */
                 if ( xcb->ts_index [2] == 0x01 ) // plane mask
                 {
-                    dst              = (uint8_t *)malloc ( windowWidth * windowHeight * sizeof (uint8_t) ); 
+                    //dst              = (uint8_t *)malloc ( windowWidth * windowHeight * sizeof (uint8_t) ); 
                     
                     raylib_fb.format = PIXELFORMAT_UNCOMPRESSED_GRAYSCALE;
                     
                     RESOLUTION       = 1;
+                    //SCREEN_SIZE          = windowWidth * windowHeight;
                 }
 
                 /* Colour */
                 else if ( xcb->ts_index [2] == 0x0F ) // plane mask
                 {
-                    dst              = (uint16_t *)malloc ( windowWidth * windowHeight * sizeof (uint16_t) ); 
+                    //dst              = (uint16_t *)malloc ( windowWidth * windowHeight * sizeof (uint16_t) ); 
                     
                     raylib_fb.format = PIXELFORMAT_UNCOMPRESSED_R5G6B5;
                     
                     RESOLUTION       = 3;
+                    //SCREEN_SIZE      = windowWidth * windowHeight * 2;
                 }
 
                 else 
                 {
-                    printf ( "Planer setup failed\n" );
+                   printf ( "Planer - plane mask 0x%X\n", xcb->ts_index [2] );
                 }
             }
 
@@ -375,108 +395,143 @@ reinit:
                 raylib_fb.mipmaps    = 1;              
                 raylib_texture       = LoadTextureFromImage ( raylib_fb );
 
+                //SetTextureWrap ( raylib_texture, TEXTURE_WRAP_CLAMP );
+
                 SCREEN_SIZE          = windowWidth * windowHeight;
             }
         }
     }
 
     printf ( "\nRESOLUTION = %d\n\n", RESOLUTION );
+
+    srcrect.x = 0;
+    srcrect.y = 0;
+    srcrect.width = windowWidth;
+    srcrect.height = windowHeight;
+
+    dstscale.width = windowWidth;
+    dstscale.height = windowHeight;
+
+    origin.x = (dstscale.width - MAX_WIDTH) * 0.5;
+    origin.y = (dstscale.height - MAX_HEIGHT) * 0.5;
     
     while ( !WindowShouldClose () && RESOLUTION )     
-    {
+    {        
+        if ( !g_irq )
+        {
         BeginDrawing ();
-        
-            /* Monochrome */
-            if ( RESOLUTION == 1 )
+        RTG_updated = false;
+
+        memcpy ( lbuffer, RTGbuffer, SCREEN_SIZE * 2 ); // bytes or words?
+        src = lbuffer;
+
+        /* Monochrome */
+        if ( RESOLUTION == 1 )
+        {
+            ABPP = 1;
+            uint8_t *dptr = dst;
+            uint8_t *sptr = src;
+            
+            for ( uint32_t address = 0, pixel = 0; pixel < SCREEN_SIZE; address++ ) 
             {
-                ABPP = 1;
-                uint8_t *dptr = dst;
-                uint8_t *sptr = src;
-                
-                for ( uint32_t address = 0, pixel = 0; pixel < SCREEN_SIZE; address++ ) 
-                {
-                    for ( int ppb = 0; ppb < 8 / ABPP; ppb++, pixel++ ) /* pixels per byte eg. 4bpp = 2 */
-                        *( dptr + pixel ) = ( *( sptr + address ) >> ( 7 - ppb ) ) & 0x1 ? 0x20 : 255;//0xa0;
-                }
+                for ( int ppb = 0; ppb < 8 / ABPP; ppb++, pixel++ ) /* pixels per byte eg. 4bpp = 2 */
+                    *( dptr + pixel ) = ( *( sptr + address ) >> ( 7 - ppb ) ) & 0x1 ? 0x20 : 255;//0xa0;
             }
+        }
 
-            /* Colour 8bit 256 colours */
-            else if ( RESOLUTION == 2 )
+        /* Colour 8bit 256 colours */
+        else if ( RESOLUTION == 2 )
+        {
+            uint16_t *dptr = dst;
+            uint8_t  *sptr = src;
+            uint16_t ix;
+            uint8_t  r, g, b;
+
+            for ( address = 0, pixel = 0; pixel < SCREEN_SIZE; pixel++, address++ ) 
             {
-                uint16_t *dptr = dst;
-                uint8_t  *sptr = src;
-                uint16_t ix;
-                uint8_t  r, g, b;
+                //if ( !g_irq )
+                // {
+                ix = sptr [address] * 3;                // pointer to palette index
+                
+                r  = xcb->user_palette [ix++] >> 1;     // 6 bit red to 5 bit
+                g  = xcb->user_palette [ix++];          // 6 bit green 
+                b  = xcb->user_palette [ix] >> 1;       // 6 bit blue t 5 bit
 
-                for ( address = 0, pixel = 0; address < SCREEN_SIZE; pixel++, address++ ) 
+                dptr [pixel] = r << 11 | g << 5 | b;
+                //}
+            }
+        }
+
+        /* Colour 4bit 16 colours */
+        else if ( RESOLUTION == 3 )
+        {
+            uint16_t *dptr = dst;
+            uint16_t *sptr = src;
+            ABPP = 4;
+            uint32_t colour;
+            uint8_t r, g, b;
+            int plane0, plane1, plane2, plane3;
+            
+            for ( uint32_t address = 0, pixel = 0; pixel < SCREEN_SIZE; address += 1 ) 
+            {
+                for ( int ppb = 0; ppb < 16; ppb++, pixel++ )
                 {
-                    ix = sptr [address] * 3;                // pointer to palette index
-                    
-                    r  = xcb->user_palette [ix++] >> 1;     // 6 bit red to 5 bit
-                    g  = xcb->user_palette [ix++];          // 6 bit green 
-                    b  = xcb->user_palette [ix] >> 1;       // 6 bit blue t 5 bit
+                    plane0 = xcb->ts_index [2] & 0x01 ? ( be16toh ( sptr [address] ) >> ( 15 - ppb ) ) & 0x1 : 0; // Blue      
+                    plane1 = xcb->ts_index [2] & 0x02 ? ( be16toh ( sptr [address + 1] ) >> ( 15 - ppb ) ) & 0x1 : 0; // Green     
+                    plane2 = xcb->ts_index [2] & 0x04 ? ( be16toh ( sptr [address + 2] ) >> ( 15 - ppb ) ) & 0x1 : 0; // Red       
+                    plane3 = xcb->ts_index [2] & 0x08 ? ( be16toh ( sptr [address + 3] ) >> ( 15 - ppb ) ) & 0x1 : 0; // Intensity 
 
+                    colour = vga_palette [plane3 << 3 | plane2 << 2 | plane1 << 1 | plane0];
+                    r = ((colour >> 16) & 0xff) >> 3;
+                    g = ((colour >> 8) & 0xff) >> 2;
+                    b = (colour & 0xff) >> 3;
+                    
                     dptr [pixel] = r << 11 | g << 5 | b;
                 }
+                //printf ( "SCREEN SIZE %d - pixel %d, address %d\n", SCREEN_SIZE, pixel, address );
             }
+        }
+        
+        /* Colour 16bit 64k colours */
+        else if ( RESOLUTION == 4 )
+        {
+            uint16_t *dptr = dst;
+            uint16_t *sptr = src;
 
-            /* Colour 4bit 16 colours */
-            else if ( RESOLUTION == 3 )
-            {
-                uint16_t *dptr = dst;
-                uint8_t *sptr = src;
-                ABPP = 4;
-                uint32_t colour;
-                uint8_t r, g, b;
-                int plane0, plane1, plane2, plane3;
-                
-                for ( uint32_t address = 0, pixel = 0; pixel < SCREEN_SIZE; address += ABPP ) 
-                {
-                    for ( int ppb = 0; ppb < 8; ppb++, pixel++ )
-                    {
-                        plane0 = xcb->ts_index [2] & 0x01 ? ( ( sptr [address] ) >> ( 7 - ppb ) ) & 0x1 : 0; // Blue      
-                        plane1 = xcb->ts_index [2] & 0x02 ? ( ( sptr [address + 1] ) >> ( 7 - ppb ) ) & 0x1 : 0; // Green     
-                        plane2 = xcb->ts_index [2] & 0x04 ? ( ( sptr [address + 2] ) >> ( 7 - ppb ) ) & 0x1 : 0; // Red       
-                        plane3 = xcb->ts_index [2] & 0x08 ? ( ( sptr [address + 3] ) >> ( 7 - ppb ) ) & 0x1 : 0; // Intensity 
+            for ( address = 0, pixel = 0; pixel < SCREEN_SIZE; pixel++, address++ ) 
+                    dptr [pixel] = sptr [address];
+        }
+        
+        SetTextureFilter ( raylib_texture, 1 );
 
-                        colour = vga_palette [plane3 << 3 | plane2 << 2 | plane1 << 1 | plane0];
-                        r = ((colour >> 16) & 0xff) >> 3;
-                        g = ((colour >> 8) & 0xff) >> 2;
-                        b = (colour & 0xff) >> 3;
-                        
-                        dptr [pixel] = r << 11 | g << 5 | b;
-                    }
-                    //printf ( "SCREEN SIZE %d - pixel %d, address %d\n", SCREEN_SIZE, pixel, address );
-                }
-            }
-            
-            /* Colour 16bit 64k colours */
-            else if ( RESOLUTION == 4 )
-            {
-                uint16_t *dptr = dst;
-                uint16_t *sptr = src;
-
-                RTG_VSYNC = 1;
-                for ( address = 0, pixel = 0; address < SCREEN_SIZE; pixel++, address++ ) 
-                    *( dptr + pixel ) = *( sptr + address );
-                RTG_VSYNC = 0;
-            }
+       // if ( !g_irq )
+       // {
+        //BeginDrawing ();
+           
+            RTG_VSYNC = 0; /* not in vblank */
+            //RTG_updated = false;
 
             ClearBackground ( RAYWHITE );
+
             UpdateTexture ( raylib_texture, dst );
+        
+            //DrawTexture ( raylib_texture, (MAX_WIDTH - windowWidth) / 2, (MAX_HEIGHT - windowHeight) / 2, RAYWHITE );
+            DrawTexturePro ( raylib_texture, srcrect, dstscale, origin, 0.0f, RAYWHITE );
             
-            DrawTexture ( raylib_texture, (MAX_WIDTH - windowWidth) / 2, (MAX_HEIGHT - windowHeight) / 2, RAYWHITE );
-           
             DrawFPS ( (MAX_WIDTH - windowWidth) / 2 + (windowWidth - 90), (MAX_HEIGHT - windowHeight) / 2 );
-           
+
+            RTG_updated = true;
+            
         EndDrawing ();
+        }
+        RTG_VSYNC = 1; /* in vblank */
     }
 
     printf ( "ET4000 Changing RESOLUTION\n" );
 
     UnloadTexture ( raylib_texture );
 
-    free ( (void*)dst );
+    //free ( (void*)dst );
 
     UnloadRenderTexture ( target );
     //CloseWindow ();
@@ -504,7 +559,7 @@ void *rtgRender ( void *vptr )
     InitWindow ( MAX_WIDTH, MAX_HEIGHT, "PiStorm Atari RTG" );
     target = LoadRenderTexture ( MAX_WIDTH, MAX_HEIGHT );
     SetTextureFilter ( target.texture, TEXTURE_FILTER_BILINEAR);
-    SetTargetFPS ( 120 );
+    SetTargetFPS ( 60 );
 
     usleep ( 100000 );
 
@@ -547,10 +602,37 @@ int et4000Init ( void )
     xcb->ISr0 = 0;
     xcb->FCr = 0;
 
-    //ix = -1;
     first = true;
-    //ResolutionChanged = false;
+    /*
+    buffer = mmap ( NULL, 
+        MAX_WIDTH * MAX_HEIGHT * 2, 
+        PROT_READ | PROT_WRITE, 
+        MAP_SHARED | MAP_ANONYMOUS, 
+        -1, 
+        0 );
 
+    dst = mmap ( NULL, 
+        MAX_WIDTH * MAX_HEIGHT * 2, 
+        PROT_READ | PROT_WRITE, 
+        MAP_SHARED | MAP_ANONYMOUS, 
+        -1, 
+        0 );
+    */
+
+    RTGbuffer = malloc ( MAX_WIDTH * MAX_HEIGHT * 2 );
+    lbuffer   = malloc ( MAX_WIDTH * MAX_HEIGHT * 2 );
+    dst       = malloc ( MAX_WIDTH * MAX_HEIGHT * 2 );
+
+    RTG_initialised = true;
+    RTG_VSYNC = 1;
+    RTG_updated = true;
+
+    //if ( dst == MAP_FAILED || buffer == MAP_FAILED ) 
+    if ( dst == NULL || RTGbuffer == NULL ) 
+    {
+        printf ( "[RTG] ET4000 Initialisation failed\n" );
+        RTG_initialised = false;
+    }
 #ifdef TRYDMA
     //virt_dma_regs = map_segment ( (void *)DMA_BASE, 0x1000 );
     virt_dma_regs = (void *) gpio;
@@ -559,271 +641,305 @@ int et4000Init ( void )
     return 1;
 }
 
-int et4000read ( uint32_t addr, uint32_t *value, int type )
+
+uint32_t et4000read ( uint32_t addr, uint32_t *value, int type )
 {
     //printf ( "ET4000 reg read 0x%X\n", addr );
-    *value = 1;
-
-    uint32_t a = addr - NOVA_ET4000_REGBASE;
-
-    switch ( a )
+    if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGBASE + 0x400 )
     {
-        case 0x3b4: /* monochrome */
-            break;
-        case 0x3b5: /* monochrome */
-            break;
-        case 0x3ba: /* monochrome */
-            break;
-        case 0x3c0: /* ATC register - Address/Index */
-            *value = xcb->atc_ix;
-            printf ( "ET4000 iw register = 0x%X\n", ix );
-            break;
-        case 0x3cc: /* GENERAL register - Miscellaneous Output */
-            break;
-        case 0x3ca: /* Feature Control Register */
-            *value = xcb->FCr;
-            break;
-        case 0x3c7:
-            break;
-        case 0x3c1:
-            break;
-        case 0x3d4:
-            break;
-        case 0x3d5:
-            break;
-        case 0x3c4:
-            break;
-        case 0x3c5:
-            break;
-        case 0x3c3: /* Video Subsystem Register */
-        case 0x46e8:
-            /* if emulator cnf file has not set setenv rtg then do not enable ET4000 */
-            if ( !ET4000enabled && !RTG_enabled )
-            {
-                *value = 0xff;
-                g_buserr = 1; 
-            }
+        *value = 1;
 
-            else
-                *value = xcb->videoSubsystemr;
+        uint32_t a = addr - NOVA_ET4000_REGBASE;
 
-            /* stop emutos initialising ET4000 */
-            if ( first )
-            {
-                //*value = 0xff;
-                first = false;
-                //g_buserr = 1; /* uncomment this line if you don't want EMUtos to init ET4000 */
-            }
+        switch ( a )
+        {
+            case 0x3b4: /* monochrome */
+                break;
+            case 0x3b5: /* monochrome */
+                break;
+            case 0x3ba: /* monochrome */
+                break;
+            case 0x3c0: /* ATC register - Address/Index */
+                *value = xcb->atc_ix;
+                printf ( "ET4000 iw register = 0x%X\n", ix );
+                break;
+            case 0x3cc: /* GENERAL register - Miscellaneous Output */
+                break;
+            case 0x3ca: /* Feature Control Register */
+                *value = xcb->FCr;
+                break;
+            case 0x3c7:
+                break;
+            case 0x3c1:
+                break;
+            case 0x3d4:
+                break;
+            case 0x3d5:
+                break;
+            case 0x3c4:
+                break;
+            case 0x3c5:
+                break;
+            case 0x3c3: /* Video Subsystem Register */
+            case 0x46e8:
+                /* if emulator cnf file has not set setenv rtg then do not enable ET4000 */
+                if ( !ET4000enabled && !RTG_enabled )
+                {
+                    *value = 0xff;
+                    g_buserr = 1; 
+                }
 
-            break;
-        case 0x3c2: /* Input Status Register Zero */
-            *value = xcb->ISr0;
-            break;
-        case 0x3c6: /* */
-            break;
-        case 0x3c8: /* */
-            break;
-        case 0x3c9:
-            *value = xcb->user_palette [xcb->palette_ix_rd];
-            break;
-        case 0x3cd:
-            break;
-        case 0x3ce:
-            *value = xcb->gdc_ix;
-            break;
-        case 0x3cf:
-            *value = xcb->gdc_index [xcb->gdc_ix];
-            break;
-        case 0x3da: /* GENERAL register - Input Status Register One */
-            *value = (~RTG_VSYNC << 7) | (RTG_VSYNC << 3) | ET4000enabled;
-            xcb->atc_ixdff = false; /* reset index/data flip-flop */
-            break;
+                else
+                    *value = xcb->videoSubsystemr;
 
-        default:
-            printf ( "ET4000 unknown read register 0x%X\n", a );
-            break;
+                /* stop emutos initialising ET4000 */
+                if ( first )
+                {
+                    //*value = 0xff;
+                    first = false;
+                    //g_buserr = 1; /* uncomment this line if you don't want EMUtos to init ET4000 */
+                }
+
+                break;
+            case 0x3c2: /* Input Status Register Zero */
+                *value = xcb->ISr0;
+                break;
+            case 0x3c6: /* */
+                break;
+            case 0x3c8: /* */
+                break;
+            case 0x3c9:
+                *value = xcb->user_palette [xcb->palette_ix_rd];
+                break;
+            case 0x3cd:
+                break;
+            case 0x3ce:
+                *value = xcb->gdc_ix;
+                break;
+            case 0x3cf:
+                *value = xcb->gdc_index [xcb->gdc_ix];
+                break;
+            case 0x3da: /* GENERAL register - Input Status Register One */
+                //*value = (~RTG_VSYNC << 7) | (RTG_VSYNC << 3) | ET4000enabled;
+                *value = ET4000enabled;
+                xcb->atc_ixdff = false; /* reset index/data flip-flop */
+                break;
+
+            default:
+                printf ( "ET4000 unknown read register 0x%X\n", a );
+                break;
+        }
+
+        return 0;
     }
 
-    return 1;
+    else if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMTOP )
+    {
+        if ( type == OP_TYPE_BYTE )
+            return *( uint8_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) );
+
+        else if ( type == OP_TYPE_WORD )
+            return be16toh ( *( uint16_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
+
+        else if ( type == OP_TYPE_LONGWORD )
+            return be32toh ( *(uint32_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
+    }
 }
 
 
-int et4000write ( uint32_t addr, uint32_t value, int type )
+uint32_t et4000write ( uint32_t addr, uint32_t value, int type )
 {
     //printf ( "ET4000 reg write 0x%X, 0x%X\n", addr, value );
 
-    uint32_t a = addr - NOVA_ET4000_REGBASE;
-
-    switch ( a )
+    if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGBASE + 0x400 )
     {
-        case 0x3b4:
-            break;
-        case 0x3b5:
-            break;
-        case 0x3b8: /* Mode Control Register monochrome */
-            break;
-        case 0x3bf: /* Hercules Compatibility Register */
-            if ( value == 0x03 )
-                xcb->KEY = true;
-            break;
-        case 0x3ba: /* monochrome */
-            break;
-        case 0x3cd:
-            break;
-        case 0x3ce: /* GDC (Graphics Data Controller) Index register */
-            xcb->gdc_ix = value & 0x0f;
-            break;
-        case 0x3cf:
-            xcb->gdc_index [xcb->gdc_ix] = value;
-            break;
-        case 0x3c4: /* TS Index */
-            xcb->ts_ix = value & 0x07;
-            break;
-        case 0x3c5: /* TS Indexed Register 2: Write Plane Mask */
+        uint32_t a = addr - NOVA_ET4000_REGBASE;
 
-            if ( xcb->ts_ix == 2 )
-                printf ( "TS Write Plane Mask = 0x%X\n", value );
+        switch ( a )
+        {
+            case 0x3b4:
+                break;
+            case 0x3b5:
+                break;
+            case 0x3b8: /* Mode Control Register monochrome */
+                break;
+            case 0x3bf: /* Hercules Compatibility Register */
+                if ( value == 0x03 )
+                    xcb->KEY = true;
+                break;
+            case 0x3ba: /* monochrome */
+                break;
+            case 0x3cd:
+                break;
+            case 0x3ce: /* GDC (Graphics Data Controller) Index register */
+                xcb->gdc_ix = value & 0x0f;
+                break;
+            case 0x3cf:
+                xcb->gdc_index [xcb->gdc_ix] = value;
+                break;
+            case 0x3c4: /* TS Index */
+                xcb->ts_ix = value & 0x07;
+                break;
+            case 0x3c5: /* TS Indexed Register 2: Write Plane Mask */
 
-            else if ( xcb->ts_ix == 4 )
-            {
-                //if ( (xcb->ts_index [xcb->ts_ix] & 0x08) != (value & 0x08) )
-                //{
-                    printf ( "Resolution changed\n" );
-                    //ResolutionChanged = true;
-                    RESOLUTION = 0;
-                //}
-            
-                printf ( "TS Memory Mode = 0x%X - Map mask = %d, %s mode enabled\n", value, value & 0x04, value & 0x08 ? "Chain 4 (Linear)" : "Planer" );
-            }
+                if ( xcb->ts_ix == 2 )
+                    printf ( "TS Write Plane Mask = 0x%X\n", value );
 
-            else if ( xcb->ts_ix == 7 )
-            {
-                printf ( "TS Auxillary Mode = 0x%X - %s mode enabled\n", value, value & 0x80 ? "VGA" : "EGA" );
-                xcb->VGAmode = value & 0x80;
-            }
-
-            xcb->ts_index [xcb->ts_ix] = value;
-
-            break;
-        case 0x3c2: /* GENERAL register - Miscellaneous Output */
-            printf ( "MISC_W using CRTC addresses %s\n",
-                value & 0x01 ? "3Dx Colour" : "3Bx Monochrome" );
-            printf ( "MISC_W DMA access %s\n",
-                value & 0x02 ? "enabled" : "disabled" );
-            printf ( "MISC_W MCLK = 0x%X\n", value & 0x0c );
-
-            xcb->MISC_Wr = value;
-            break;
-        case 0x3c3:
-        case 0x46e8:
-            /* enable VGA mode */
-            if ( value == 0x01 )
-            {
-                ET4000enabled = true;
-                printf ( "ET4000 Enable VGA SubSystem\n" );
-            }
-
-            else
-            {
-                ET4000enabled = false;
-                printf ( "ET4000 Disable VGA SubSystem 0x%X\n", value );
-            }
-
-            xcb->videoSubsystemr = value;
-            break;
-
-        /* 
-         * 3C6 PALETTE MASK
-         * 3C7 PALETTE READ
-         * 3C8 PALETTE WRITE
-         * 3C9 PALETTE DATA
-         */
-        case 0x3c6:
-            xcb->paletteWrite = false;
-
-            if ( value == 0xFF )
-                xcb->paletteWrite = true;
-            
-            break;
-        case 0x3c7: /* PEL READ ADDRESS */
-            xcb->palette_ix_rd = value * 3;
-            break;
-        case 0x3c8:
-            //printf ( "palette index = %d\n", value );
-            xcb->palette_ix = value * 3;
-          
-            break;
-        case 0x3c9: /* PEL DATA - NOTE must have three consecutive writes to populate RGB */
-            //printf ( "palette index 0x%04X = 0x%X\n", xcb->palette_ix, value );
-            if ( xcb->paletteWrite == true )
-                xcb->user_palette [xcb->palette_ix++] = value;
-
-            //xcb->palette_ix += 1;
-
-            break;
-        case 0x3c0: /* ATC (Attribute Controller) register - Address/Index (23 registers) */
-            
-            if ( xcb->atc_ixdff == false ) /* index */
-                xcb->atc_ix = value & 0x1f;
-
-            if ( xcb->atc_ixdff == true )   /* data */
-                xcb->atc_index [xcb->atc_ix] = value;
-
-            /* every write toggles the index/data bit */
-            xcb->atc_ixdff = !xcb->atc_ixdff;
-            xcb->atc_paletteRAMaccess = value & 0x20;
-
-            break;
-        case 0x3d4: /* 6845 CRT Control Register */
-            xcb->crtc_ix = value;
-            
-            break;
-        case 0x3d5: /* 6845 CRT Data Register */
-            if ( (xcb->crtc_ix < 0x32) || (xcb->crtc_ix == 0x33) || (xcb->crtc_ix == 0x35) || (xcb->crtc_ix > 0x18 && xcb->KEY) )
-                xcb->crtc_index [xcb->crtc_ix] = value;
-
-            //if ( xcb->crtc_ix > 0x35 && xcb->KEY )
-            //    printf ( "6845 Video System Configuration %d = 0x%X\n", xcb->crtc_ix == VSCONF1 ? 1 : 2, xcb->crtc_index [xcb->crtc_ix] );
-
-            if ( xcb->crtc_ix == VSCONF1 && xcb->KEY )
-            {
-                printf ( "6845 VSCONF1 Addressing Mode %s\n", value & 0x20 ? "TLI" : "IBM" );
-                printf ( "6845 VSCONF1 16 bit display memory r/w %s\n", value & 0x40 ? "enabled" : "disabled" );
-                printf ( "6845 VSCONF1 16 bit IO r/w %s\n", value & 0x80 ? "enabled" : "disabled" );
-                xcb->VSCONF1r = value;
-            }
-
-            if ( xcb->crtc_ix == VSCONF2 && xcb->KEY )
-            {
-                printf ( "6845 VSCONF2 Addressing Mode %s\n", value & 0x20 ? "TLI" : "IBM" );
-                xcb->VSCONF2r = value;
-            }
-
-            break;
-        case 0x3d8: /* (RW) 6845 Display Mode Control Register colour */
-            if ( value == 0xA0 )
-                xcb->KEY = true;
-
-            else
-            {
-                xcb->DisplayModeControlr = value;
-
-                printf ( "DisplayModeControlRegister - %s\n", value & 0x04 ? "Monochrome" : "Colour" );
-                printf ( "DisplayModeControlRegister - %s\n", value & 0x10 ? "Monochrome 640x200" : "" );
+                else if ( xcb->ts_ix == 4 )
+                {
+                    //if ( (xcb->ts_index [xcb->ts_ix] & 0x08) != (value & 0x08) )
+                    //{
+                        printf ( "Resolution changed\n" );
+                        //ResolutionChanged = true;
+                        RESOLUTION = 0;
+                    //}
                 
-                printf ( "Display Mode Control Register 3D8 = 0x%X\n", value );
-            }
-            break;
-        case 0x3d9: /* (WO) 6845 Display Colour Control Register */
-            printf ( "Colour Select Register - 0x%X\n", value );
-            break;
-        case 0x3da: /* 6845 Display Status Control Register */
-            break;
+                    printf ( "TS Memory Mode = 0x%X - Map mask = %d, %s mode enabled\n", value, value & 0x04, value & 0x08 ? "Chain 4 (Linear)" : "Planer" );
+                }
 
-        default:
-            printf ( "ET4000 unknown write register 0x%X\n", a );
-            break;
+                else if ( xcb->ts_ix == 7 )
+                {
+                    printf ( "TS Auxillary Mode = 0x%X - %s mode enabled\n", value, value & 0x80 ? "VGA" : "EGA" );
+                    xcb->VGAmode = value & 0x80;
+                }
+
+                xcb->ts_index [xcb->ts_ix] = value;
+
+                break;
+            case 0x3c2: /* GENERAL register - Miscellaneous Output */
+                printf ( "MISC_W using CRTC addresses %s\n",
+                    value & 0x01 ? "3Dx Colour" : "3Bx Monochrome" );
+                printf ( "MISC_W DMA access %s\n",
+                    value & 0x02 ? "enabled" : "disabled" );
+                printf ( "MISC_W MCLK = 0x%X\n", value & 0x0c );
+
+                xcb->MISC_Wr = value;
+                break;
+            case 0x3c3:
+            case 0x46e8:
+                /* enable VGA mode */
+                if ( value == 0x01 )
+                {
+                    ET4000enabled = true;
+                    printf ( "ET4000 Enable VGA SubSystem\n" );
+                }
+
+                else
+                {
+                    ET4000enabled = false;
+                    printf ( "ET4000 Disable VGA SubSystem 0x%X\n", value );
+                }
+
+                xcb->videoSubsystemr = value;
+                break;
+
+            /* 
+            * 3C6 PALETTE MASK
+            * 3C7 PALETTE READ
+            * 3C8 PALETTE WRITE
+            * 3C9 PALETTE DATA
+            */
+            case 0x3c6:
+                xcb->paletteWrite = false;
+
+                if ( value == 0xFF )
+                    xcb->paletteWrite = true;
+                
+                break;
+            case 0x3c7: /* PEL READ ADDRESS */
+                xcb->palette_ix_rd = value * 3;
+                break;
+            case 0x3c8:
+                //printf ( "palette index = %d\n", value );
+                xcb->palette_ix = value * 3;
+            
+                break;
+            case 0x3c9: /* PEL DATA - NOTE must have three consecutive writes to populate RGB */
+                //printf ( "palette index 0x%04X = 0x%X\n", xcb->palette_ix, value );
+                if ( xcb->paletteWrite == true )
+                    xcb->user_palette [xcb->palette_ix++] = value;
+
+                //xcb->palette_ix += 1;
+
+                break;
+            case 0x3c0: /* ATC (Attribute Controller) register - Address/Index (23 registers) */
+                
+                if ( xcb->atc_ixdff == false ) /* index */
+                    xcb->atc_ix = value & 0x1f;
+
+                if ( xcb->atc_ixdff == true )   /* data */
+                    xcb->atc_index [xcb->atc_ix] = value;
+
+                /* every write toggles the index/data bit */
+                xcb->atc_ixdff = !xcb->atc_ixdff;
+                xcb->atc_paletteRAMaccess = value & 0x20;
+
+                break;
+            case 0x3d4: /* 6845 CRT Control Register */
+                xcb->crtc_ix = value;
+                
+                break;
+            case 0x3d5: /* 6845 CRT Data Register */
+                if ( (xcb->crtc_ix < 0x32) || (xcb->crtc_ix == 0x33) || (xcb->crtc_ix == 0x35) || (xcb->crtc_ix > 0x18 && xcb->KEY) )
+                    xcb->crtc_index [xcb->crtc_ix] = value;
+
+                //if ( xcb->crtc_ix > 0x35 && xcb->KEY )
+                //    printf ( "6845 Video System Configuration %d = 0x%X\n", xcb->crtc_ix == VSCONF1 ? 1 : 2, xcb->crtc_index [xcb->crtc_ix] );
+
+                if ( xcb->crtc_ix == VSCONF1 && xcb->KEY )
+                {
+                    printf ( "6845 VSCONF1 Addressing Mode %s\n", value & 0x20 ? "TLI" : "IBM" );
+                    printf ( "6845 VSCONF1 16 bit display memory r/w %s\n", value & 0x40 ? "enabled" : "disabled" );
+                    printf ( "6845 VSCONF1 16 bit IO r/w %s\n", value & 0x80 ? "enabled" : "disabled" );
+                    xcb->VSCONF1r = value;
+                }
+
+                if ( xcb->crtc_ix == VSCONF2 && xcb->KEY )
+                {
+                    printf ( "6845 VSCONF2 Addressing Mode %s\n", value & 0x20 ? "TLI" : "IBM" );
+                    xcb->VSCONF2r = value;
+                }
+
+                break;
+            case 0x3d8: /* (RW) 6845 Display Mode Control Register colour */
+                if ( value == 0xA0 )
+                    xcb->KEY = true;
+
+                else
+                {
+                    xcb->DisplayModeControlr = value;
+
+                    printf ( "DisplayModeControlRegister - %s\n", value & 0x04 ? "Monochrome" : "Colour" );
+                    printf ( "DisplayModeControlRegister - %s\n", value & 0x10 ? "Monochrome 640x200" : "" );
+                    
+                    printf ( "Display Mode Control Register 3D8 = 0x%X\n", value );
+                }
+                break;
+            case 0x3d9: /* (WO) 6845 Display Colour Control Register */
+                printf ( "Colour Select Register - 0x%X\n", value );
+                break;
+            case 0x3da: /* 6845 Display Status Control Register */
+                break;
+
+            default:
+                printf ( "ET4000 unknown write register 0x%X\n", a );
+                break;
+        }
+
+        return 1;
     }
 
-    return 1;
+    else if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMTOP )
+    {
+        if ( type == OP_TYPE_BYTE )
+            *( (uint8_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) ) = value;
+
+        else if ( type == OP_TYPE_WORD )
+            *( (uint16_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) ) = htobe16 (value);
+
+        else if ( type == OP_TYPE_LONGWORD )
+            *( (uint32_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) ) = htobe32 (value);
+
+        return 1;
+    }
 }
