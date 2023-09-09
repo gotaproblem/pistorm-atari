@@ -129,21 +129,25 @@ Run the emulator using `sudo ./emulator --config ../configs/myatari.cfg`.
 To exit the emulator you can press `Ctrl+C`.
 
 # RTG Graphics - Raylib
-Enhanced video modes are available for an OS such as Mint. To use this feature, a couple of changes are needed.
+# NOTE Sep 2023 - no-longer using raylib
+Enhanced video modes are available for GEM and Mint. To use this feature, a couple of changes are needed.
 * 1. copy the configs/config.txt file to /boot/
 * `sudo cp configs/config.txt /boot/config.txt`
 * A reboot is needed after this
 * `sudo reboot`
 * 2. Changes to the emulator configuration file are needed
-* edit your .cfg file and uncomment (remove the preceding hash), the following two lines
+* edit your .cfg file and uncomment (remove the preceding hash), the following three lines
 * #setvar rtg
-* #map type=ram address=0x00B00000 size=0x100000 id=RTG
+* #map type=ram address=0x00C00000 size=0x100000 id=ET4000vram
+* #map type=register address=0x00D00000 size= 0x400 id=ET4000reg
 
 **A mint specific configuration file is now included in the repository**
 * Make a copy of configs/mint.cfg
 * `cp configs/mint.cfg ../configs/`
 
 Finally, perform a rebuild
+To build now, using RTG, you must alter the git branch before compiling
+* `git checkout et4000-dev`
 * `make clean`
 * `make`
 
