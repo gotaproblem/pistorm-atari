@@ -25,6 +25,7 @@
 #include <stdbool.h>
 #include "et4000.h"
 
+
 #define MAX_WIDTH 1024
 #define MAX_HEIGHT 768
 #define ATARI_VRAM_BASE   0x003f8000 /* 4MB machine - will get changed at detection */
@@ -66,7 +67,7 @@ size_t screensize = 0;
 void *fbptr;
 
 void et4000Draw ( int, int );
-int FRAME_RATE = 20000;
+int FRAME_RATE = 20000; /* 50 Hz - 20ms */
 
 /*
  *  Standard colour palette - taken from ATARI ST INTERNALS - ROM listing
@@ -280,11 +281,15 @@ void draw ( int res )
 }
 
 
+int kbhit (void);
+void screenDump (int, int);
+
+
 void *rtgRender ( void* vptr ) 
 {
     int    wait;
     //int    render = 1;
-    int    thisRES = LOW_RES;
+    int    thisRES = RESOLUTION1;//LOW_RES;
     int    windowWidth;
     int    windowHeight;
     int    SCREEN_SIZE;
@@ -298,11 +303,11 @@ void *rtgRender ( void* vptr )
     {
         //RTG_VSYNC = 0;
 
-        if ( RTGresChanged )
+        if ( ET4000enabled && RTGresChanged )
         {
             thisRES = RTG_RES;
-            COLOURDEPTH = 0;
-
+            COLOURDEPTH = 1;
+#ifdef NATIVE_RES
             if ( thisRES == LOW_RES )
             {
                 vinfo.xres = 320;
@@ -374,6 +379,9 @@ void *rtgRender ( void* vptr )
             }
 
             else if ( thisRES > HI_RES )
+#else
+            if ( thisRES > HI_RES )
+#endif
             {
                 if ( (xcb->VGAmode & 0x80) == 0x80 )
                 {
@@ -406,6 +414,7 @@ void *rtgRender ( void* vptr )
                     vinfo.xres_virtual = windowWidth;
                     vinfo.yres_virtual = windowHeight;
                     vinfo.bits_per_pixel = 16;
+
                     if ( ioctl ( fbfd, FBIOPUT_VSCREENINFO, &vinfo ) )
                     {
                         printf ( "RESOLUTION2 error setting virtual; width / height\n" );
@@ -470,7 +479,8 @@ void *rtgRender ( void* vptr )
 
                         else 
                         {
-                        printf ( "Planer - plane mask 0x%X\n", xcb->ts_index [2] );
+                            printf ( "Planer - plane mask 0x%X\n", xcb->ts_index [2] );
+                            SCREEN_SIZE      = windowWidth * windowHeight;
                         }
                     }
 
@@ -515,7 +525,7 @@ void *rtgRender ( void* vptr )
 
             screensize = finfo.smem_len; 
 
-            //printf ( "screensize = 0x%X\n", screensize );
+            printf ( "screensize = 0x%X\n", screensize );
 
             fbp = (void *)mmap ( 0, 
                         screensize, 
@@ -546,10 +556,14 @@ void *rtgRender ( void* vptr )
         gettimeofday ( &start, NULL );
 
         /* draw the screen */
+#ifdef NATIVE_RES
         if ( thisRES < RESOLUTION1 )
             draw ( thisRES );
 
         else
+#endif
+        /* only draw screen if VGA sub-system has been enabled */
+        if ( ET4000enabled )
             et4000Draw ( windowWidth, windowHeight );
 
         RTG_VSYNC = 1;
@@ -557,6 +571,16 @@ void *rtgRender ( void* vptr )
         /* rough frame rate delay */
         while ( 1 )
         {
+            /* simple screengrab - could be improved A LOT */
+            /* pressing 'p' on the keyboard executes a system call to grab the framebuffer */
+            /* followed by a second system call to ffmpeg which converts the screendump to a .png file */
+            /*
+            if ( thisRES > HI_RES && kbhit () )
+            {
+                if ( getchar () == 'p' )
+                    screenDump ( windowWidth, windowHeight );
+            }
+            */
             gettimeofday ( &stop, NULL );
 
             if ( ( (stop.tv_sec - start.tv_sec) * 1000000 ) + (stop.tv_usec - start.tv_usec) > FRAME_RATE )
@@ -593,8 +617,8 @@ void rtgInit ( void )
     char func [] = "[RTG] ";
 
     /* check .cfg has setvar rtg */
-    if ( !RTG_enabled )
-        return;
+    //if ( !RTG_enabled )
+    //    return;
 
     // Open the file for reading and writing
     fbfd = open ( "/dev/fb0", O_RDWR );
@@ -635,14 +659,15 @@ void rtgInit ( void )
     fbp = NULL;    
 
     /* Atari screen buffer - not used for ET4000 */
+    /*
     if ( ( screen = (volatile void *)calloc ( 640 * 400, 1 ) ) == NULL )
     {
         printf ( "%sFATAL - failed to allocate memory to screen buffer\n", func );
         return;
     }
-
-    RTG_ATARI_SCREEN_RAM = ATARI_VRAM_BASE;
-    RTG_RES = LOW_RES;
+    */
+    //RTG_ATARI_SCREEN_RAM = ATARI_VRAM_BASE;
+    RTG_RES = RESOLUTION1; //LOW_RES;
     RTGresChanged = 1;
 }
 
@@ -703,7 +728,7 @@ int et4000Init ( void )
     xcb->FCr = 0;
 
     first = true;
-    RTGbuffer = malloc ( 1024 * 768 * 2 );
+    RTGbuffer = malloc ( 1024 * 768 * 2 ); /* allocate max size */
     RTG_VSYNC = 1;
     RTG_updated = true;
 
@@ -867,10 +892,12 @@ void et4000Draw ( int windowWidth, int windowHeight )
 
 uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
 {
-    //printf ( "ET4000 reg read 0x%X\n", addr );
-    if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGBASE + 0x400 )
+    
+    if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGTOP )
     {
         *value = 1;
+
+       // printf ( "ET4000 reg read 0x%X\n", addr );
 
         uint32_t a = addr - NOVA_ET4000_REGBASE;
 
@@ -906,7 +933,8 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
             case 0x3c3: /* Video Subsystem Register */
             case 0x46e8:
                 /* if emulator cnf file has not set setenv rtg then do not enable ET4000 */
-                if ( !ET4000enabled && !RTG_enabled )
+                //if ( !ET4000enabled && !RTG_enabled )
+                if ( !RTG_enabled )
                 {
                     *value = 0xff;
                     g_buserr = 1; 
@@ -918,9 +946,9 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
                 /* stop emutos initialising ET4000 */
                 if ( first )
                 {
-                    //*value = 0xff;
+                    *value = 0;
                     first = false;
-                    //g_buserr = 1; /* uncomment this line if you don't want EMUtos to init ET4000 */
+                    g_buserr = 1; /* uncomment this line if you don't want EMUtos to init ET4000 */
                 }
 
                 break;
@@ -969,7 +997,7 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
 
 uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
 {
-    if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGBASE + 0x400 )
+    if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGTOP )
     {
         uint32_t a = addr - NOVA_ET4000_REGBASE;
 
@@ -1163,4 +1191,55 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
         *( (uint32_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) ) = htobe32 (value);
 
     return 1;
+}
+
+
+/* ------------------------------------------------------------------------- */
+
+/* terminal IO */
+#include <stdio.h>
+#include <termios.h>
+#include <unistd.h>
+#include <fcntl.h>
+ 
+int kbhit (void)
+{
+  struct termios oldt, newt;
+  int ch;
+  int oldf;
+ 
+  tcgetattr(STDIN_FILENO, &oldt);
+  newt = oldt;
+  newt.c_lflag &= ~(ICANON | ECHO);
+  tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+  oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+  fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+ 
+  ch = getchar();
+ 
+  tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+  fcntl(STDIN_FILENO, F_SETFL, oldf);
+ 
+  if ( ch != EOF )
+  {
+    ungetc(ch, stdin);
+    return 1;
+  }
+ 
+  return 0;
+}
+
+
+void screenDump ( int w, int h )
+{
+    FILE fp;
+    char *dumpfile = "screendump.raw";
+    char filename [13];
+    char command [300];
+
+    sprintf ( command, "ffmpeg -vcodec rawvideo -f rawvideo -pix_fmt rgb565le -s %dx%d -i %s -f image2 -frames 1 -hide_banner -y -vcodec png screendump.png", w, h, dumpfile );
+    system ( "cat /dev/fb0 > screendump.raw" );
+    system ( command );
+
+    return;
 }

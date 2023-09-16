@@ -1967,8 +1967,8 @@ static inline void m68ki_set_sr_noint_nosp(m68ki_cpu_core *state, uint value)
 }
 
 static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_level);
-extern volatile int g_irq;
-extern bool RTG_enabled;
+//extern volatile int g_irq;
+//extern bool RTG_enabled;
 /* Set the status register and check for interrupts */
 static inline void m68ki_set_sr(m68ki_cpu_core *state, uint value)
 {
@@ -2469,31 +2469,31 @@ static inline void m68ki_exception_privilege_violation(m68ki_cpu_core *state)
 /* Exception for bus error */
 static inline void m68ki_exception_bus_error(m68ki_cpu_core *state)
 {
-	//int i;
 	/* If we were processing a bus error, address error, or reset,
 	 * this is a catastrophic failure.
 	 * Halt the CPU
 	 */
-	/*
+#if (0)
 	if(CPU_RUN_MODE == RUN_MODE_BERR_AERR_RESET)
 	{
 		m68k_read_memory_8(0x00ffff01);
 		CPU_STOPPED = STOP_LEVEL_HALT;
 		return;
 	}
-	*/
-/*
+	
+
 	if(CPU_RUN_MODE != RUN_MODE_NORMAL ) {
     	printf("Double fault!\n"); 
 		CPU_STOPPED = STOP_LEVEL_HALT;
 		return;		
 	}
+	
 	CPU_RUN_MODE = RUN_MODE_BERR_AERR_RESET;
-*/
+#endif
 	/* Use up some clock cycles and undo the instruction's cycles */
 	USE_CYCLES(CYC_EXCEPTION[EXCEPTION_BUS_ERROR] - CYC_INSTRUCTION[REG_IR]);
 
-	//for (i = 15; i >= 0; i--){
+	//for ( int i = 15; i >= 0; i--){
 	//	REG_DA[i] = REG_DA_SAVE[i];
 	//}
 

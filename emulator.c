@@ -242,6 +242,7 @@ execute:
 
     if ( GET_CYCLES () > 0 ) // cryptodad make sure m68kcpu.h m68ki_set_sr() has relevent line commented out
       goto execute;
+
     //REG_PPC = REG_PC;
 	}
 
@@ -341,7 +342,6 @@ run:
       m68k_set_irq ( last_irq );
 
       m68ki_check_interrupts ( state );
-      //g_irq = 0;
     }
   }
 
@@ -350,7 +350,7 @@ run:
    // last_last_irq = 0;
     m68k_set_irq ( 0 );
   }
-  M68K_END_TIMESLICE;
+  //M68K_END_TIMESLICE;
   //m68ki_check_interrupts ( state );
 #endif
 
@@ -499,15 +499,15 @@ int main ( int argc, char *argv[] )
   {
     rtgInit ();
 
-    int ix = get_named_mapped_item ( cfg, "ET4000vram" );
+    //int ix = get_named_mapped_item ( cfg, "ET4000vram" );
 
-    if ( cfg->map_offset [ix] )
-    { 
+    //if ( cfg->map_offset [ix] )
+    //{ 
       et4000Init ();
 
-      RTG_VRAM_BASE = (uint32_t)RTGbuffer; 
-      RTG_VRAM_SIZE = cfg->map_size [ix];
-    }
+      //RTG_VRAM_BASE = (uint32_t)RTGbuffer; 
+      //RTG_VRAM_SIZE = cfg->map_size [ix];
+    //}
   }
   
   err = pthread_create ( &cpu_tid, NULL, &cpu_task, NULL );
@@ -521,7 +521,7 @@ int main ( int argc, char *argv[] )
     printf ( "[MAIN] CPU thread created successfully\n" );
   }
 
-  if ( RTG_enabled ) //&& ET4000Initialised )
+  if ( ET4000Initialised )
   {
     err = pthread_create ( &rtg_tid, NULL, &rtgRender, NULL );
 
@@ -556,7 +556,7 @@ int main ( int argc, char *argv[] )
   //system ( "echo -1 >/proc/sys/kernel/sched_rt_runtime_us" );
   //cpu3 (); // anchor main task to cpu3 
 
-  if ( RTG_enabled )
+  if ( ET4000Initialised )
     pthread_join ( rtg_tid, NULL );
 
   else
@@ -608,8 +608,6 @@ uint16_t cpu_irq_ack ( int level )
 
 static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_t *res ) 
 {
-  if ( IDE_IDE_enabled && (addr >= (0xFF000000 | IDEBASE) && addr < (0xFF000000 | IDETOP) ) )
-    addr &= 0x00ffffff;
    // printf ( "IDE read\n" );
   
   //if ( addr >= 0x00ff8a00 && addr < 0x00ff8a3e )
@@ -620,16 +618,20 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
     //return 1;
   //}
 
-  if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGBASE + 0x400 )
+  if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
   {
     RTG_RAMLOCK = true;
 
-    *res = et4000Read ( addr, res, type );
+    //*res = et4000Read ( addr, res, type );
+    *res = et4000Read ( addr, &target, type );
 
     RTG_RAMLOCK = false;
 
     return 1;
   }
+
+  else if ( IDE_IDE_enabled && (addr >= (0xFF000000 | IDEBASE) && addr < (0xFF000000 | IDETOP) ) )
+    addr &= 0x00ffffff;
 
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) )
   {
@@ -717,18 +719,27 @@ extern volatile int RTGresChanged;
 extern volatile uint16_t RTG_PALETTE_REG [16];
 extern void rtg ( int size, uint32_t address, uint32_t data );
 
-extern volatile bool ET4000enabled;
+//extern volatile bool ET4000enabled;
 #endif
 
 
 static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32_t val ) 
 {
-  if ( IDE_IDE_enabled && (addr >= (0xFF000000 | IDEBASE) && addr < (0xFF000000 | IDETOP) ) )
-    addr &= 0x00ffffff;
+  if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
+  {
+    RTG_RAMLOCK = true;
 
-#ifdef RTG
+    et4000Write ( addr, val, type );
+
+    RTG_RAMLOCK = false;
+
+    return 1;
+  }
+//#ifdef RTG
+#if (0)
   if ( !ET4000enabled )
   {
+  #ifdef NATIVE_RES
     /* ATARI System Variables - do before anything else */
     if ( RTG_enabled && addr >= SYS_VARS && addr < SYS_VARS_TOP )
     {
@@ -782,19 +793,23 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
 
       return 0;
     }
+  #endif
   }
+#endif
+ // if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
+ // {
+ //   RTG_RAMLOCK = true;
 
-  if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGBASE + 0x400 )
-  {
-    RTG_RAMLOCK = true;
+ //   et4000Write ( addr, val, type );
 
-    et4000Write ( addr, val, type );
+ //   RTG_RAMLOCK = false;
 
-    RTG_RAMLOCK = false;
+  //  return 1;
+  //}
+//#endif 
 
-    return 1;
-  }
-#endif 
+  else if ( IDE_IDE_enabled && (addr >= (0xFF000000 | IDEBASE) && addr < (0xFF000000 | IDETOP) ) )
+    addr &= 0x00ffffff;
 
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) ) 
   {

@@ -160,7 +160,7 @@ gpio + 34 = GPAFEN  GPIO Pin Asysnchronous Falling Edge Detect Enable 0
 //#define TXN_END (0x00ffff00 | (1 << PIN_WR) | (1 << PIN_RD) | (REG_ADDR_HI << PIN_A0) | (REG_ADDR_LO << PIN_A0))
 
 
-//volatile int g_irq;
+volatile int g_irq;
 volatile int g_buserr;
 
 
