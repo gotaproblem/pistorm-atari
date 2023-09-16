@@ -37,8 +37,8 @@ static bool first;
 volatile bool ET4000enabled = false;
 
 bool ET4000Initialised;
-volatile bool RTG_hold;
-volatile bool RTG_updated;
+//volatile bool RTG_hold;
+//volatile bool RTG_updated;
 void *RTGbuffer = NULL;
 volatile int COLOURDEPTH = 0;
 volatile uint32_t RTG_VSYNC;
@@ -49,7 +49,8 @@ volatile uint32_t RTG_ATARI_SCREEN_RAM;
 volatile uint16_t RTG_PALETTE_REG [16]; /* palette colours */
 volatile uint8_t  RTG_RES; /* bits 0 & 1 - 00 = 320x200, 01 = 640x200, 10 = 640x400 */
 int ix;
-bool RTG_enabled;
+bool RTG_enabled = false;
+bool screenGrab = false;
 
 extern volatile uint32_t RTG_VRAM_BASE;
 extern volatile uint32_t RTG_VRAM_SIZE;
@@ -574,13 +575,15 @@ void *rtgRender ( void* vptr )
             /* simple screengrab - could be improved A LOT */
             /* pressing 'p' on the keyboard executes a system call to grab the framebuffer */
             /* followed by a second system call to ffmpeg which converts the screendump to a .png file */
-            /*
-            if ( thisRES > HI_RES && kbhit () )
+            
+            if ( screenGrab && thisRES > HI_RES && kbhit () )
             {
-                if ( getchar () == 'p' )
+                int c = getchar ();
+
+                if ( c == 's' || c == 'S' )
                     screenDump ( windowWidth, windowHeight );
             }
-            */
+            
             gettimeofday ( &stop, NULL );
 
             if ( ( (stop.tv_sec - start.tv_sec) * 1000000 ) + (stop.tv_usec - start.tv_usec) > FRAME_RATE )
@@ -730,7 +733,7 @@ int et4000Init ( void )
     first = true;
     RTGbuffer = malloc ( 1024 * 768 * 2 ); /* allocate max size */
     RTG_VSYNC = 1;
-    RTG_updated = true;
+    //RTG_updated = true;
 
     //if ( dst == MAP_FAILED || buffer == MAP_FAILED ) 
     if ( RTGbuffer == NULL )//|| RTGbuffer == NULL ) 
@@ -1237,7 +1240,7 @@ void screenDump ( int w, int h )
     char filename [13];
     char command [300];
 
-    sprintf ( command, "ffmpeg -vcodec rawvideo -f rawvideo -pix_fmt rgb565le -s %dx%d -i %s -f image2 -frames 1 -hide_banner -y -vcodec png screendump.png", w, h, dumpfile );
+    sprintf ( command, "ffmpeg -vcodec rawvideo -f rawvideo -pix_fmt rgb565le -s %dx%d -i %s -f image2 -frames 1 -hide_banner -y -loglevel quiet -vcodec png screendump.png", w, h, dumpfile );
     system ( "cat /dev/fb0 > screendump.raw" );
     system ( command );
 

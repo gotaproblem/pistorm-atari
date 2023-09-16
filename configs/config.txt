@@ -4,7 +4,6 @@
 #
 # cryptodad
 #
-arm64bit=0
 #
 arm64bit=0
 
