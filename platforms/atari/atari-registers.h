@@ -11,9 +11,12 @@ int handle_register_write_atari ( uint32_t addr, unsigned int value, unsigned ch
 void adjust_IDE_4000();
 void adjust_IDE_1200();
 
-#define IDEBASE 0x00f00000
+#define IDEBASEADDR 0xFFF00000
+#define IDETOPADDR  0xFFF00040
+#define IDEBASE 0x00F00000
+#define IDETOP  0x00F00040
 #define IDESIZE 0x40
-#define IDETOP  (IDEBASE | IDESIZE)
+//#define IDETOP  (IDEBASE | IDESIZE)
 
 #define BLITTERBASE 0x00ff8a00
 #define BLITTERSIZE 0x3e

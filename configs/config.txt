@@ -3,29 +3,31 @@
 # /boot/config.txt
 #
 # cryptodad
+# Sep 2023
 #
-#
+[all]
 arm64bit=0
-
-# Framebuffer settings
-# 09/09/23 leave commented out for now
-# HDMI set to 640x480 for RTG/ET4000 development
-#hdmi_group=2
-# 640x480 60Hz 4:3
-#hdmi_mode=4
-# 800x600 60Hz 4:3
-#hdmi_mode=9
-# 1024x768 60Hz 4:3
-#hdmi_mode=16
+disable_splash=1
+boot_delay=1
+force_turbo=1
+arm_boost=1
+initial_turbo=5
+temp_limit=75
 
 # currently have to disable gpio irq
 dtoverlay=gpio-no-irq
 
-# Run as fast as firmware / board allows
-arm_boost=1
+
+[pi3]
+overvoltage=6
+arm_freq=1500
+core_freq=600
+gpu_mem=16
+
+
+[pi4]
 #over_voltage=9 # if arm_freq > 2.1GHz
 arm_freq=1500
 gpu_freq=750
-gpu_mem=32
-force_turbo=1
-initial_turbo=5
+gpu_mem=16
+

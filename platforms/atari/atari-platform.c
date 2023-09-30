@@ -203,14 +203,12 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val) {
             set_hard_drive_image_file_atari ( 1, val );
     }
 
-//#ifdef RTG
     if CHKVAR ( "rtg" ) 
         RTG_enabled = 1;
 
     if CHKVAR ( "screengrab" ) 
         screenGrab = 1;
 
-//#endif
     /* cryptodad allow selection of fpu for 68020 CPU */
     if CHKVAR ( "68020fpu" )
         FPU68020_SELECTED = 1;

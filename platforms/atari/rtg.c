@@ -26,10 +26,12 @@
 #include "et4000.h"
 
 
-#define MAX_WIDTH 1024
+#define MAX_WIDTH  1024
 #define MAX_HEIGHT 768
 #define ATARI_VRAM_BASE   0x003f8000 /* 4MB machine - will get changed at detection */
 #define GETRES() (uint16_t)( ((xcb->crtc_index [0x35] & 0x02) >> 1 ) << 10 | ((xcb->crtc_index [7] & 0x20) >> 5) << 9 | (xcb->crtc_index [7] & 0x01) << 8 | xcb->crtc_index [6] )
+#define HZ50       20000
+#define HZ60       16666
 
 static volatile nova_xcb_t nova_xcb;
 static volatile nova_xcb_t *xcb;
@@ -68,7 +70,7 @@ size_t screensize = 0;
 void *fbptr;
 
 void et4000Draw ( int, int );
-int FRAME_RATE = 20000; /* 50 Hz - 20ms */
+int FRAME_RATE = HZ60;
 
 /*
  *  Standard colour palette - taken from ATARI ST INTERNALS - ROM listing
@@ -289,7 +291,7 @@ void screenDump (int, int);
 void *rtgRender ( void* vptr ) 
 {
     int    wait;
-    //int    render = 1;
+    int    took;
     int    thisRES = RESOLUTION1;//LOW_RES;
     int    windowWidth;
     int    windowHeight;
@@ -302,7 +304,9 @@ void *rtgRender ( void* vptr )
 
     while ( cpu_emulation_running )
     {
-        //RTG_VSYNC = 0;
+        /* get time and wait for end-of-frame */
+        /* 50 Hz 20000 (20ms), 60 Hz 16666 (16.6ms), 70 Hz 14285 (14.2ms) */
+        gettimeofday ( &start, NULL );
 
         if ( ET4000enabled && RTGresChanged )
         {
@@ -526,7 +530,7 @@ void *rtgRender ( void* vptr )
 
             screensize = finfo.smem_len; 
 
-            printf ( "screensize = 0x%X\n", screensize );
+            //printf ( "screensize = 0x%X\n", screensize );
 
             fbp = (void *)mmap ( 0, 
                         screensize, 
@@ -551,10 +555,6 @@ void *rtgRender ( void* vptr )
         }
 
         RTG_VSYNC = 0;
-
-        /* get time and wait for end-of-frame */
-        /* 50 Hz 20000 (20ms), 60 Hz 16666 (16.6ms), 70 Hz 14285 (14.2ms) */
-        gettimeofday ( &start, NULL );
 
         /* draw the screen */
 #ifdef NATIVE_RES
@@ -586,11 +586,16 @@ void *rtgRender ( void* vptr )
             
             gettimeofday ( &stop, NULL );
 
-            if ( ( (stop.tv_sec - start.tv_sec) * 1000000 ) + (stop.tv_usec - start.tv_usec) > FRAME_RATE )
+            took = ( (stop.tv_sec - start.tv_sec) * 1000000 ) + (stop.tv_usec - start.tv_usec);
+            
+            if ( took >= FRAME_RATE )
                 break;
 
-            usleep ( 100 );
+            //usleep ( 100 );
         }
+
+        if ( took > FRAME_RATE + 200 )
+            printf ( "frame overrun %d\n", took );
     }
 }
 
@@ -1205,27 +1210,32 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
 #include <unistd.h>
 #include <fcntl.h>
  
-int kbhit (void)
+int kbhit ( void )
 {
   struct termios oldt, newt;
   int ch;
   int oldf;
  
-  tcgetattr(STDIN_FILENO, &oldt);
+  tcgetattr ( STDIN_FILENO, &oldt );
+
   newt = oldt;
+  //memcpy ( &newt, &oldt, sizeof oldt );
   newt.c_lflag &= ~(ICANON | ECHO);
-  tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-  oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-  fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+
+  tcsetattr ( STDIN_FILENO, TCSANOW, &newt );
+
+  oldf = fcntl ( STDIN_FILENO, F_GETFL, 0 );
+  fcntl ( STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK );
  
-  ch = getchar();
+  ch = getchar ();
  
-  tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-  fcntl(STDIN_FILENO, F_SETFL, oldf);
+  oldt.c_lflag |= ECHO;
+  tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
+  fcntl ( STDIN_FILENO, F_SETFL, oldf );
  
   if ( ch != EOF )
   {
-    ungetc(ch, stdin);
+    ungetc ( ch, stdin) ;
     return 1;
   }
  
@@ -1243,6 +1253,7 @@ void screenDump ( int w, int h )
     sprintf ( command, "ffmpeg -vcodec rawvideo -f rawvideo -pix_fmt rgb565le -s %dx%d -i %s -f image2 -frames 1 -hide_banner -y -loglevel quiet -vcodec png screendump.png", w, h, dumpfile );
     system ( "cat /dev/fb0 > screendump.raw" );
     system ( command );
+    system ( "bash ./screendump.sh" );
 
     return;
 }

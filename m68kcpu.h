@@ -302,7 +302,7 @@ typedef uint32 uint64;
 
 /* Simulate address lines of 68k family */
 #define ADDRESS_68K(A) ((A)&CPU_ADDRESS_MASK)
-//#define ADDRESS_68K(A) ((A))
+//#define ADDRESS_68K(A) ((A)) /* cryptodad - uncomment if want to use alt-ram on 68000 */
 
 /* Shift & Rotate Macros. */
 #define LSL(A, C) ((A) << (C))
@@ -1299,8 +1299,10 @@ static inline uint m68ki_read_8_fc(m68ki_cpu_core *state, uint address, uint fc)
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,1);
 #endif
-	//address_translation_cache *cache = &state->fc_read_translation_cache;
+	
 #ifdef CACHE_ON  // cryptodad
+	address_translation_cache *cache = &state->fc_read_translation_cache;
+
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		return cache->offset[address - cache->lower];
@@ -1338,8 +1340,9 @@ static inline uint m68ki_read_16_fc ( m68ki_cpu_core *state, uint address, uint 
 	    address = pmmu_translate_addr(state,address,1);
 #endif
 
-	//address_translation_cache *cache = &state->fc_read_translation_cache;
 #ifdef CACHE_ON  // cryptodad
+	address_translation_cache *cache = &state->fc_read_translation_cache;
+
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		return be16toh(((unsigned short *)(cache->offset + (address - cache->lower)))[0]);
@@ -1384,8 +1387,10 @@ static inline uint m68ki_read_32_fc(m68ki_cpu_core *state, uint address, uint fc
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,1);
 #endif
-	//address_translation_cache *cache = &state->fc_read_translation_cache;
+	
 #ifdef CACHE_ON  // cryptodad
+	address_translation_cache *cache = &state->fc_read_translation_cache;
+
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		return be32toh(((unsigned int *)(cache->offset + (address - cache->lower)))[0]);
@@ -1432,8 +1437,10 @@ static inline void m68ki_write_8_fc(m68ki_cpu_core *state, uint address, uint fc
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,0);
 #endif
-	//address_translation_cache *cache = &state->fc_read_translation_cache;
+	
 #ifdef CACHE_ON  // cryptodad
+	address_translation_cache *cache = &state->fc_read_translation_cache;
+
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		cache->offset[address - cache->lower] = (unsigned char)value;
@@ -1481,8 +1488,10 @@ static inline void m68ki_write_16_fc(m68ki_cpu_core *state, uint address, uint f
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,0);
 #endif
-	//address_translation_cache *cache = &state->fc_read_translation_cache;
+	
 #ifdef CACHE_ON  // cryptodad
+	address_translation_cache *cache = &state->fc_read_translation_cache;
+
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		((short *)(cache->offset + (address - cache->lower)))[0] = htobe16(value);
@@ -1537,8 +1546,10 @@ static inline void m68ki_write_32_fc(m68ki_cpu_core *state, uint address, uint f
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(state,address,0);
 #endif
-	//address_translation_cache *cache = &state->fc_read_translation_cache;
+	
 #ifdef CACHE_ON // cryptodad
+	address_translation_cache *cache = &state->fc_read_translation_cache;
+
 	if(cache->offset && address >= cache->lower && address < cache->upper)
 	{
 		((int *)(cache->offset + (address - cache->lower)))[0] = htobe32(value);

@@ -30,9 +30,12 @@
 #define STATUS_MASK_IPL 0xe000
 #define STATUS_SHIFT_IPL 13
 
-//#define BCM2708_PERI_BASE 0x20000000  // pi0-1
-#define BCM2708_PERI_BASE	0xFE000000  // pi4
-//#define BCM2708_PERI_BASE 0x3F000000  // pi3
+#ifndef PI3
+  #define BCM2708_PERI_BASE	0xFE000000
+#else
+  #define BCM2708_PERI_BASE 0x3F000000
+#endif
+
 #define BCM2708_PERI_SIZE 0x01000000
 
 #define GPIO_ADDR 0x200000 /* GPIO controller */

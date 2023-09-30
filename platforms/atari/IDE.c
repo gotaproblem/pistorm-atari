@@ -7,6 +7,8 @@
 //  Copyright © 2019 Matt Parsons. All rights reserved.
 //
 
+#define _LARGEFILE64_SOURCE 
+
 #include "platforms/atari/IDE.h"
 #include <fcntl.h>
 #include <stdio.h>
@@ -91,25 +93,29 @@ void InitIDE (void)
 {
   uint8_t num_IDE_drives = 0;
 
-  for (int i = 0; i < IDE_MAX_HARDFILES; i++) 
+  for (int i = 0; i < 2; i++ )//IDE_MAX_HARDFILES; i++) 
   {
-    if (atari_image_file[i]) 
+    //printf ( "here 1\n" );
+    if ( atari_image_file[i] ) 
     {
-      atarifd = open(atari_image_file[i], O_RDWR);
+      //printf ( "here 2\n" );
+      atarifd = open ( atari_image_file[i], O_RDWR | O_LARGEFILE );
 
       if (atarifd != -1) 
       {
+        //printf ( "here 3\n" );
         if (!atariide0)
             atariide0 = IDE_allocate("cf");
       }
 
       if (atarifd == -1) 
       {
-        DEBUG_PRINTF ("[HDD%d] HDD Image %s failed open\n", i, atari_image_file[i]);
+        printf ( "[HDD%d] HDD Image %s failed to open\n", i, atari_image_file[i] );
       } 
       
       else 
       {
+        //printf ( "here 4\n" );
         if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 2 ), "ST" ) == 0 )
         {
           printf ( "[FDD%d] Attaching FDD image %s.\n", i, atari_image_file [i] );
@@ -120,9 +126,10 @@ void InitIDE (void)
           printf ( "[FDD%d] FDD Image %s attached\n", i, atari_image_file [i] );
         }
 
-        else if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 3 ), "img" ) == 0 )
+        else if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 3 ), "img" ) == 0 
+        || strncmp ( atari_image_file [i], "/dev/loop0", 10 ) == 0 )
         {
-          DEBUG_PRINTF ("[HDD%d] Attaching HDD image %s.\n", i, atari_image_file[i]);
+          //printf ("[HDD%d] Attaching HDD image %s.\n", i, atari_image_file[i]);
           //if (strcmp(atari_image_file[i] + (strlen(atari_image_file[i]) - 3), "img") != 0) {
             //DEBUG_PRINTF ("No header present on HDD image %s.\n", atari_image_file[i]);
             ide_attach_hdf ( atariide0, i, atarifd );

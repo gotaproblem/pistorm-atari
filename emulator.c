@@ -217,8 +217,8 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 {
 	/* Set our pool of clock cycles available */
 	SET_CYCLES ( num_cycles );
-	//m68ki_initial_cycles = num_cycles;
-
+	m68ki_initial_cycles = num_cycles;
+ 
 	/* Make sure we're not stopped */
 	if ( !CPU_STOPPED )
 	{
@@ -232,10 +232,7 @@ execute:
     m68ki_instruction_jump_table [REG_IR] (state);
 
     if ( g_buserr ) 
-    {
       m68ki_exception_bus_error ( state ); 
-      //g_buserr = 0;
-    }
 
     else
       USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
@@ -243,8 +240,11 @@ execute:
     if ( GET_CYCLES () > 0 ) // cryptodad make sure m68kcpu.h m68ki_set_sr() has relevent line commented out
       goto execute;
 
-    //REG_PPC = REG_PC;
+    REG_PPC = REG_PC;
 	}
+
+  else
+    SET_CYCLES ( 0 );
 
 	return;
 }
@@ -336,22 +336,22 @@ run:
       m68k_pulse_reset ( state );
     }
 
-    if ( last_irq != 0 )//&& last_irq != last_last_irq ) 
+    if ( last_irq != 0 && last_irq != last_last_irq ) 
     {
-      //last_last_irq = last_irq;
+      last_last_irq = last_irq;
       m68k_set_irq ( last_irq );
 
-      m68ki_check_interrupts ( state );
+      //m68ki_check_interrupts ( state );
     }
   }
 
-  else if ( !g_irq )//&& last_last_irq != 0 ) 
+  else if ( !g_irq && last_last_irq != 0 ) 
   {
-   // last_last_irq = 0;
+    last_last_irq = 0;
     m68k_set_irq ( 0 );
   }
   //M68K_END_TIMESLICE;
-  //m68ki_check_interrupts ( state );
+  m68ki_check_interrupts ( state );
 #endif
 
   if ( !cpu_emulation_running )
@@ -372,12 +372,10 @@ int main ( int argc, char *argv[] )
 {
   const struct sched_param priority = {99};
   int g;
-#ifdef RTG
+
   int err;
   pthread_t rtg_tid, cpu_tid;
-#else
-  pthread_t rtg_tid, cpu_tid;
-#endif
+
 
   RTG_enabled = 0;
   FPU68020_SELECTED = 0;
@@ -630,7 +628,7 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
     return 1;
   }
 
-  else if ( IDE_IDE_enabled && (addr >= (0xFF000000 | IDEBASE) && addr < (0xFF000000 | IDETOP) ) )
+  else if ( IDE_IDE_enabled && addr >= IDEBASEADDR && addr < IDETOPADDR )
     addr &= 0x00ffffff;
 
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) )
@@ -654,11 +652,11 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
     return platform_res;
   }
 
-  if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  if ( ( address & 0xFF000000 ) )//== 0xFF000000 ) 
     address &= 0x00FFFFFF;
 
-  if ( address & 0xFF000000 )
-    return 0;
+  //if ( address & 0xFF000000 )
+  //  return 0;
 
   return ps_read_8 ( address );  
 }
@@ -671,11 +669,11 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
     return platform_res;
   }
 
-  if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  if ( ( address & 0xFF000000 ) )//== 0xFF000000 ) 
     address &= 0x00FFFFFF;
 
-  if ( address & 0xFF000000 )
-    return 0;
+  //if ( address & 0xFF000000 )
+  //  return 0;
 
   return ps_read_16 ( address );
 }
@@ -688,11 +686,11 @@ unsigned int m68k_read_memory_32 ( uint32_t address )
     return platform_res;
   }
 
-  if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  if ( ( address & 0xFF000000 ) )//== 0xFF000000 ) 
     address &= 0x00FFFFFF;
 
-  if ( address & 0xFF000000 )
-    return 0;
+  //if ( address & 0xFF000000 )
+  //  return 0;
 
   return ps_read_32 ( address );
 }
@@ -808,7 +806,7 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   //}
 //#endif 
 
-  else if ( IDE_IDE_enabled && (addr >= (0xFF000000 | IDEBASE) && addr < (0xFF000000 | IDETOP) ) )
+  else if ( IDE_IDE_enabled && addr >= IDEBASEADDR && addr < IDETOPADDR )
     addr &= 0x00ffffff;
 
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) ) 

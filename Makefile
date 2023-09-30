@@ -26,16 +26,23 @@ MUSASHIGENERATOR = m68kmake
 
 CC        = gcc
 
-RAYLIB    = -I./raylib-test -L./raylib-test -lraylib -lGLESv2 -lEGL -ldrm -lgbm -lm
+#RAYLIB    = -I./raylib-test -L./raylib-test -lraylib -lGLESv2 -lEGL -ldrm -lgbm -lm
 
-PI4OPTS	  = -march=armv8-a -mfloat-abi=hard -mfpu=neon-fp-armv8
+PIOPTS	  = -march=armv8-a -mfloat-abi=hard -mfpu=neon-fp-armv8
 
-ifeq ($(USERAYLIB),YES)
-	CFLAGS = -I. $(PI4OPTS) -O3 $(RAYLIB) -DRTG -DRAYLIB #-DT_CACHE_ON -DCACHE_ON
+ifeq ($(PIMODEL),PI3)
+	PI = -DPI3
 else
-	CFLAGS = -I. $(PI4OPTS) -O3 -DRTG #-DT_CACHE_ON -DCACHE_ON
+	PI = -DPI4
 endif
 
+#ifeq ($(USERAYLIB),YES)
+#	CFLAGS = -I. $(PI4OPTS) -O3 $(RAYLIB) -DRTG -DRAYLIB #-DT_CACHE_ON -DCACHE_ON
+#else
+#	CFLAGS = -I. $(PI4OPTS) -O3 #-DT_CACHE_ON -DCACHE_ON
+#endif
+
+CFLAGS    = -I. $(PIOPTS) -O3 $(PI)
 TARGET    = $(EXENAME)
 
 DELETEFILES = $(MUSASHIGENCFILES) $(.OFILES) $(.OFILES:%.o=%.d) $(TARGET) $(MUSASHIGENERATOR) ataritest

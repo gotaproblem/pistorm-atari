@@ -1270,19 +1270,25 @@ inline unsigned int  m68k_read_pcrelative_32(m68ki_cpu_core *state, unsigned int
 
 extern volatile int g_buserr;
 
-//uint m68ki_read_imm16_addr_slowpath(m68ki_cpu_core *state, uint32_t pc, address_translation_cache *cache)
+//inline uint m68ki_read_imm16_addr_slowpath(m68ki_cpu_core *state, uint32_t pc, address_translation_cache *cache)
 inline uint m68ki_read_imm16_addr_slowpath ( m68ki_cpu_core *state, uint32_t pc )
 {
     uint32_t address = ADDRESS_68K(pc);
 
 #ifdef CACHE_ON // cryptodad
+	address_translation_cache *cache = &state->code_translation_cache;
     uint32_t pc_address_diff = pc - address;
-	for (int i = 0; i < state->read_ranges; i++) {
-		if(address >= state->read_addr[i] && address < state->read_upper[i]) {
+
+	for (int i = 0; i < state->read_ranges; i++) 
+	{
+		if(address >= state->read_addr[i] && address < state->read_upper[i]) 
+		{
 			cache->lower = state->read_addr[i] + pc_address_diff;
 			cache->upper = state->read_upper[i] + pc_address_diff;
 			cache->offset = state->read_data[i] - cache->lower;
+
 			REG_PC += 2;
+
 			return be16toh(((unsigned short *)(state->read_data[i] + (address - state->read_addr[i])))[0]);
 		}
 	}
