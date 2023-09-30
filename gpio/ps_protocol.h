@@ -16,7 +16,7 @@
 #define PIN_RESET 5
 #define PIN_RD 6
 #define PIN_WR 7
-#define PIN_D(x) (8 + x)
+//#define PIN_D(x) (8 + x)
 
 #define REG_DATA 0
 #define REG_ADDR_LO 1
@@ -30,9 +30,12 @@
 #define STATUS_MASK_IPL 0xe000
 #define STATUS_SHIFT_IPL 13
 
-//#define BCM2708_PERI_BASE 0x20000000  // pi0-1
-#define BCM2708_PERI_BASE	0xFE000000  // pi4
-//#define BCM2708_PERI_BASE 0x3F000000  // pi3
+#ifndef PI3
+  #define BCM2708_PERI_BASE	0xFE000000
+#else
+  #define BCM2708_PERI_BASE 0x3F000000
+#endif
+
 #define BCM2708_PERI_SIZE 0x01000000
 
 #define GPIO_ADDR 0x200000 /* GPIO controller */
@@ -47,8 +50,8 @@
 
 // GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or
 // SET_GPIO_ALT(x,y)
-#define INP_GPIO(g) *(gpio + ((g) / 10)) &= ~(7 << (((g) % 10) * 3))
-#define OUT_GPIO(g) *(gpio + ((g) / 10)) |= (1 << (((g) % 10) * 3))
+//#define INP_GPIO(g) *(gpio + ((g) / 10)) &= ~(7 << (((g) % 10) * 3))
+//#define OUT_GPIO(g) *(gpio + ((g) / 10)) |= (1 << (((g) % 10) * 3))
 #define SET_GPIO_ALT(g, a)  \
   *(gpio + (((g) / 10))) |= \
       (((a) <= 3 ? (a) + 4 : (a) == 4 ? 3 : 2) << (((g) % 10) * 3))
@@ -56,14 +59,15 @@
 #define GPIO_PULL *(gpio + 37)      // Pull up/pull down
 #define GPIO_PULLCLK0 *(gpio + 38)  // Pull up/pull down clock
 
-#define GPFSEL0_INPUT 0x00244240 //0x00244240
-#define GPFSEL1_INPUT 0x00000000
-#define GPFSEL2_INPUT 0x00000000
+#define GPFSEL0_INPUT 0x00244240 /* GPIO 2,3,6,7 always OUTPUTS - GPIO 4 = 100 = Alt Fn 0 = GPCLK0 */
+#define GPFSEL1_INPUT 0x00000000 /* GPIO 10-19 all INPUTS */
+#define GPFSEL2_INPUT 0x00000000 /* GPIO 20-23 all INPUTS */
 
-#define GPFSEL0_OUTPUT 0x09244240 //0x09244240
-#define GPFSEL1_OUTPUT 0x09249249
-#define GPFSEL2_OUTPUT 0x00000249
+#define GPFSEL0_OUTPUT 0x09244240 /* GPIO 0-3, 5-9 OUTPUTS */
+#define GPFSEL1_OUTPUT 0x09249249 /* GPIO 10-19 OUTPUTS */
+#define GPFSEL2_OUTPUT 0x00000249 /* GPIO 20-23 OUTPUTS */
 
+#if (0)
 #define GPFSEL_OUTPUT \
   *(gpio + 0) = GPFSEL0_OUTPUT; \
   *(gpio + 1) = GPFSEL1_OUTPUT; \
@@ -89,7 +93,7 @@
 
 #define END_TXN \
   *(gpio + 10) = 0xFFFFEC;
-
+#endif
 /*
 static inline void ps_write_8_ex(volatile uint32_t *gpio, uint32_t address, uint32_t data) {
   if (address & 0x01) {
@@ -170,19 +174,19 @@ typedef union
 
 } t_a32;
 
-//uint8_t ps_read_8(uint32_t address);
-//uint16_t ps_read_16(uint32_t address);
-//uint32_t ps_read_32(uint32_t address);
-uint8_t ps_read_8(t_a32 address);
-uint16_t ps_read_16(t_a32 address);
-uint32_t ps_read_32(t_a32 address);
+uint8_t ps_read_8(uint32_t address);
+uint16_t ps_read_16(uint32_t address);
+uint32_t ps_read_32(uint32_t address);
+//uint8_t ps_read_8(t_a32 address);
+//uint16_t ps_read_16(t_a32 address);
+//uint32_t ps_read_32(t_a32 address);
 
-//void ps_write_8(uint32_t address, uint16_t data);
-void ps_write_8(t_a32 address, uint16_t data);
-//void ps_write_16(uint32_t address, uint16_t data);
-void ps_write_16(t_a32 address, uint16_t data);
-//void ps_write_32(uint32_t address, uint32_t data);
-void ps_write_32(t_a32 address, uint32_t data);
+void ps_write_8(uint32_t address, uint16_t data);
+//void ps_write_8(t_a32 address, uint16_t data);
+void ps_write_16(uint32_t address, uint16_t data);
+//void ps_write_16(t_a32 address, uint16_t data);
+void ps_write_32(uint32_t address, uint32_t data);
+//void ps_write_32(t_a32 address, uint32_t data);
 
 uint16_t ps_read_status_reg();
 void ps_write_status_reg(unsigned int value);

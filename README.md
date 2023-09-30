@@ -69,6 +69,12 @@ This is okay for the final-cut, but for development, option 2 is suggested
 If you are developing, which requires numerous power cycles, then this is the option for you. You will need to make sure USB power (5v) does not reach the PiStorm. The Pi4 GPIO header supplies 5v power on pins 2 and 4. These two pins need to be cut.
 As the Pi4 physically can not connect directly to the PiStorm, a header extension is needed - this is where you cut the pins - **do not cut the pins on the Raspberry Pi4 header.**
 
+* Header extension needed such as
+
+https://www.amazon.co.uk/gp/product/B08C581XHV/ref=ppx_yo_dt_b_asin_title_o03_s00?ie=UTF8&th=1
+
+https://www.amazon.co.uk/gp/product/B07NQ5Z7Y9/ref=ppx_yo_dt_b_asin_title_o04_s00?ie=UTF8&psc=1
+
 * Attach the Pi4 to the PiStorm and install the PiStorm adapter in place of the orignal CPU in the Atari.
   Make sure the PiStorm sits flush and correct in the socket.
   Double check that all is properly in place and no pins are bent.
@@ -129,21 +135,23 @@ Run the emulator using `sudo ./emulator --config ../configs/myatari.cfg`.
 To exit the emulator you can press `Ctrl+C`.
 
 # RTG Graphics - Raylib
-Enhanced video modes are available for an OS such as Mint. To use this feature, a couple of changes are needed.
+# NOTE Sep 2023 - no-longer using raylib
+Enhanced video modes are available for GEM and Mint. To use this feature, a couple of changes are needed.
 * 1. copy the configs/config.txt file to /boot/
 * `sudo cp configs/config.txt /boot/config.txt`
 * A reboot is needed after this
 * `sudo reboot`
 * 2. Changes to the emulator configuration file are needed
-* edit your .cfg file and uncomment (remove the preceding hash), the following two lines
+* edit your .cfg file and uncomment (remove the preceding hash), the following line
 * #setvar rtg
-* #map type=ram address=0x00B00000 size=0x100000 id=RTG
 
 **A mint specific configuration file is now included in the repository**
 * Make a copy of configs/mint.cfg
 * `cp configs/mint.cfg ../configs/`
 
 Finally, perform a rebuild
+To build now, using RTG, you must alter the git branch before compiling
+* `git checkout et4000-dev`
 * `make clean`
 * `make`
 

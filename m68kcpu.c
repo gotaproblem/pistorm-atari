@@ -53,6 +53,7 @@ extern inline void m68ki_ic_clear(struct m68ki_cpu_core *state);
 #include "m68kmmu.h" // uses some functions from m68kfpu.c which are static !
 
 
+extern int FPU68020_SELECTED; /* cryptodad */
 
 /* ======================================================================== */
 /* ================================= DATA ================================= */
@@ -865,7 +866,8 @@ void m68k_set_cpu_type(struct m68ki_cpu_core *state, unsigned int cpu_type)
 			CYC_SHIFT        = 0;
 			CYC_RESET        = 518;
 			HAS_PMMU         = 0;
-			HAS_FPU          = 0;
+			//HAS_FPU          = 0;
+			HAS_FPU          = FPU68020_SELECTED; /* cryptodad */
 			return;
 		case M68K_CPU_TYPE_68030:
 			CPU_TYPE         = CPU_TYPE_030;
@@ -963,7 +965,7 @@ void m68k_set_cpu_type(struct m68ki_cpu_core *state, unsigned int cpu_type)
 uint m68k_get_address_mask(m68ki_cpu_core *state) {
 	return state->address_mask;
 }
-
+#if (0)
 /* Execute some instructions until we use up num_cycles clock cycles */
 /* ASG: removed per-instruction interrupt checks */
 int m68k_execute(m68ki_cpu_core *state, int num_cycles)
@@ -1035,7 +1037,7 @@ int m68k_execute(m68ki_cpu_core *state, int num_cycles)
 	/* return how many clocks we used */
 	return m68ki_initial_cycles - GET_CYCLES();
 }
-
+#endif
 
 int m68k_cycles_run(void)
 {
@@ -1073,7 +1075,7 @@ void m68k_set_irq(unsigned int int_level)
 
 	/* A transition from < 7 to 7 always interrupts (NMI) */
 	/* Note: Level 7 can also level trigger like a normal IRQ */
-	if(old_level != 0x0700 && CPU_INT_LEVEL == 0x0700)
+	if ( old_level != 0x0700 && CPU_INT_LEVEL == 0x0700 )
 		m68ki_cpu.nmi_pending = TRUE;
 }
 
@@ -1268,52 +1270,63 @@ inline unsigned int  m68k_read_pcrelative_32(m68ki_cpu_core *state, unsigned int
 
 extern volatile int g_buserr;
 
-uint m68ki_read_imm16_addr_slowpath(m68ki_cpu_core *state, uint32_t pc, address_translation_cache *cache)
+//inline uint m68ki_read_imm16_addr_slowpath(m68ki_cpu_core *state, uint32_t pc, address_translation_cache *cache)
+inline uint m68ki_read_imm16_addr_slowpath ( m68ki_cpu_core *state, uint32_t pc )
 {
-#ifdef CACHE_ON // cryptodad
     uint32_t address = ADDRESS_68K(pc);
 
+#ifdef CACHE_ON // cryptodad
+	address_translation_cache *cache = &state->code_translation_cache;
     uint32_t pc_address_diff = pc - address;
-	for (int i = 0; i < state->read_ranges; i++) {
-		if(address >= state->read_addr[i] && address < state->read_upper[i]) {
+
+	for (int i = 0; i < state->read_ranges; i++) 
+	{
+		if(address >= state->read_addr[i] && address < state->read_upper[i]) 
+		{
 			cache->lower = state->read_addr[i] + pc_address_diff;
 			cache->upper = state->read_upper[i] + pc_address_diff;
 			cache->offset = state->read_data[i] - cache->lower;
+
 			REG_PC += 2;
+
 			return be16toh(((unsigned short *)(state->read_data[i] + (address - state->read_addr[i])))[0]);
 		}
 	}
 #endif
 	m68ki_set_fc(FLAG_S | FUNCTION_CODE_USER_PROGRAM); /* auto-disable (see m68kcpu.h) */
-	state->mmu_tmp_fc = FLAG_S | FUNCTION_CODE_USER_PROGRAM;
-	state->mmu_tmp_rw = 1;
-	state->mmu_tmp_sz = M68K_SZ_WORD;
-	m68ki_check_address_error(state, REG_PC, MODE_READ, FLAG_S | FUNCTION_CODE_USER_PROGRAM); /* auto-disable (see m68kcpu.h) */
+	//state->mmu_tmp_fc = FLAG_S | FUNCTION_CODE_USER_PROGRAM;
+	//state->mmu_tmp_rw = 1;
+	//state->mmu_tmp_sz = M68K_SZ_WORD;
+	//m68ki_check_address_error(state, REG_PC, MODE_READ, FLAG_S | FUNCTION_CODE_USER_PROGRAM); /* auto-disable (see m68kcpu.h) */
 
 #if M68K_EMULATE_PREFETCH
 {
 	uint result;
-	if(REG_PC != CPU_PREF_ADDR)
+	if ( REG_PC != CPU_PREF_ADDR )
 	{
 		CPU_PREF_DATA = m68ki_ic_readimm16(state, REG_PC);
-		state->mmu_tmp_buserror_occurred = g_buserr;
-		CPU_PREF_ADDR = state->mmu_tmp_buserror_occurred ? ((uint32)~0) : REG_PC;
-		//CPU_PREF_ADDR = g_buserr ? ((uint32)~0) : REG_PC;
+		//state->mmu_tmp_buserror_occurred = g_buserr;
+		//CPU_PREF_ADDR = state->mmu_tmp_buserror_occurred ? ((uint32)~0) : REG_PC;
+		CPU_PREF_ADDR = g_buserr ? ((uint32)~0) : REG_PC;
 	}
+
 	result = MASK_OUT_ABOVE_16(CPU_PREF_DATA);
 	REG_PC += 2;
-	if (!state->mmu_tmp_buserror_occurred) {
-	//if (!g_buserr) {
+	
+	//if (!state->mmu_tmp_buserror_occurred) {
+	if ( !g_buserr ) 
+	{
 		// prefetch only if no bus error occurred in opcode fetch
 		CPU_PREF_DATA = m68ki_ic_readimm16(state, REG_PC);
-		state->mmu_tmp_buserror_occurred = g_buserr;
-		CPU_PREF_ADDR = state->mmu_tmp_buserror_occurred ? ((uint32)~0) : REG_PC;
-		//CPU_PREF_ADDR = g_buserr ? ((uint32)~0) : REG_PC;
+		//state->mmu_tmp_buserror_occurred = g_buserr;
+		//CPU_PREF_ADDR = state->mmu_tmp_buserror_occurred ? ((uint32)~0) : REG_PC;
+		CPU_PREF_ADDR = g_buserr ? ((uint32)~0) : REG_PC;
 
 		// ignore bus error on prefetch
-		state->mmu_tmp_buserror_occurred = 0;
+		//state->mmu_tmp_buserror_occurred = 0;
 		g_buserr = 0;
 	}
+
 	return result;
 }
 #else

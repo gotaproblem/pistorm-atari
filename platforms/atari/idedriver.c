@@ -17,6 +17,8 @@
  *	along with IDE-emu.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _LARGEFILE64_SOURCE 
+
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -26,6 +28,7 @@
 #include <time.h>
 #include <arpa/inet.h>
 //#include <endian.h>
+#include <fcntl.h>
 
 #include "config_file/config_file.h"
 #include "idedriver.h"
@@ -856,6 +859,7 @@ int ide_attach_st (struct ide_controller *c, int drive, int fd)
 
 
 // Attach a headerless HDD image to the controller
+// ATA defines limitations for capacity to 8GB
 int ide_attach_hdf(struct ide_controller *c, int drive, int fd)
 {
   struct ide_drive *d = &c->drive[drive];
@@ -866,43 +870,48 @@ int ide_attach_hdf(struct ide_controller *c, int drive, int fd)
 
   d->fd = fd;
   d->present = 1;
-  d->lba = 0;
+  d->lba = 1;
 
-  d->heads = 255;
-  d->sectors = 64; //63;
+  d->heads = 16;
+  d->sectors = 63;
   d->header_present = 0;
 
-  uint64_t file_size = lseek(fd, 0, SEEK_END);
-  lseek(fd, 0, SEEK_SET);
+  off64_t file_size = lseek64 ( fd, 0, SEEK_END );
+  lseek64 ( fd, 0, SEEK_SET );
 
   if (file_size < 4 * 1000 * 1000) {
     //printf ( "[IDE/HDL] File size is too small. Image must be > 4 MB\n" );
     return -1;
   }
 
-  if (file_size < 504 * SIZE_MEGA) {
-    d->heads = 16;
+  /* if drive < 528 MB word[1] (default cylinders) <= 1024 */
+  /* word[3] <= 16 */
+  /*
+  if ( file_size < (528 * 1000 * 1000) ) 
+  {
+    d->cylinders = (file_size / (d->sectors * d->heads) / 512) + 1;
   }
-  else if (file_size < 1008 * SIZE_MEGA) {
+
+  else if ( file_size < (1056 * 1000 * 1000) ) 
+  {
     d->heads = 32;
   }
-  else if (file_size < 2016 * SIZE_MEGA) {
+
+  else if ( file_size < (2112 * 1000 * 1000) ) 
+  {
     d->heads = 64;
   }
-  else if (file_size < (uint64_t)4032 * SIZE_MEGA) {
+
+  else if ( file_size < (4224 * 1000 * 1000) ) 
+  {
     d->heads = 128;
   }
-
+  */
   d->cylinders = (file_size / 512) / (d->sectors * d->heads);
-  //if ( d->cylinders == 0 )
-   // d->cylinders = 1;
+  
 
-  //DEBUG_PRINTF ("[IDE/HDL] Cylinders: %d Heads: %d Sectors: %d - filesize = %d\n", d->cylinders, d->heads, d->sectors, file_size );
+  printf ("[IDE/HDL] Cylinders: %d Heads: %d Sectors: %d - filesize = %llu\n", d->cylinders, d->heads, d->sectors, file_size );
 
-  //if (file_size >= 4 * 1000 * 1000) {
-   
-    d->lba = 1;
-  //}
 
   ide_make_ident(drive, d->cylinders, d->heads, d->sectors, "PISTORM IDE DK", d->identify);
 
@@ -999,10 +1008,7 @@ static void make_serial(uint16_t *p)
 
 static void put_le16(uint16_t *p, unsigned int v)
 {
-	//*p = SDL_SwapLE16(v);
-    //*p = v << 8 | ((v & 0xff00) >> 8);
     *p = v;
-    //*p = htons (v);
 }
 
 static void padstr(char *str, const char *src, int len)
@@ -1020,139 +1026,58 @@ static void padstr(char *str, const char *src, int len)
 
 int ide_make_ident(int drive, uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *target)
 {
-			 
-#if (0)
-  uint16_t *ident = target;
-  uint32_t sectors;
-  char buf[40];
-
-  sectors = c * h * s;
-
-  memset(ident, 0, 512);
-  //memcpy(ident, ide_magic, 8);
-  //memset(ident, 0, 8);
-  ident[0] = le16((1 << 15) | (1 << 6));	/* Non removable */
-  make_serial(ident + 10);
-  ident[47] = 0; /* no read multi for now */
-  ident[51] = le16(240 /* PIO2 */ << 8);	/* PIO cycle time */
-  ident[53] = le16(1);		/* Geometry words are valid */
-
-   make_ascii(ident + 23, "A001.001", 8);
-   //make_ascii(ident + 27, name, 40);
-   //make_ascii(ident + 31, "A001.001", 8);
-   snprintf(buf, sizeof(buf), "%s%d %liM", name, 0,
-    (long)( sectors / (1024 * 1024 / 512 )));
-    strncpy((char*)(ident + 27), buf, 40);
-
-  ident[49] = le16(1 << 9); /* LBA */
-
-  ident[1] = le16(c);
-  ident[3] = le16(h);
-  ident[6] = le16(s);
-  ident[54] = ident[1];
-  ident[55] = ident[3];
-  ident[56] = ident[6];
-  sectors = c * h * s;
-  ident[57] = le16(sectors & 0xFFFF);
-  ident[58] = le16(sectors >> 16);
-  ident[60] = sectors & 0xffff; //ident[57];
-  ident[61] = sectors >> 16; //ident[58];
-#else
-    //static void ide_identify(IDEState *s)
-//{
-
-	//uint16_t *p;
-	unsigned int oldsize;
+	uint32_t oldsize;
 	char buf[40];
-    uint16_t *p = target;
-    uint32_t sectors;
+  uint16_t *p = target;
+  uint32_t sectors;
 
-    memset(p, 0, 512);
-    oldsize = c * h * s;
+  memset(p, 0, 512);
+  oldsize = c * h * s;
 
-	//if (s->identify_set)
-	//{
-	//	memcpy(s->io_buffer, s->identify_data, sizeof(s->identify_data));
-	//	return;
-	//}
-
-	//memset(s->io_buffer, 0, 512);
-	//p = (uint16_t *)s->io_buffer;
-	put_le16(p + 0, 0x0040);
+	
+	put_le16(p + 0, (1 << 15) | (1 << 6));//0x0040);
 	put_le16(p + 1, c);
 	put_le16(p + 3, h);
-	//put_le16(p + 4, 512 * s); /* XXX: retired, remove ? */
-	//put_le16(p + 5, 512); /* XXX: retired, remove ? */
+	
 	put_le16(p + 6, s);
-	snprintf(buf, sizeof(buf), "QM%05d", 12345 );//s->drive_serial);
-	//padstr((char *)(p + 10), buf, 20); /* serial number */
+	snprintf(buf, sizeof(buf), "QM%05d", 12345 );
+	
   strncpy((char*)(p + 10), buf, 20);
-	//put_le16(p + 20, 3); /* XXX: retired, remove ? */
+
 	put_le16(p + 21, 512); /* cache size in sectors */
 	put_le16(p + 22, 4); /* ecc bytes */
-	//padstr((char *)(p + 23), FW_VERSION, 8); /* firmware version */
+	
   strncpy((char*)(p + 23), FW_VERSION, 8);
 	/* Use the same convention for the name as SCSI disks are using: The
 	 * first 8 characters should be the vendor, i.e. use 2 spaces here */
 	snprintf(buf, sizeof(buf), "%s%d %liM", name, drive,
-	         //(long)(s->nb_sectors / (1024 * 1024 / 512 ))); //s->bs->sector_size)));
-            (long)( oldsize / (1024 * 1024 / 512 ))); //s->bs->sector_size)));
-	//padstr((char *)(p + 27), buf, 40);
-    strncpy((char*)(p + 27), buf, 40);
+            (long)( oldsize / (1024 * 1024 / 512 )));
+	
+  strncpy((char*)(p + 27), buf, 40);
+
 #if MAX_MULT_SECTORS > 1
 	put_le16(p + 47, 0x8000 | 1);//MAX_MULT_SECTORS);
 #endif
+
 	put_le16(p + 48, 1); /* dword I/O */
 	put_le16(p + 49, (1 << 9)); //(1 << 11) | (1 << 9) | (1 << 8)); /* DMA and LBA supported */
 	put_le16(p + 51, (240 << 8)); //0x200); /* PIO transfer cycle */
 	put_le16(p + 52, 0x200); /* DMA transfer cycle */
-	put_le16(p + 53, 1 | (1 << 1) | (1 << 2)); /* words 54-58,64-70,88 are valid */
+	put_le16(p + 53, 1);// | (1 << 1) | (1 << 2)); /* words 54-58,64-70,88 are valid */
+  
 	put_le16(p + 54, c);
 	put_le16(p + 55, h);
 	put_le16(p + 56, s);
 
-	put_le16(p + 57, oldsize);
-	put_le16(p + 58, oldsize >> 16);
-	//if (s->mult_sectors)
-	//	put_le16(p + 59, 0x100 | s->mult_sectors);
-	put_le16(p + 60, oldsize);//s->nb_sectors);
-	put_le16(p + 61, oldsize >> 16);//s->nb_sectors >> 16);
+  sectors = c * h * s;
 
-	//put_le16(p + 63, 0x07); /* mdma0-2 supported */
-	//put_le16(p + 65, 120);
-	//put_le16(p + 66, 120);
-	//put_le16(p + 67, 120);
-	//put_le16(p + 68, 120);
-	//put_le16(p + 80, 0xf0); /* ata3 -> ata6 supported */
-	//put_le16(p + 81, 0x16); /* conforms to ata5 */
-	//put_le16(p + 82, (1 << 14));
+	put_le16(p + 57, sectors & 0xffff);
+	put_le16(p + 58, sectors >> 16);
 
-	/* 13=flush_cache_ext,12=flush_cache,10=lba48 */
-	//put_le16(p + 83, (1 << 14) | (1 << 13) | (1 <<12) | (1 << 10));
-	//put_le16(p + 84, (1 << 14));
-	//put_le16(p + 85, (1 << 14));
-	/* 13=flush_cache_ext,12=flush_cache,10=lba48 */
-	//put_le16(p + 86, (1 << 14) | (1 << 13) | (1 <<12) | (1 << 10));
-	//put_le16(p + 87, (1 << 14));
-	//put_le16(p + 88, 0x3f | (1 << 13)); /* udma5 set and supported */
-	//put_le16(p + 93, 1 | (1 << 14) | 0x2000);
+	*(p + 60) = *(p + 57);
+	*(p + 61) = *(p + 58);
 
-	/* LBA-48 sector count */
-	//put_le16(p + 100, s->nb_sectors);
-	//put_le16(p + 101, s->nb_sectors >> 16);
-	//put_le16(p + 102, s->nb_sectors >> 32);
-	//put_le16(p + 103, s->nb_sectors >> 48);
-	/* ratio logical/physical: 0, logicalSectorSizeSupported */
-	//put_le16(p + 106, 1 << 12);
-	/* words per logical sector */
-	//put_le16(p + 117, 512 >> 1);//s->bs->sector_size >> 1);
-	//put_le16(p + 118, 512 >> 17);//s->bs->sector_size >> 17);
 
-	//memcpy(s->identify_data, p, sizeof(s->identify_data));
-//	s->identify_set = 1;
-//}
-
-#endif
   return 0;
 }
 

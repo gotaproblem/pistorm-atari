@@ -7,6 +7,7 @@
 *.bin
 *.exe
 *.stackdump
+._*
 !/platforms/atari/*.img.bak
 /m68kmake
 /m68kmake.exe

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdbool.h>
 #include "atari-autoconf.h"
 #include "atari-registers.h"
 //#include "atari-interrupts.h"
@@ -36,12 +37,14 @@
 #define DEBUG(...)
 #endif
 
-extern int handle_register_read_atari(unsigned int addr, unsigned char type, unsigned int *val);
-extern int handle_register_write_atari(unsigned int addr, unsigned int value, unsigned char type);
+extern int handle_register_read_atari ( uint32_t addr, unsigned char type, unsigned int *val);
+extern int handle_register_write_atari ( uint32_t addr, unsigned int value, unsigned char type);
 
-#ifdef RTG
-extern int RTG_enabled;
-#endif
+//#ifdef RTG
+extern bool RTG_enabled;
+extern bool screenGrab;
+//#endif
+extern int FPU68020_SELECTED;
 
 extern const char *op_type_names[OP_TYPE_NUM];
 //extern uint8_t cdtv_mode;
@@ -199,13 +202,17 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val) {
         if ( val && strlen ( val ) != 0 )
             set_hard_drive_image_file_atari ( 1, val );
     }
-#ifdef RTG
-    if CHKVAR ( "rtg" ) 
-    {
-        RTG_enabled = 1;
-    }
-#endif
 
+    if CHKVAR ( "rtg" ) 
+        RTG_enabled = 1;
+
+    if CHKVAR ( "screengrab" ) 
+        screenGrab = 1;
+
+    /* cryptodad allow selection of fpu for 68020 CPU */
+    if CHKVAR ( "68020fpu" )
+        FPU68020_SELECTED = 1;
+        
 #ifdef PISCSI
     // PiSCSI stuff
     if (CHKVAR("piscsi") && !piscsi_enabled) {
