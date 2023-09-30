@@ -301,6 +301,9 @@ inline
 uint16_t ps_read_16 ( uint32_t address ) 
 {
 	static uint32_t l;
+#ifdef PI3
+  static uint16_t value;
+#endif
 
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
@@ -325,6 +328,10 @@ uint16_t ps_read_16 ( uint32_t address )
   while ( ( l = gpio [13] ) & (1 << PIN_TXN_IN_PROGRESS) )
     ;
 
+#ifdef PI3
+  value = (*(gpio + 13) >> 8);
+#endif
+
  	gpio [10] = TXN_END;
 
   //g_irq = CHECK_IRQ (l);
@@ -334,7 +341,11 @@ uint16_t ps_read_16 ( uint32_t address )
   RWstats.r16++;
 #endif
 
+#ifdef PI3
+  return value;
+#else
   return (l >> 8);
+#endif
 }
 
 
@@ -342,6 +353,9 @@ inline
 uint8_t ps_read_8 ( uint32_t address ) 
 {
   static uint32_t l;
+#ifdef PI3
+  static uint32_t value;
+#endif
   
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
@@ -366,6 +380,10 @@ uint8_t ps_read_8 ( uint32_t address )
   while ( ( l = gpio [13] ) & (1 << PIN_TXN_IN_PROGRESS) )
     ;
 
+#ifdef PI3
+  value = *(gpio + 13);
+#endif
+
   gpio [10] = TXN_END;
 
   //g_irq = CHECK_IRQ (l);
@@ -375,11 +393,23 @@ uint8_t ps_read_8 ( uint32_t address )
   RWstats.r8++;
 #endif
 
+#ifdef PI3
+  value = (value >> 8) & 0xffff;
+
+  if ( (address & 1) == 0 )
+    return (value >> 8) & 0xff;  // EVEN, A0=0,UDS
+
+  else
+    return value & 0xff;  // ODD , A0=1,LDS
+
+#else
+
   if ( (address & 1) == 0 )
     return (l >> 16);
 
   else
     return (l >> 8);
+#endif
 }
 
 
@@ -391,8 +421,6 @@ uint32_t ps_read_32 ( uint32_t address )
 
 void ps_write_status_reg(unsigned int value) 
 {
-  //while ( gpio [13] & 1 );
-
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
   gpio [2] = GPFSEL2_OUTPUT;
@@ -420,7 +448,11 @@ uint16_t ps_read_status_reg ()
 
   gpio [7] = 0x4C;//(REG_STATUS << PIN_A0) | (1 << PIN_RD);
 
-  while ( ( value = gpio [13] ) & 1 )//(1 << PIN_TXN_IN_PROGRESS) )
+#ifdef PI3
+  value = gpio [13];
+#endif
+
+  while ( ( value = gpio [13] ) & 1 )
     ;
 
   gpio [10] = TXN_END;
