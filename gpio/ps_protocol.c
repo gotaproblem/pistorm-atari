@@ -102,10 +102,12 @@ static void setup_io()
 /* max target frequency for PI_CLK (MHz) */
 #ifndef PI3
   #define PI_CLK 125
-  #define PLL_DIVISOR 7
+  #define PLL_DIVISOR 5
+  #define PLL_TO_USE PLLD
 #else
   #define PI_CLK 200
   #define PLL_DIVISOR 6
+  #define PLL_TO_USE PLLC
 #endif
 
 /* Enable PI_CLK output on GPIO4, adjust divider and pll source depending on pi model */
@@ -134,7 +136,7 @@ static void setup_gpclk()
   *(gpclk + (CLK_GP0_DIV / 4)) = CLK_PASSWD | (PLL_DIVISOR << 12);  // bits 23:12 integer part of divisor
   usleep(30);
 
-  *(gpclk + (CLK_GP0_CTL / 4)) = CLK_PASSWD | PLLC | (1 << 4); // 6=plld, 5=pllc
+  *(gpclk + (CLK_GP0_CTL / 4)) = CLK_PASSWD | PLL_TO_USE | (1 << 4); // 6=plld, 5=pllc
   usleep(30);
 
   while (((*(gpclk + (CLK_GP0_CTL / 4))) & (1 << 7)) == 0);
