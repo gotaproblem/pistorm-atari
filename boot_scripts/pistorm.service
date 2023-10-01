@@ -1,5 +1,5 @@
 [Unit]
-Description=PiStorm emulator
+Description=PiStorm-Atari Emulator
 StartLimitIntervalSec=0
 
 [Service]
@@ -7,8 +7,8 @@ Type=simple
 Restart=always
 RestartSec=1
 User=root
-ExecStart=/home/pi/pistorm/emulator
-WorkingDirectory=/home/pi/pistorm
+ExecStart=/home/steve/dev/ATARI/tmp/pistorm-atari/emulator --config ../../configs/autoboot.cfg
+WorkingDirectory=/home/steve/dev/ATARI/tmp/pistorm-atari
 
 [Install]
 WantedBy=multi-user.target
