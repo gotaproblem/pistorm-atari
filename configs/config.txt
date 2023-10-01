@@ -26,7 +26,7 @@ gpu_mem=16
 [all]
 arm64bit=0
 disable_splash=1
-boot_delay=1
+boot_delay=0
 force_turbo=1
 arm_boost=1
 initial_turbo=5
@@ -34,3 +34,6 @@ temp_limit=75
 
 # currently have to disable gpio irq
 dtoverlay=gpio-no-irq
+
+# Disable Bluetooth
+dtoverlay=disable-bt
