@@ -506,15 +506,33 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
 {
   static int r;
   
-  //if ( addr >= 0x00ff8a00 && addr < 0x00ff8a3e )
-  //{
-  //  printf ( "Blitter: read 0x%X\n", addr );
 
-    //*res = 0;
-    //return 1;
-  //}
+  /* Set Ataris date/time - picked up by TOS program */
+  if ( addr >= 0x00FFFC40 && addr < 0x00FFFC44 )
+  {
+    uint16_t atari_dt;
+    uint16_t atari_tm;
+    time_t t = time ( NULL );
+    struct tm tm = *localtime ( &t );
 
-  if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
+    atari_dt = (tm.tm_year - 80) << 9;
+    atari_dt |= (tm.tm_mon + 1) << 5;
+    atari_dt |= tm.tm_mday;
+
+    atari_tm = tm.tm_hour << 11;
+    atari_tm |= tm.tm_min << 5;
+    atari_tm |= tm.tm_sec / 2;
+
+    if ( addr == 0x00FFFC40 )
+      *res = atari_dt;
+
+    else if ( addr == 0x00FFFC42 )
+      *res = atari_tm;
+
+    return 1;
+  }
+  
+  else if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
   {
     RTG_RAMLOCK = true;
 
