@@ -28,6 +28,7 @@
 
 #define MAX_WIDTH  1024
 #define MAX_HEIGHT 768
+#define MAX_VRAM   (1024 * 768 * 2)
 #define ATARI_VRAM_BASE   0x003f8000 /* 4MB machine - will get changed at detection */
 #define GETRES() (uint16_t)( ((xcb->crtc_index [0x35] & 0x02) >> 1 ) << 10 | ((xcb->crtc_index [7] & 0x20) >> 5) << 9 | (xcb->crtc_index [7] & 0x01) << 8 | xcb->crtc_index [6] )
 #define HZ50       20000
@@ -292,22 +293,25 @@ void *rtgRender ( void* vptr )
 {
     int    wait;
     int    took;
-    int    thisRES = RESOLUTION1;//LOW_RES;
+    int    thisRES = RESOLUTION2;//LOW_RES;
     int    windowWidth;
     int    windowHeight;
     int    SCREEN_SIZE;
     struct timeval stop, start;
 
 
+    //while ( !ET4000Initialised )
     while ( !cpu_emulation_running )
         ;
 
+    //while ( ET4000Initialised )
     while ( cpu_emulation_running )
     {
         /* get time and wait for end-of-frame */
         /* 50 Hz 20000 (20ms), 60 Hz 16666 (16.6ms), 70 Hz 14285 (14.2ms) */
         gettimeofday ( &start, NULL );
 
+        //if ( ET4000Initialised && RTGresChanged )
         if ( ET4000enabled && RTGresChanged )
         {
             thisRES = RTG_RES;
@@ -568,6 +572,7 @@ void *rtgRender ( void* vptr )
             et4000Draw ( windowWidth, windowHeight );
 
         RTG_VSYNC = 1;
+        took = 0;
 
         /* rough frame rate delay */
         while ( 1 )
@@ -594,6 +599,7 @@ void *rtgRender ( void* vptr )
             //usleep ( 100 );
         }
 
+        /* debug */
         if ( took > FRAME_RATE + 200 )
             printf ( "frame overrun %d\n", took );
     }
@@ -675,8 +681,8 @@ void rtgInit ( void )
     }
     */
     //RTG_ATARI_SCREEN_RAM = ATARI_VRAM_BASE;
-    RTG_RES = RESOLUTION1; //LOW_RES;
-    RTGresChanged = 1;
+    //RTG_RES = RESOLUTION1;
+   // RTGresChanged = 1;
 }
 
 
@@ -736,12 +742,14 @@ int et4000Init ( void )
     xcb->FCr = 0;
 
     first = true;
-    RTGbuffer = malloc ( 1024 * 768 * 2 ); /* allocate max size */
-    RTG_VSYNC = 1;
-    //RTG_updated = true;
 
-    //if ( dst == MAP_FAILED || buffer == MAP_FAILED ) 
-    if ( RTGbuffer == NULL )//|| RTGbuffer == NULL ) 
+    /* this might be a re-initialise, so don't allocate more memory */
+    if ( RTGbuffer == NULL )
+        RTGbuffer = malloc ( MAX_VRAM ); /* allocate max size */
+
+    RTG_VSYNC = 1;
+
+    if ( RTGbuffer == NULL )
     {
         printf ( "[RTG] ET4000 Initialisation failed\n" );
         ET4000Initialised = false;
@@ -749,9 +757,11 @@ int et4000Init ( void )
         return 0;
     }
 
+    RTG_RES = RESOLUTION2;
+    RTGresChanged = 1;
     ET4000Initialised = true;
 
-    printf ( "[RTG] ET4000 Initialised\n" );
+    //memset ( RTGbuffer, 1, MAX_VRAM ); /* clear VRAM */
 
     return 1;
 }
@@ -775,8 +785,8 @@ void et4000Draw ( int windowWidth, int windowHeight )
     if ( COLOURDEPTH == 1 )
     {
         uint16_t *dptr = fbptr;
-        uint8_t *sptr = (uint8_t *)RTGbuffer;
-        
+        uint8_t  *sptr = RTGbuffer;
+
         for ( uint32_t address = 0, pixel = 0; pixel < SCREEN_SIZE; address++ ) 
         {
             for ( int ppb = 0; ppb < 8; ppb++ )
@@ -940,21 +950,22 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
                 break;
             case 0x3c3: /* Video Subsystem Register */
             case 0x46e8:
-                /* if emulator cnf file has not set setenv rtg then do not enable ET4000 */
+                /* if emulator cnf file has not `setenv rtg` then do not enable ET4000 */
                 //if ( !ET4000enabled && !RTG_enabled )
                 if ( !RTG_enabled )
                 {
-                    *value = 0xff;
-                    g_buserr = 1; 
+                //    *value = 0xff;
+                //    g_buserr = 1; 
+                    printf ( "et4000 raise bus error\n" );
                 }
 
-                else
+                //else
                     *value = xcb->videoSubsystemr;
 
                 /* stop emutos initialising ET4000 */
                 if ( first )
                 {
-                    *value = 0;
+                //    *value = 0;
                     first = false;
                     g_buserr = 1; /* uncomment this line if you don't want EMUtos to init ET4000 */
                 }
@@ -985,26 +996,34 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
                 break;
 
             default:
-                printf ( "ET4000 unknown read register 0x%X\n", a );
+               // printf ( "ET4000 unknown read register 0x%X\n", a );
                 break;
         }
 
-        return 0;
+        return 1;
     }
 
+//printf ( "et4000Read () -> type = %d, addr = 0x%X\n", type, addr );
+
+
     if ( type == OP_TYPE_BYTE )
-        return *( uint8_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) );
+        *value = *( uint8_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) );
 
     else if ( type == OP_TYPE_WORD )
-        return be16toh ( *( uint16_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
+        *value = be16toh ( *( uint16_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
 
     else if ( type == OP_TYPE_LONGWORD )
-        return be32toh ( *(uint32_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
+        *value = be32toh ( *(uint32_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
+
+    return 1;
 }
 
 
 uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
 {
+    static uint32_t offset;
+
+
     if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGTOP )
     {
         uint32_t a = addr - NOVA_ET4000_REGBASE;
@@ -1188,15 +1207,22 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
 
     /* must be a VRAM address */
     //printf ( "ET4000 VRAM write 0x%X, 0x%X\n", addr, value );
+    offset = addr - NOVA_ET4000_VRAMBASE;
 
     if ( type == OP_TYPE_BYTE )
-        *( (uint8_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) ) = value;
+    {
+        *( (uint8_t *)( RTGbuffer + offset ) ) = value;
+    }
 
     else if ( type == OP_TYPE_WORD )
-        *( (uint16_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) ) = htobe16 (value);
+    {
+        *( (uint16_t *)( RTGbuffer + offset) ) = htobe16 (value);
+    }
 
     else if ( type == OP_TYPE_LONGWORD )
-        *( (uint32_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) ) = htobe32 (value);
+    {
+        *( (uint32_t *)( RTGbuffer + offset ) ) = htobe32 (value);
+    }
 
     return 1;
 }
@@ -1204,38 +1230,17 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
 
 /* ------------------------------------------------------------------------- */
 
-/* terminal IO */
-#include <stdio.h>
-#include <termios.h>
-#include <unistd.h>
-#include <fcntl.h>
- 
+/* terminal IO */ 
 int kbhit ( void )
 {
-  struct termios oldt, newt;
   int ch;
-  int oldf;
- 
-  tcgetattr ( STDIN_FILENO, &oldt );
-
-  newt = oldt;
-  //memcpy ( &newt, &oldt, sizeof oldt );
-  newt.c_lflag &= ~(ICANON | ECHO);
-
-  tcsetattr ( STDIN_FILENO, TCSANOW, &newt );
-
-  oldf = fcntl ( STDIN_FILENO, F_GETFL, 0 );
-  fcntl ( STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK );
  
   ch = getchar ();
- 
-  oldt.c_lflag |= ECHO;
-  tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
-  fcntl ( STDIN_FILENO, F_SETFL, oldf );
  
   if ( ch != EOF )
   {
     ungetc ( ch, stdin) ;
+
     return 1;
   }
  
