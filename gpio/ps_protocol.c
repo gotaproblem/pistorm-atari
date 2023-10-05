@@ -102,7 +102,7 @@ static void setup_io()
 /* max target frequency for PI_CLK (MHz) */
 #ifndef PI3
   #define PI_CLK 125
-  #define PLL_DIVISOR 5
+  #define PLL_DIVISOR 9 //5
   #define PLL_TO_USE PLLD
 #else
   #define PI_CLK 200

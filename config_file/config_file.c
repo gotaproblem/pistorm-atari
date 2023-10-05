@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "rominfo.h"
+
 
 #define DEBUGPRINT 1
 #if DEBUGPRINT

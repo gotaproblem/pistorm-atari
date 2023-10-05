@@ -4,7 +4,6 @@
 *.hdf
 *.rom
 *.dll
-*.bin
 *.exe
 *.stackdump
 ._*

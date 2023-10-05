@@ -168,7 +168,8 @@ void sigint_handler ( int sig_num )
   }
 
   /* free up RTG memory */
-  free ( RTGbuffer );
+  if ( RTGbuffer )
+    free ( RTGbuffer );
 
   /* reset stdio tty properties */
   oldt.c_lflag |= ECHO;
@@ -225,7 +226,15 @@ run:
   if ( g_irq )
   {
     status = ps_read_status_reg ();
+    if ( status == 0xFFFF )
+      printf ( "bad status\n" );
     last_irq = status >> 13;
+
+    if ( last_irq != 0 )
+    {
+      m68k_set_irq ( last_irq );
+      m68ki_check_interrupts ( state );
+    }
 
     if ( status & 0x2 ) 
     {
@@ -237,23 +246,14 @@ run:
 
       m68k_pulse_reset ( state );
     }
-
-    if ( last_irq != 0 && last_irq != last_last_irq ) 
-    {
-      last_last_irq = last_irq;
-      m68k_set_irq ( last_irq );
-
-      //m68ki_check_interrupts ( state );
-    }
   }
 
-  else if ( !g_irq && last_last_irq != 0 ) 
+  else
   {
-    last_last_irq = 0;
     m68k_set_irq ( 0 );
+    m68ki_check_interrupts ( state );
   }
-  //M68K_END_TIMESLICE;
-  m68ki_check_interrupts ( state );
+  
 #endif
 
   if ( !cpu_emulation_running )
