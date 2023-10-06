@@ -860,11 +860,11 @@ void et4000Draw ( int windowWidth, int windowHeight )
         uint16_t *dptr = fbptr;
         uint16_t *sptr = RTGbuffer;
         
-        for ( address = 0, pixel = 0; pixel < SCREEN_SIZE; pixel++, address++ )
+        for ( pixel = 0; pixel < SCREEN_SIZE; pixel++ )
         {
             while ( RTG_RAMLOCK );
 
-            dptr [pixel] = sptr [address];
+            dptr [pixel] = sptr [pixel];
         }
     }
 

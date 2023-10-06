@@ -203,6 +203,8 @@ run:
   m68k_execute_bef ( state, loop_cycles );
 #if (1)
   status = ps_read_status_reg ();
+  if ( status == 0xFFFF )
+    printf ( "bad status\n" );
   g_last_irq = status >> 13;
 
   if ( status & 0x2 ) 
