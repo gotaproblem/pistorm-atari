@@ -9,11 +9,11 @@
 [pi3]
 overvoltage=6
 arm_freq=1500
-core_freq=600
+core_freq=400
 gpu_mem=16
-sdram_freq=700
-over_voltage_sdram=5
-sdram_schmoo=0x2000020
+#sdram_freq=700
+#over_voltage_sdram=5
+#sdram_schmoo=0x2000020
 
 
 [pi4]
