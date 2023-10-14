@@ -19,7 +19,7 @@
 //`define NEWARB
 
  
-module pistormsxb_devEPM570(
+module pistormsxb_devEPM240(
     output reg     	PI_TXN_IN_PROGRESS, 	// GPIO0
     output reg     	PI_IPL_ZERO,        	// GPIO1
     input   [1:0]   PI_A,       			// GPIO[3..2]
@@ -163,7 +163,6 @@ module pistormsxb_devEPM570(
 	//assign LTCH_A_24 						= PI_A == REG_ADDR_HI && PI_WR;
 	assign LTCH_D_RD_OE_n					= !(PI_A == REG_DATA && PI_RD);
 	
-	
 	reg a0;
 
 	always @(posedge c200m) begin
@@ -171,7 +170,7 @@ module pistormsxb_devEPM570(
 	end
 
 	wire c8m_rising 						= !c8m_sync[1] && c8m_sync[0];
-	wire c8m_falling 						= c8m_sync[1] && !c8m_sync[0];	
+	wire c8m_falling 						= c8m_sync[1] && !c8m_sync[0];
 	
 	reg [2:0] ipl;
 	reg [2:0] reset_d 						= 3'b000;
@@ -308,7 +307,7 @@ module pistormsxb_devEPM570(
 	
 	/* WRITE commands */
 	reg [2:0] op_fc 						= 3'b111;
-	
+
 	assign CMDWR = PI_WR;
 	
 	always @(CMDWR) begin
