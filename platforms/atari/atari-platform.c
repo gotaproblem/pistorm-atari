@@ -203,6 +203,42 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val) {
             set_hard_drive_image_file_atari ( 1, val );
     }
 
+    if CHKVAR ( "hdd2" ) 
+    {
+        if ( val && strlen ( val ) != 0 )
+            set_hard_drive_image_file_atari ( 2, val );
+    }
+
+    if CHKVAR ( "hdd3" ) 
+    {
+        if ( val && strlen ( val ) != 0 )
+            set_hard_drive_image_file_atari ( 3, val );
+    }
+
+    if CHKVAR ( "hdd4" ) 
+    {
+        if ( val && strlen ( val ) != 0 )
+            set_hard_drive_image_file_atari ( 4, val );
+    }
+
+    if CHKVAR ( "hdd5" ) 
+    {
+        if ( val && strlen ( val ) != 0 )
+            set_hard_drive_image_file_atari ( 5, val );
+    }
+
+    if CHKVAR ( "hdd6" ) 
+    {
+        if ( val && strlen ( val ) != 0 )
+            set_hard_drive_image_file_atari ( 6, val );
+    }
+
+    if CHKVAR ( "hdd7" ) 
+    {
+        if ( val && strlen ( val ) != 0 )
+            set_hard_drive_image_file_atari ( 7, val );
+    }
+
     if CHKVAR ( "rtg" ) 
         RTG_enabled = 1;
 

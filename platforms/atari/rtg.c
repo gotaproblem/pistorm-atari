@@ -1016,7 +1016,7 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
                 break;
             case 0x3bf: /* Hercules Compatibility Register */
                 if ( value == 0x03 )
-                    xcb->KEY = true;
+                    xcb->KEYenable = true;
                 break;
             case 0x3ba: /* monochrome */
                 break;
@@ -1154,7 +1154,7 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
 
                 break;
             case 0x3d8: /* (RW) 6845 Display Mode Control Register colour */
-                if ( value == 0xA0 )
+                if ( value == 0xA0 && xcb->KEYenable )
                     xcb->KEY = true;
 
                 else

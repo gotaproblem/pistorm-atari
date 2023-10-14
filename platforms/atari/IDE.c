@@ -36,6 +36,7 @@
 #endif
 
 //#define IDE_DUMMY 
+//int IDEIF;
 
 #ifdef IDE_DUMMY
 uint8_t *atariide0 = NULL;
@@ -64,7 +65,7 @@ void IDE_attach(uint8_t *dummy, uint32_t idx, uint32_t atarifd) {
   return;
 }
 #else
-static struct ide_controller *atariide0 = NULL;
+static struct ide_controller *atariIDE [4] = {NULL, NULL, NULL, NULL};
 #endif
 
 int atarifd;
@@ -74,9 +75,9 @@ uint8_t IDE_IDE_enabled;
 
 struct ide_controller *get_ide ( int index ) 
 {
-  if ( index ) {}
+  //if ( index ) {}
 
-  return atariide0;
+  return atariIDE [index];
 }
 
 
@@ -92,62 +93,80 @@ void set_hard_drive_image_file_atari ( uint8_t index, char *filename )
 void InitIDE (void) 
 {
   uint8_t num_IDE_drives = 0;
+  int port = 0;
+  int ix;
 
-  for (int i = 0; i < 2; i++ )//IDE_MAX_HARDFILES; i++) 
-  {
-    //printf ( "here 1\n" );
-    if ( atari_image_file[i] ) 
+  //get_mapped_item_by_address ( cfg, 0x00F00000 );
+  ix = (0x00 & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+
+
+
+ // for ( int n = 0; n < 4; n++ )
+  //{
+    //for (int i = 0; i < 2; i++ )//IDE_MAX_HARDFILES; i++) 
+    for ( int i = 0; i < IDE_MAX_HARDFILES && port < 4; i++ ) 
     {
-      //printf ( "here 2\n" );
-      atarifd = open ( atari_image_file[i], O_RDWR | O_LARGEFILE );
+      //printf ( "here 1\n" );
+      port = (i / 2); //+ ix;
+      //printf ( "port %d\n", port );
 
-      if (atarifd != -1) 
+      if ( atari_image_file [i] ) 
       {
-        //printf ( "here 3\n" );
-        if (!atariide0)
-            atariide0 = IDE_allocate("cf");
-      }
+       // printf ( "here 2\n" );
+        atarifd = open ( atari_image_file[i], O_RDWR | O_LARGEFILE );
 
-      if (atarifd == -1) 
-      {
-        printf ( "[HDD%d] HDD Image %s failed to open\n", i, atari_image_file[i] );
-      } 
-      
-      else 
-      {
-        //printf ( "here 4\n" );
-        if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 2 ), "ST" ) == 0 )
+        if (atarifd != -1) 
         {
-          printf ( "[FDD%d] Attaching FDD image %s.\n", i, atari_image_file [i] );
-
-          ide_attach_st ( atariide0, i, atarifd );
-          num_IDE_drives++;
-
-          printf ( "[FDD%d] FDD Image %s attached\n", i, atari_image_file [i] );
+         // printf ( "here 3\n" );
+          if ( ! atariIDE [port] )
+              atariIDE [port] = IDE_allocate ( "cf" );
         }
 
-        else if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 3 ), "img" ) == 0 
-        || strncmp ( atari_image_file [i], "/dev/loop0", 10 ) == 0 )
+        if (atarifd == -1) 
         {
-          //printf ("[HDD%d] Attaching HDD image %s.\n", i, atari_image_file[i]);
-          //if (strcmp(atari_image_file[i] + (strlen(atari_image_file[i]) - 3), "img") != 0) {
-            //DEBUG_PRINTF ("No header present on HDD image %s.\n", atari_image_file[i]);
-            ide_attach_hdf ( atariide0, i, atarifd );
+          printf ( "[IDE%d:] [HDD%d] HDD Image %s failed to open\n", port, i, atari_image_file[i] );
+        } 
+        
+        else 
+        {
+         // printf ( "here 4\n" );
+          if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 2 ), "ST" ) == 0 )
+          {
+            printf ( "[FDD%d] Attaching FDD image %s.\n", i, atari_image_file [i] );
+
+            ide_attach_st ( atariIDE [port], i & 1, atarifd );
             num_IDE_drives++;
-          //}
-          //else {
-          //  DEBUG_PRINTF ("Attaching HDD image with header.\n");
-          //  IDE_attach(atariide0, i, atarifd);
-          //  num_IDE_drives++;
-          //}
-          printf ("[HDD%d] HDD Image %s attached\n", i, atari_image_file[i]);
+
+            printf ( "[FDD%d] FDD Image %s attached\n", i, atari_image_file [i] );
+          }
+
+          else if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 3 ), "img" ) == 0 
+          || strncmp ( atari_image_file [i], "/dev/loop0", 10 ) == 0 )
+          {
+            //printf ("[HDD%d] Attaching HDD image %s.\n", i, atari_image_file[i]);
+            //if (strcmp(atari_image_file[i] + (strlen(atari_image_file[i]) - 3), "img") != 0) {
+              //DEBUG_PRINTF ("No header present on HDD image %s.\n", atari_image_file[i]);
+              ide_attach_hdf ( atariIDE [port], i & 1, atarifd );
+              num_IDE_drives++;
+            //}
+            //else {
+            //  DEBUG_PRINTF ("Attaching HDD image with header.\n");
+            //  IDE_attach(atariide0, i, atarifd);
+            //  num_IDE_drives++;
+            //}
+            printf ("[IDE%d:] [HDD%d] HDD Image %s attached\n", port, i, atari_image_file[i]);
+          }
         }
       }
-    }
-  }
 
-  if (atariide0)
-    IDE_reset_begin (atariide0);
+      
+    }
+  
+    for ( int n = 0; n < 4; n ++ )
+      if ( atariIDE [n] )
+        IDE_reset_begin ( atariIDE [n] );
+  //}
+
 
   if (num_IDE_drives == 0) 
   {
@@ -164,11 +183,14 @@ static uint8_t IDE_action = 0;
 
 void writeIDEB ( uint32_t address, unsigned int value ) 
 {
-  if ( atariide0 ) 
+  int port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+
+  if ( atariIDE [port] ) 
   {
     //if (address >= IDEBASE && address < (IDEBASE + IDESIZE) ) {
+      int base = address - ( IDEBASE + (0x40 * port) );
 #if (1)
-      switch ( address - IDEBASE ) 
+      switch ( base ) 
       {
         case GFEAT_OFFSET:
           //DEBUG_PRINTF ("Write to GFEAT: %.2X.\n", value);
@@ -208,9 +230,9 @@ void writeIDEB ( uint32_t address, unsigned int value )
         //  printf ( "%s: unserviced request 0x%x\n", __func__, ((address - IDEBASE)) );//IDE_IDE_base) - IDE_IDE_adj) );
       }
       goto skip_idewrite8;
-IDEwrite8:;
+IDEwrite8:
 //#else
-      IDE_write8(atariide0, IDE_action, value);
+      IDE_write8( atariIDE [port], IDE_action, value);
       return;
 skip_idewrite8:;
     //}
@@ -272,10 +294,12 @@ void writeIDE ( uint32_t address, unsigned int value)
 {
 #if (1)
   //printf ( "writeIDE: address 0x%X\n", address );  
-  if ( atariide0 ) 
+  int port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+
+  if ( atariIDE [port] ) 
   {
     //if (address - IDEBASE == GDATA_OFFSET) {
-      IDE_write16(atariide0, IDE_data, value);
+      IDE_write16( atariIDE [port], IDE_data, value);
       return;
     //}
 
@@ -323,12 +347,15 @@ void writeIDEL ( uint32_t address, unsigned int value )
     //put_rtc_byte(address, (value >> 24), rtc_type);
     //return;
   //}
-  if ( address - IDEBASE == GDATA_OFFSET ) 
+  int port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+  int base = address - ( IDEBASE + (0x40 * port) );
+  //if ( address - IDEIF == GDATA_OFFSET ) 
+  if ( base == GDATA_OFFSET )
   {
     //printf ("IDE write long 0x%x\n", value);
 
-    IDE_write16 ( atariide0, IDE_data, value >> 16 ) ;
-    IDE_write16 ( atariide0, IDE_data, value & 0xffff );
+    IDE_write16 ( atariIDE [port], IDE_data, value >> 16 ) ;
+    IDE_write16 ( atariIDE [port], IDE_data, value & 0xffff );
   }
 
   //DEBUG("Write Long to IDE Space 0x%06x (0x%06x)\n", address, value);
@@ -336,12 +363,15 @@ void writeIDEL ( uint32_t address, unsigned int value )
 
 uint8_t readIDEB ( uint32_t address ) 
 {
-  if ( atariide0 ) 
+  int port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+  int base = address - ( IDEBASE + (0x40 * port) );
+
+  if ( atariIDE [port] ) 
   {
     uint8_t IDE_action = 0, IDE_val = 0;
 #if (1)
       //printf ("IDE read byte at 0x%X\n", address );
-      switch ( address - IDEBASE ) 
+      switch ( base ) 
       {
         case GERROR_OFFSET:
           IDE_action = IDE_error_r;
@@ -378,7 +408,7 @@ uint8_t readIDEB ( uint32_t address )
 
       return 0xFF;
 ideread8:
-      IDE_val = IDE_read8 ( atariide0, IDE_action );
+      IDE_val = IDE_read8 ( atariIDE [port], IDE_action );
       return IDE_val;
 //skip_ideread8:
     //}
@@ -466,16 +496,21 @@ ideread8:
 uint16_t readIDE ( uint32_t address ) 
 {
   uint16_t value;
+  int port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+  int base = address - ( IDEBASE + (0x40 * port) );
+
   //printf ( "readIDE: address 0x%X\n", address );
-  if ( atariide0 ) 
+  if ( atariIDE [port] ) 
   {
 #if (1)
-    if (address - IDEBASE == GDATA_OFFSET) {
+   // if (address - IDEIF == GDATA_OFFSET) 
+    if ( base == GDATA_OFFSET) 
+    {
       
       //printf ("IDE read word\n");
 
       uint16_t value;
-      value = IDE_read16(atariide0, IDE_data);
+      value = IDE_read16( atariIDE [port], IDE_data);
       //	value = (value << 8) | (value >> 8);
       return value;//value << 8 | value >> 8;
     }
@@ -520,16 +555,20 @@ uint32_t readIDEL ( uint32_t address )
     //DEBUG_PRINTF ("Longword read from RTC.\n");
     //return 0xffffffff; //((get_rtc_byte(address, rtc_type) << 24) | (get_rtc_byte(address + 1, rtc_type) << 16) | (get_rtc_byte(address + 2, rtc_type) << 8) | (get_rtc_byte(address + 3, rtc_type)));
   //}
-  if ( address - IDEBASE == GDATA_OFFSET ) 
+  int port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+  int base = address - ( IDEBASE + (0x40 * port) );
+
+  //if (address - IDEIF == GDATA_OFFSET) 
+  if ( base == GDATA_OFFSET ) 
   {
 
    // printf ("IDE read long\n");
 
       uint32_t value;
 
-      value = IDE_read16(atariide0, IDE_data);
+      value = IDE_read16( atariIDE [port], IDE_data);
       
-      return value << 16 | IDE_read16(atariide0, IDE_data) ;
+      return value << 16 | IDE_read16( atariIDE [port], IDE_data) ;
     }
   //DEBUG("Read Long From IDE Space 0x%06x\n", address);
   return 0x8000;

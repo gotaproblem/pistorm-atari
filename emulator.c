@@ -203,8 +203,8 @@ run:
   m68k_execute_bef ( state, loop_cycles );
 #if (1)
   status = ps_read_status_reg ();
-  if ( status == 0xFFFF )
-    printf ( "bad status\n" );
+  //if ( status == 0xFFFF )
+  //  printf ( "bad status\n" );
   g_last_irq = status >> 13;
 
   if ( status & 0x2 ) 
@@ -228,8 +228,6 @@ run:
   if ( g_irq )
   {
     status = ps_read_status_reg ();
-    if ( status == 0xFFFF )
-      printf ( "bad status\n" );
     last_irq = status >> 13;
 
     if ( last_irq != 0 )
@@ -711,6 +709,18 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   #endif
   }
 #endif
+  /* DMA check */
+  /*
+  else if ( (addr == 0xFFFF8604 || addr == 0xFFFF8606) && type == OP_TYPE_LONGWORD )
+  {
+    //printf ( "LONGWORD DMA 0x%X\n", addr );
+    addr &= 0x00FFFFFF;
+    ps_write_16 ( addr, val >> 16 );
+    ps_write_16 ( addr + 2, val & 0xffff );
+
+    return 1;
+  }
+  */
  // if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
  // {
  //   RTG_RAMLOCK = true;

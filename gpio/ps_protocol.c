@@ -100,14 +100,52 @@ static void setup_io()
 /* PLLD GPU_FREQ (750 MHz) as defined in /boot/config.txt */
 
 /* max target frequency for PI_CLK (MHz) */
+/*
 #ifndef PI3
   #define PI_CLK 125
   #define PLL_DIVISOR 9 //5
   #define PLL_TO_USE PLLD
 #else
   #define PI_CLK 200
-  #define PLL_DIVISOR 6
+  #define PLL_DIVISOR 11 //6
   #define PLL_TO_USE PLLC
+#endif*/
+
+
+/* cryptodad */
+/* PI_CLK (GPIO 4) definitions */
+#define PLLC 5 /* ARM CLOCK  - cpu_freq */
+#define PLLD 6 /* CORE CLOCK - gpu_freq this should be used for a stable 200 MHz PI_CLK as it is NOT affected by overclocking CPU */
+
+/* pi3 BCM 2837 */
+/* GPIO max clock is 200 MHz */
+/* PLLD GPU_FREQ (500 MHz) as defined in /boot/config.txt */
+
+/* Pi4 BCM 2711 */
+/* GPIO max clock is 125 MHz */
+/* PLLD GPU_FREQ (750 MHz) as defined in /boot/config.txt */
+
+/* max target frequency for PI_CLK (MHz) */
+
+#ifndef PI3 /* THIS IS FOR PI4 */
+
+  #define PLL_TO_USE PLLD
+  #define MAX_PI_CLK 125
+
+  #if PLL_TO_USE == PLLC
+    #define PI_CLK_DIV (1500 / MAX_PI_CLK)
+    #define PLL_DIVISOR PI_CLK_DIV
+  #elif PLL_TO_USE == PLLD
+    #define PI_CLK_DIV (750 / MAX_PI_CLK)
+    #define PLL_DIVISOR PI_CLK_DIV
+  #endif
+
+#else /* THIS IS FOR PI3 */
+
+  #define PLL_TO_USE PLLC
+  #define MAX_PI_CLK 200
+  #define PLL_DIVISOR 6
+  
 #endif
 
 /* Enable PI_CLK output on GPIO4, adjust divider and pll source depending on pi model */
@@ -446,16 +484,15 @@ uint16_t ps_read_status_reg ()
 {
   static uint32_t value;
 
-  while ( gpio [13] & 1 );
-
-  gpio [7] = 0x4C;//(REG_STATUS << PIN_A0) | (1 << PIN_RD);
-
-#ifdef PI3
-  value = gpio [13];
-#endif
-
-  while ( ( value = gpio [13] ) & 1 )
+  while ( gpio [13] & 1 )
     ;
+
+  gpio [7] = 0x4C; //(REG_STATUS << PIN_A0) | (1 << PIN_RD);
+
+  while ( gpio [13] & 1 )
+    ;
+
+  value = gpio [13];
 
   gpio [10] = TXN_END;
 

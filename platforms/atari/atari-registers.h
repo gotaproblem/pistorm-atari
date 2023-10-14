@@ -12,11 +12,14 @@ void adjust_IDE_4000();
 void adjust_IDE_1200();
 
 #define IDEBASEADDR 0xFFF00000
-#define IDETOPADDR  0xFFF00040
+#define IDETOPADDR  0xFFF00100
 #define IDEBASE 0x00F00000
-#define IDETOP  0x00F00040
+#define IDETOP  0x00F00100
 #define IDESIZE 0x40
-//#define IDETOP  (IDEBASE | IDESIZE)
+#define IDE0 IDEBASE
+#define IDE1 (IDE0 + IDESIZE)
+#define IDE2 (IDE1 + IDESIZE)
+#define IDE3 (IDE2 + IDESIZE)
 
 #define BLITTERBASE 0x00ff8a00
 #define BLITTERSIZE 0x3e

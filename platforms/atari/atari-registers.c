@@ -11,6 +11,7 @@ uint8_t atari_rtc_emulation_enabled = 1;
 //extern uint8_t IDE_emulation_enabled;
 //extern uint8_t Blitter_enabled;
 extern uint8_t IDE_IDE_enabled;
+//extern int IDEIF;
 
 extern volatile uint32_t RTG_ATARI_SCREEN_RAM;
 extern volatile uint8_t RTG_RES;
@@ -36,6 +37,8 @@ int handle_register_read_atari ( uint32_t addr, unsigned char type, uint32_t *va
         if ( addr >= IDEBASE && addr < IDETOP ) 
         {
             //printf ("IDE read 0x%X\n", addr );
+            //IDEIF = (addr & 0xF0) + IDEBASE;
+
             switch(type) 
             {
                 case OP_TYPE_BYTE:
@@ -89,6 +92,8 @@ int handle_register_write_atari ( uint32_t addr, unsigned int value, unsigned ch
         if ( addr >= IDEBASE && addr < IDETOP ) 
         {
             //printf ( "IDE write\n" );
+            //IDEIF = (addr & 0xF0) + IDEBASE;
+
             switch ( type ) 
             {
                 case OP_TYPE_BYTE:

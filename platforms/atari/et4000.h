@@ -86,6 +86,7 @@ typedef struct
     uint8_t gdc_ix;
     uint8_t gdc_index [11];
     bool    KEY;
+	bool    KEYenable;
     uint8_t ISr0;
     uint8_t FCr;
     uint8_t DisplayModeControlr;
