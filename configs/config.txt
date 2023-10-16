@@ -6,6 +6,13 @@
 # Sep 2023
 #
 
+[pi02]
+#overvoltage=6
+#arm_freq=1300
+core_freq=500
+gpu_mem=16
+
+
 [pi3]
 #overvoltage=6
 #arm_freq=1400
