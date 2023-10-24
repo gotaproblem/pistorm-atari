@@ -183,63 +183,73 @@ static uint8_t IDE_action = 0;
 
 void writeIDEB ( uint32_t address, unsigned int value ) 
 {
-  int port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+  static int port;
+  static int base;
+
+  port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
 
   if ( atariIDE [port] ) 
   {
-    //if (address >= IDEBASE && address < (IDEBASE + IDESIZE) ) {
-      int base = address - ( IDEBASE + (0x40 * port) );
-#if (1)
-      switch ( base ) 
-      {
-        case GFEAT_OFFSET:
-          //DEBUG_PRINTF ("Write to GFEAT: %.2X.\n", value);
-          IDE_action = IDE_feature_w;
-          goto IDEwrite8;
-        case GCMD_OFFSET:
-          //DEBUG_PRINTF ("Write to GCMD: %.2X.\n", value);
-          IDE_action = IDE_command_w;
-          goto IDEwrite8;
-        case GSECTCOUNT_OFFSET:
-          IDE_action = IDE_sec_count;
-          goto IDEwrite8;
-        case GSECTNUM_OFFSET:
-          IDE_action = IDE_sec_num;
-          goto IDEwrite8;
-        case GCYLLOW_OFFSET:
-          IDE_action = IDE_cyl_low;
-          goto IDEwrite8;
-        case GCYLHIGH_OFFSET:
-          IDE_action = IDE_cyl_hi;
-          goto IDEwrite8;
-        case GDEVHEAD_OFFSET:
-          //DEBUG_PRINTF ("Write to GDEVHEAD: %.2X.\n", value);
-          IDE_action = IDE_dev_head;
-          goto IDEwrite8;
-        case GCTRL_OFFSET:
-          //DEBUG_PRINTF ("Write to GCTRL: %.2X.\n", value);
-          IDE_action = IDE_devctrl_w;
-          goto IDEwrite8;
-        //case GIRQ_4000_OFFSET:
-        //  IDE_a4k_irq = value;
-          // Fallthrough
-        //case GIRQ_OFFSET:
-        //  IDE_irq = (IDE_irq & value) | (value & (IDE_IRQ_RESET | IDE_IRQ_BERR));
-        //  return;
-        //default:
-        //  printf ( "%s: unserviced request 0x%x\n", __func__, ((address - IDEBASE)) );//IDE_IDE_base) - IDE_IDE_adj) );
-      }
-      goto skip_idewrite8;
-IDEwrite8:
-//#else
-      IDE_write8( atariIDE [port], IDE_action, value);
-      return;
-skip_idewrite8:;
-    //}
+    base = address - ( IDEBASE + (0x40 * port) );
 
-    
+    switch ( base ) 
+    {
+      case GFEAT_OFFSET:
+        //DEBUG_PRINTF ("Write to GFEAT: %.2X.\n", value);
+        IDE_action = IDE_feature_w;
+       // goto IDEwrite8;
+        break;
+      case GCMD_OFFSET:
+        //DEBUG_PRINTF ("Write to GCMD: %.2X.\n", value);
+        IDE_action = IDE_command_w;
+        //goto IDEwrite8;
+        break;
+      case GSECTCOUNT_OFFSET:
+        IDE_action = IDE_sec_count;
+        //goto IDEwrite8;
+        break;
+      case GSECTNUM_OFFSET:
+        IDE_action = IDE_sec_num;
+        //goto IDEwrite8;
+        break;
+      case GCYLLOW_OFFSET:
+        IDE_action = IDE_cyl_low;
+        //goto IDEwrite8;
+        break;
+      case GCYLHIGH_OFFSET:
+        IDE_action = IDE_cyl_hi;
+        //goto IDEwrite8;
+        break;
+      case GDEVHEAD_OFFSET:
+        //DEBUG_PRINTF ("Write to GDEVHEAD: %.2X.\n", value);
+        IDE_action = IDE_dev_head;
+        //goto IDEwrite8;
+        break;
+      case GCTRL_OFFSET:
+        //DEBUG_PRINTF ("Write to GCTRL: %.2X.\n", value);
+        IDE_action = IDE_devctrl_w;
+       // goto IDEwrite8;
+       break;
+      //case GIRQ_4000_OFFSET:
+      //  IDE_a4k_irq = value;
+        // Fallthrough
+      //case GIRQ_OFFSET:
+      //  IDE_irq = (IDE_irq & value) | (value & (IDE_IRQ_RESET | IDE_IRQ_BERR));
+      //  return;
+      default:
+      //  printf ( "%s: unserviced request 0x%x\n", __func__, ((address - IDEBASE)) );//IDE_IDE_base) - IDE_IDE_adj) );
+        return;
+    }
+
+    //goto skip_idewrite8;
+
+IDEwrite8:
+    IDE_write8 ( atariIDE [port], IDE_action, value );
+
     return;
-#endif
+
+//skip_idewrite8:;
+//    return;
   }
 
 #if (0)
@@ -272,247 +282,119 @@ skip_idewrite8:;
   }
   
 #endif
-  
-  //if ((address & IDEMASK) == CLOCKBASE) {
-  //  if ((address & CLOCKMASK) >= 0x8000) {
-      //if (cdtv_mode) {
-      //  //DEBUG_PRINTF ("[CDTV] BYTE write to SRAM @%.8X (%.8X): %.2X\n", (address & CLOCKMASK) - 0x8000, address, value);
-      //  cdtv_sram[(address & CLOCKMASK) - 0x8000] = value;
-      //}
-   //   return;
-   // }
-    //DEBUG_PRINTF ("Byte write to RTC.\n");
-    //put_rtc_byte(address, value, rtc_type);
-    //DEBUG("Write Byte to IDE Space 0x%06x (0x%06x)\n", address, value);
-  //  return;
-  //}
 
   //DEBUG("Write Byte to IDE Space 0x%06x (0x%06x)\n", address, value);
 }
 
 void writeIDE ( uint32_t address, unsigned int value) 
 {
-#if (1)
-  //printf ( "writeIDE: address 0x%X\n", address );  
-  int port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+  static int port;
+  static int base;
+
+  port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+  base = address - ( IDEBASE + (0x40 * port) );
 
   if ( atariIDE [port] ) 
   {
-    //if (address - IDEBASE == GDATA_OFFSET) {
-      IDE_write16( atariIDE [port], IDE_data, value);
-      return;
-    //}
+    if ( base == GDATA_OFFSET )
+      IDE_write16 ( atariIDE [port], IDE_data, value );
 
-    //if (address == GIRQ_A4000) {
-    //  IDE_a4k_irq = value;
-    //  return;
-    //}
+    return;
   }
 
-  //if ((address & IDEMASK) == CLOCKBASE) {
-  //  if ((address & CLOCKMASK) >= 0x8000) {
-      //if (cdtv_mode) {
-      //  //DEBUG_PRINTF ("[CDTV] WORD write to SRAM @%.8X (%.8X): %.4X\n", (address & CLOCKMASK) - 0x8000, address, htobe16(value));
-      //  ((short *) ((size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000)))[0] = htobe16(value);
-      //}
-  //    return;
-  //  }
-    //DEBUG_PRINTF ("Word write to RTC.\n");
-    //put_rtc_byte(address + 1, (value & 0xFF), rtc_type);
-    //put_rtc_byte(address, (value >> 8), rtc_type);
-  //  return;
-  //}
-#else
-    IDE_write16(atariide0, IDE_data, value);
-    return;
-#endif
-
-  DEBUG("Write Word to IDE Space 0x%06x (0x%06x)\n", address, value);
+  //DEBUG("Write Word to IDE Space 0x%06x (0x%06x)\n", address, value);
 }
 
 void writeIDEL ( uint32_t address, unsigned int value ) 
 {
-  //if ((address & IDEMASK) == CLOCKBASE) {
-    //if ((address & CLOCKMASK) >= 0x8000) {
-      //if (cdtv_mode) {
-      //  //DEBUG_PRINTF ("[CDTV] LONGWORD write to SRAM @%.8X (%.8X): %.8X\n", (address & CLOCKMASK) - 0x8000, address, htobe32(value));
-      //  ((int *) (size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000))[0] = htobe32(value);
-      //}
-      //return;
-    //}
-    //DEBUG_PRINTF ("Longword write to RTC.\n");
-    //put_rtc_byte(address + 3, (value & 0xFF), rtc_type);
-    //put_rtc_byte(address + 2, ((value & 0x0000FF00) >> 8), rtc_type);
-    //put_rtc_byte(address + 1, ((value & 0x00FF0000) >> 16), rtc_type);
-    //put_rtc_byte(address, (value >> 24), rtc_type);
-    //return;
-  //}
-  int port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
-  int base = address - ( IDEBASE + (0x40 * port) );
-  //if ( address - IDEIF == GDATA_OFFSET ) 
-  if ( base == GDATA_OFFSET )
+  static int port;
+  static int base;
+
+  port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+  base = address - ( IDEBASE + (0x40 * port) );
+
+  if ( atariIDE [port] ) 
   {
-    //printf ("IDE write long 0x%x\n", value);
-
-    IDE_write16 ( atariIDE [port], IDE_data, value >> 16 ) ;
-    IDE_write16 ( atariIDE [port], IDE_data, value & 0xffff );
+    if ( base == GDATA_OFFSET )
+    {
+      IDE_write16 ( atariIDE [port], IDE_data, value >> 16 ) ;
+      IDE_write16 ( atariIDE [port], IDE_data, value & 0xffff );
+    }
   }
-
   //DEBUG("Write Long to IDE Space 0x%06x (0x%06x)\n", address, value);
 }
 
 uint8_t readIDEB ( uint32_t address ) 
 {
-  int port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
-  int base = address - ( IDEBASE + (0x40 * port) );
+  static int port;
+  static int base;
+  static uint8_t IDE_action;
+
+  port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+  base = address - ( IDEBASE + (0x40 * port) );
 
   if ( atariIDE [port] ) 
   {
-    uint8_t IDE_action = 0, IDE_val = 0;
-#if (1)
-      //printf ("IDE read byte at 0x%X\n", address );
+    //uint8_t IDE_action = 0, IDE_val = 0;
+
       switch ( base ) 
       {
         case GERROR_OFFSET:
           IDE_action = IDE_error_r;
-          goto ideread8;
+          break; //goto ideread8;
         case GSTATUS_OFFSET:
           IDE_action = IDE_status_r;
-          goto ideread8;
+          break; //goto ideread8;
         case GSECTCOUNT_OFFSET:
           IDE_action = IDE_sec_count;
-          goto ideread8;
+          break; //goto ideread8;
         case GSECTNUM_OFFSET:
           IDE_action = IDE_sec_num;
-          goto ideread8;
+          break; //goto ideread8;
         case GCYLLOW_OFFSET:
           IDE_action = IDE_cyl_low;
-          goto ideread8;
+          break; //goto ideread8;
         case GCYLHIGH_OFFSET:
           IDE_action = IDE_cyl_hi;
-          goto ideread8;
+          break; //goto ideread8;
         case GDEVHEAD_OFFSET:
           IDE_action = IDE_dev_head;
-          goto ideread8;
+          break; //goto ideread8;
         case GCTRL_OFFSET:
           IDE_action = IDE_altst_r;
-          goto ideread8;
+          break; //goto ideread8;
+
        // case GIRQ_4000_OFFSET:
         //case GIRQ_OFFSET:
         //  return 0x80;
           //IDE_irq = (IDE_irq & value) | (value & (IDE_IRQ_RESET | IDE_IRQ_BERR));
           //default:
           //  printf ( "%s: unserviced command = 0x%x\n", __func__, ((address - IDEBASE) ));//- IDE_IDE_adj) );
+        default:
+          return 0xFF;
       }
-      //goto skip_ideread8;
-
-      return 0xFF;
-ideread8:
-      IDE_val = IDE_read8 ( atariIDE [port], IDE_action );
-      return IDE_val;
-//skip_ideread8:
-    //}
-/*
-    switch (address) {
-      //case GIDENT: {
-      //  uint8_t val;
-      //  if (ataricounter == 0 || ataricounter == 1 || ataricounter == 3) {
-      //    val = 0x80;  // 80; to enable IDE
-      //  } else {
-      //    val = 0x00;
-      //  }
-      //  ataricounter++;
-        //DEBUG_PRINTF ("Read from GIDENT: %.2X.\n", val);
-      //  return val;
-      //}
-      //case GINT:
-      //  return IDE_int;
-      //case GCONF:
-        //DEBUG_PRINTF ("Read from GCONF: %d\n", IDE_cfg & 0x0F);
-      //  return IDE_cfg & 0x0f;
-      //case GCS: {
-      //  uint8_t v;
-      //  v = IDE_cs_mask | IDE_cs;
-      //  DEBUG_PRINTF ("Read from GCS: %d\n", v);
-      //  return v;
-      //}
-      // This seems incorrect, GARY_REG3 is the same as GIDENT, and the A4000
-      // service manual says that Gary is accessible in the address range $DFC000 to $DFFFFF.
-      case GARY_REG0:
-      case GARY_REG1:
-      case GARY_REG2:
-        return 0;//gary_cfg[address - GARY_REG0];
-        break;
-      //case GARY_REG3:
-      case GARY_REG4:
-      //case GARY_REG5:
-        return 0;//gary_cfg[address - GARY_REG4];
-      case RAMSEY_ID:
-        return ramsey_id;
-      case RAMSEY_REG:
-        return 0;//ramsey_cfg;
-      case GARY_REG5: { // This makes no sense.
-        uint8_t val;
-        if (ataricounter == 0 || ataricounter == 1 || ataricounter == 3) {
-          val = 0x80;  // 80; to enable GARY
-        } else {
-          val = 0x00;
-        }
-        ataricounter++;
-        return val;
-      }
-      //case 0xDD203A:
-        // This can't be correct, as this is the same address as GDEVHEAD on the A4000 IDE.
-        //DEBUG_PRINTF ("Read Byte from IDE A4k: %.2X\n", IDE_a4k);
-        //return IDE_a4k;
-
-      default:
-        printf ( "%s: unknown command 0x%x\n", __func__, address );
-    }
-    */
+      
+      return IDE_read8 ( atariIDE [port], IDE_action );
   }
 
-  //if ((address & IDEMASK) == CLOCKBASE) {
-  //  if ((address & CLOCKMASK) >= 0x8000) {
-      //if (cdtv_mode) {
-      //  //DEBUG_PRINTF ("[CDTV] BYTE read from SRAM @%.8X (%.8X): %.2X\n", (address & CLOCKMASK) - 0x8000, address, cdtv_sram[(address & CLOCKMASK) - 0x8000]);
-      //  return cdtv_sram[(address & CLOCKMASK) - 0x8000];
-      //}
-  //    return 0;
-  //  }
-    //DEBUG_PRINTF ("Byte read from RTC.\n");
-  //  return 0xff; //get_rtc_byte(address, rtc_type);
-  //}
-#else
-    DEBUG("Read Byte From IDE Space 0x%06x\n", address);
-    IDE_val = IDE_read8(atariide0, IDE_action);
-    return IDE_val;
-  }
-#endif
   //DEBUG("Read Byte From IDE Space 0x%06x\n", address);
   return 0xFF;
 }
 
+
 uint16_t readIDE ( uint32_t address ) 
 {
-  uint16_t value;
-  int port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
-  int base = address - ( IDEBASE + (0x40 * port) );
+  static int port;
+  static int base;
 
-  //printf ( "readIDE: address 0x%X\n", address );
+  port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+  base = address - ( IDEBASE + (0x40 * port) );
+
   if ( atariIDE [port] ) 
   {
-#if (1)
-   // if (address - IDEIF == GDATA_OFFSET) 
-    if ( base == GDATA_OFFSET) 
+    if ( base == GDATA_OFFSET ) 
     {
-      
-      //printf ("IDE read word\n");
-
-      uint16_t value;
-      value = IDE_read16( atariIDE [port], IDE_data);
-      //	value = (value << 8) | (value >> 8);
-      return value;//value << 8 | value >> 8;
+      return IDE_read16 ( atariIDE [port], IDE_data );
     }
 
     //if (address == GIRQ_A4000) {
@@ -521,55 +403,29 @@ uint16_t readIDE ( uint32_t address )
     //}
   }
 
-  //if ((address & IDEMASK) == CLOCKBASE) {
-  //  if ((address & CLOCKMASK) >= 0x8000) {
-      //if (cdtv_mode) {
-      //  //DEBUG_PRINTF ("[CDTV] WORD read from SRAM @%.8X (%.8X): %.4X\n", (address & CLOCKMASK) - 0x8000, address, be16toh( (( unsigned short *) (size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000))[0]));
-      //  return be16toh( (( unsigned short *) (size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000))[0]);
-      //}
-  //    return 0;
-  //  }
-    //DEBUG_PRINTF ("Word read from RTC.\n");
-  //  return 0xffff; //((get_rtc_byte(address, rtc_type) << 8) | (get_rtc_byte(address + 1, rtc_type)));
-  //}
-#else
-    value = IDE_read16(atariide0, IDE_data);
-    DEBUG("Read Word From IDE Space 0x%06x\n", address);
-    return value;
-  }
-#endif
   //DEBUG("Read Word From IDE Space 0x%06x\n", address);
   return 0x8000;
 }
 
 uint32_t readIDEL ( uint32_t address ) 
 {
-  //if ((address & IDEMASK) == CLOCKBASE) {
-    //if ((address & CLOCKMASK) >= 0x8000) {
-      //if (cdtv_mode) {
-      //  //DEBUG_PRINTF ("[CDTV] LONGWORD read from SRAM @%.8X (%.8X): %.8X\n", (address & CLOCKMASK) - 0x8000, address, be32toh( (( unsigned short *) (size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000))[0]));
-      //  return be32toh( (( unsigned int *) (size_t)(cdtv_sram + (address & CLOCKMASK) - 0x8000))[0]);
-      //}
-     // return 0;
-    //}
-    //DEBUG_PRINTF ("Longword read from RTC.\n");
-    //return 0xffffffff; //((get_rtc_byte(address, rtc_type) << 24) | (get_rtc_byte(address + 1, rtc_type) << 16) | (get_rtc_byte(address + 2, rtc_type) << 8) | (get_rtc_byte(address + 3, rtc_type)));
-  //}
-  int port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
-  int base = address - ( IDEBASE + (0x40 * port) );
+  static int port;
+  static int base;
+  static uint32_t value;
+  
+  port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
+  base = address - ( IDEBASE + (0x40 * port) );
 
-  //if (address - IDEIF == GDATA_OFFSET) 
-  if ( base == GDATA_OFFSET ) 
+  if ( atariIDE [port] ) 
   {
-
-   // printf ("IDE read long\n");
-
-      uint32_t value;
-
-      value = IDE_read16( atariIDE [port], IDE_data);
+    if ( base == GDATA_OFFSET ) 
+    {
+      value = IDE_read16 ( atariIDE [port], IDE_data );
       
-      return value << 16 | IDE_read16( atariIDE [port], IDE_data) ;
+      return value << 16 | IDE_read16 ( atariIDE [port], IDE_data ) ;
     }
+  }
+
   //DEBUG("Read Long From IDE Space 0x%06x\n", address);
   return 0x8000;
 }

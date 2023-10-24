@@ -505,6 +505,7 @@ static int ide_write_sector(struct ide_drive *d)
   return 0;
 }
 
+
 static uint16_t ide_data_in(struct ide_drive *d, int len)
 {
   uint16_t v;
@@ -630,18 +631,21 @@ static void ide_issue_command(struct ide_taskfile *t)
   }
 }
 
+
 /*
  *	8bit IDE controller emulation
  */
 
-uint8_t IDE_read8(struct ide_controller *c, uint8_t r)
+uint8_t IDE_read8 ( struct ide_controller *c, uint8_t r) 
 {
   struct ide_drive *d = &c->drive[c->selected];
   struct ide_taskfile *t = &d->taskfile;
-  switch(r) {
+
+  switch ( r ) 
+  {
     case IDE_data:
         //printf ( "%s: IDE_data\n", __func__ );
-      return ide_data_in(d, 1);
+      return ide_data_in ( d, 1 );
     case IDE_error_r:
       return t->error;
     case IDE_sec_count:
@@ -665,6 +669,7 @@ uint8_t IDE_read8(struct ide_controller *c, uint8_t r)
       return 0xFF;
   }
 }
+
 
 void IDE_write8(struct ide_controller *c, uint8_t r, uint8_t v)
 {
@@ -730,19 +735,23 @@ void IDE_write8(struct ide_controller *c, uint8_t r, uint8_t v)
   }
 }
 
+
 /*
  *	16bit IDE controller emulation
  */
 
-uint16_t IDE_read16(struct ide_controller *c, uint8_t r)
+uint16_t IDE_read16 ( struct ide_controller *c, uint8_t r )
 {
-  struct ide_drive *d = &c->drive[c->selected];
-  if (r == IDE_data){
-    //printf ( "%s: IDE_data\n", __func__ );
-    return htons(ide_data_in(d,2));
+  struct ide_drive *d = &c->drive [c->selected];
+
+  if ( r == IDE_data )
+  {
+    return htons ( ide_data_in ( d, 2 ) );
   }
-  return IDE_read8(c, r);
+
+  return IDE_read8 ( c, r );
 }
+
 
 void IDE_write16(struct ide_controller *c, uint8_t r, uint16_t v)
 {
@@ -758,6 +767,7 @@ void IDE_write16(struct ide_controller *c, uint8_t r, uint16_t v)
   else
     IDE_write8(c, r, v);
 }
+
 
 /*
  *	Allocate a new IDE controller emulation
