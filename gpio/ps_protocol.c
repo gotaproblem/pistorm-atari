@@ -137,14 +137,15 @@ static void setup_io()
     #define PLL_DIVISOR PI_CLK_DIV
   #elif PLL_TO_USE == PLLD
     #define PI_CLK_DIV (750 / MAX_PI_CLK)
-    #define PLL_DIVISOR PI_CLK_DIV
+    //#define PLL_DIVISOR PI_CLK_DIV
+    #define PLL_DIVISOR 6
   #endif
 
 #else /* THIS IS FOR PI3 */
 
-  #define PLL_TO_USE PLLC
+  #define PLL_TO_USE PLLD
   #define MAX_PI_CLK 200
-  #define PLL_DIVISOR 6
+  #define PLL_DIVISOR 4
   
 #endif
 
@@ -274,7 +275,7 @@ void ps_write_16 ( uint32_t address, uint16_t data )
 	while ( ( l = gpio [13] ) & 1 ) // wait for firmware to signal command completed
     ;
 
-  //g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -320,7 +321,7 @@ void ps_write_8 ( uint32_t address, uint16_t data )
 	while ( ( l = gpio [13] ) & 1 )
     ;
 
-  //g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -374,7 +375,7 @@ uint16_t ps_read_16 ( uint32_t address )
 
  	gpio [10] = TXN_END;
 
-  //g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -426,7 +427,7 @@ uint8_t ps_read_8 ( uint32_t address )
 
   gpio [10] = TXN_END;
 
-  //g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS

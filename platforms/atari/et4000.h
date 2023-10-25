@@ -1,7 +1,7 @@
 #ifndef ET4000_H
 #define ET4000_H
 
-#define NOVA_ET4000_REGBASE  0x00D00000
+#define NOVA_ET4000_REGBASE  0x00D003B0 //000
 #define NOVA_ET4000_REGTOP   0x00D00400
 #define NOVA_ET4000_VRAMBASE 0x00C00000
 #define NOVA_ET4000_VRAMBASE 0x00C00000
@@ -29,8 +29,14 @@
 #define IS1_RC  0x3DA   /* Input Status Register 1: color emulation */
 
 
-
-
+/* Timing Sequence Registers */
+#define SYNC_RESET			0
+#define TS_MODE				1
+#define WRITE_PLANE_MASK	2
+#define FONT_SELECT			3
+#define MEMORY_MODE			4
+#define TS_STAT				6
+#define TS_AUX_MODE			7
 
 /*--- Types ---*/
 

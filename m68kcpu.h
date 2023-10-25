@@ -913,6 +913,10 @@ extern jmp_buf m68ki_aerr_trap;
 #define m68ki_write_8(state, A, V)  m68ki_write_8_fc (state, A, FLAG_S | FUNCTION_CODE_USER_DATA, V)
 #define m68ki_write_16(state, A, V) m68ki_write_16_fc(state, A, FLAG_S | FUNCTION_CODE_USER_DATA, V)
 #define m68ki_write_32(state, A, V) m68ki_write_32_fc(state, A, FLAG_S | FUNCTION_CODE_USER_DATA, V)
+/* cryptodad - convert long to 2 words - dma fix ? */
+//#define m68ki_write_32(state, A, V) {\
+						m68ki_write_16_fc( state, (A), FLAG_S | FUNCTION_CODE_USER_DATA, (V) >> 16);\
+						m68ki_write_16_fc( state, ((A)+2), FLAG_S | FUNCTION_CODE_USER_DATA, (V) & 0xFFFF);}
 
 #if M68K_SIMULATE_PD_WRITES
 #define m68ki_write_32_pd(A, V) m68ki_write_32_pd_fc(A, FLAG_S | FUNCTION_CODE_USER_DATA, V)
@@ -2057,8 +2061,10 @@ static inline void m68ki_stack_frame_0010(m68ki_cpu_core *state, uint sr, uint v
 
 /* Bus error stack frame (68000 only).
  */
-static inline void m68ki_stack_frame_buserr_orig(m68ki_cpu_core *state, uint sr)
-//static inline void m68ki_stack_frame_buserr ( m68ki_cpu_core *state, uint sr )
+#define IDLE_DEBUG //printf
+#if (0)
+//static inline void m68ki_stack_frame_buserr_orig(m68ki_cpu_core *state, uint sr)
+static inline void m68ki_stack_frame_buserr ( m68ki_cpu_core *state, uint sr )
 {
 	//printf("m68k_stack_frame_buserr()\n");
 	//printf("Pushing REG_PC (%x)\n", REG_PC );
@@ -2078,12 +2084,9 @@ static inline void m68ki_stack_frame_buserr_orig(m68ki_cpu_core *state, uint sr)
 	m68ki_push_16(state, m68ki_aerr_write_mode | CPU_INSTR_MODE | m68ki_aerr_fc);
 }
 
-#define IDLE_DEBUG //printf
-#if (1)
+#else
 static inline void m68ki_stack_frame_buserr(m68ki_cpu_core *state, uint sr)
 {
-
-
     uint32 stacked_pc;
 //    IDLE_INIT_FUNC("m68ki_stack_frame_buserr()");
     switch (REG_IR) {

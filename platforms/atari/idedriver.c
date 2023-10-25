@@ -132,10 +132,10 @@ static void ide_xlate_errno(struct ide_taskfile *t, int len)
     t->error = ERR_AMNF;
 }
 
-static void ide_fault(struct ide_drive *d, const char *p)
+static void ide_fault ( struct ide_drive *d, const char *p )
 {
-  //fprintf(stderr, "ide: %s: %d: %s\n", d->controller->name,
-	//		(int)(d - d->controller->drive), p);
+  printf ( "ide: %s: %d: %s\n", d->controller->name,
+			(int)(d - d->controller->drive), p );
 }
 
 /* Disk translation */
@@ -833,7 +833,7 @@ printf ( "[HDD%d] cyl: %d, hds: %d, sec: %d\n", drive, d->cylinders, d->heads, d
 /* attach a floppy disk image .ST */
 int ide_attach_st (struct ide_controller *c, int drive, int fd)
 {
-  struct ide_drive *d = &c->drive [drive];
+  struct ide_drive *d = &c->drive [drive & 1];
 
   if (d->present) 
   {
@@ -870,10 +870,12 @@ int ide_attach_st (struct ide_controller *c, int drive, int fd)
 
 // Attach a headerless HDD image to the controller
 // ATA defines limitations for capacity to 8GB
-int ide_attach_hdf(struct ide_controller *c, int drive, int fd)
+int ide_attach_hdf ( struct ide_controller *c, int drive, int fd )
 {
-  struct ide_drive *d = &c->drive[drive];
-  if (d->present) {
+  struct ide_drive *d = &c->drive [drive & 1];
+
+  if ( d->present ) 
+  {
     //DEBUG_PRINTF ("[IDE/HDL] Drive already attached.\n");
     return -1;
   }
@@ -928,6 +930,7 @@ int ide_attach_hdf(struct ide_controller *c, int drive, int fd)
   return 0;
 }
 
+
 /*
  *	Detach an IDE device from the interface (not hot pluggable)
  */
@@ -937,6 +940,7 @@ void ide_detach(struct ide_drive *d)
   d->fd = -1;
   d->present = 0;
 }
+
 
 /*
  *	Free up and release and IDE controller
@@ -950,6 +954,7 @@ void ide_free(struct ide_controller *c)
   free((void *)c->name);
   free(c);
 }
+
 
 /*
  *	Emulation interface for an 8bit controller using latches on the
@@ -968,7 +973,8 @@ uint8_t ide_read_latched(struct ide_controller *c, uint8_t reg)
   return v;
 }
 
-void ide_write_latched(struct ide_controller *c, uint8_t reg, uint8_t v)
+
+void ide_write_latched ( struct ide_controller *c, uint8_t reg, uint8_t v )
 {
   uint16_t d = v;
 
@@ -980,6 +986,7 @@ void ide_write_latched(struct ide_controller *c, uint8_t reg, uint8_t v)
     d |=  (c->data_latch << 8);
   IDE_write16(c, reg, d);
 }
+
 
 static void make_ascii(uint16_t *p, const char *t, int len)
 {
@@ -1000,6 +1007,7 @@ static void make_ascii(uint16_t *p, const char *t, int len)
   //  d += 2;
   //}
 }
+
 
 static void make_serial(uint16_t *p)
 {
@@ -1034,14 +1042,15 @@ static void padstr(char *str, const char *src, int len)
 	}
 }
 
-int ide_make_ident(int drive, uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *target)
+
+int ide_make_ident (int drive, uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *target )
 {
 	uint32_t oldsize;
 	char buf[40];
   uint16_t *p = target;
   uint32_t sectors;
 
-  memset(p, 0, 512);
+  memset ( p, 0, 512 );
   oldsize = c * h * s;
 
 	
@@ -1090,6 +1099,7 @@ int ide_make_ident(int drive, uint16_t c, uint8_t h, uint8_t s, char *name, uint
 
   return 0;
 }
+
 
 int IDE_make_drive(uint8_t type, int fd)
 {

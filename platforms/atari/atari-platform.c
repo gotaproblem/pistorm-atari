@@ -43,6 +43,7 @@ extern int handle_register_write_atari ( uint32_t addr, unsigned int value, unsi
 //#ifdef RTG
 extern bool RTG_enabled;
 extern bool screenGrab;
+extern long RTG_fps;
 //#endif
 extern int FPU68020_SELECTED;
 
@@ -175,9 +176,13 @@ int setup_platform_atari(struct emulator_config *cfg) {
 
 #define CHKVAR(a) (strcmp(var, a) == 0)
 
-void setvar_atari(struct emulator_config *cfg, char *var, char *val) {
-    if (!var)
+void setvar_atari(struct emulator_config *cfg, char *var, char *val) 
+{
+    if ( !var )
         return;
+
+    char *endptr;
+
 /*
     if CHKVAR("enable_rtc_emulation") {
         int8_t rtc_enabled = 0;
@@ -244,6 +249,9 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val) {
 
     if CHKVAR ( "screengrab" ) 
         screenGrab = 1;
+
+    if CHKVAR ( "fps" )
+        RTG_fps = strtol ( val, &endptr, 0 );
 
     /* cryptodad allow selection of fpu for 68020 CPU */
     if CHKVAR ( "68020fpu" )
