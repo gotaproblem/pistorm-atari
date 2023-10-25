@@ -566,7 +566,7 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
 {
   static uint32_t d;
 
-  RTG_RAMLOCK = true;
+  //RTG_RAMLOCK = true;
   if ( platform_read_check ( OP_TYPE_BYTE, address, &platform_res ) ) 
   {
     //RTG_RAMLOCK = false;
@@ -592,7 +592,7 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
 {
   static uint32_t d;
 
-  RTG_RAMLOCK = true;
+  //RTG_RAMLOCK = true;
   if ( platform_read_check ( OP_TYPE_WORD, address, &platform_res ) ) 
   {
     //RTG_RAMLOCK = false;

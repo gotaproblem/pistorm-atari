@@ -795,7 +795,7 @@ void *rtgRender ( void* vptr )
 
             took = ( (stop.tv_sec - start.tv_sec) * 1000000 ) + (stop.tv_usec - start.tv_usec);
 
-            usleep ( 100 );
+            //usleep ( 100 );
         }
 
         /* debug */
