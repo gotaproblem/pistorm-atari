@@ -1,0 +1,7 @@
+(sym_lib_table
+  (lib (name "mc_68000_plcc68")(type "Legacy")(uri "${KIPRJMOD}/kicad-symbols-generated-2.6.0/ics/atari-16-32/mc_68000_plcc68.lib")(options "")(descr "")(disabled))
+  (lib (name "mc_68000_dip64")(type "Legacy")(uri "/home/dh219/devel/svn/kicad/ste_adapter_1/mc_68000_dip64.lib")(options "")(descr "")(disabled))
+  (lib (name "pistorm-ste")(type "Legacy")(uri "${KIPRJMOD}/pistorm-ste.lib")(options "")(descr ""))
+  (lib (name "pistorm-ste-rescue")(type "Legacy")(uri "${KIPRJMOD}/pistorm-ste-rescue.lib")(options "")(descr ""))
+  (lib (name "PLCC_plugs")(type "KiCad")(uri "${KIPRJMOD}/PLCC_plugs.kicad_sym")(options "")(descr ""))
+)
