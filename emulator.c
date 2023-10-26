@@ -60,6 +60,7 @@ volatile uint32_t last_last_irq = 8;
 volatile uint32_t RTG_VRAM_BASE = 0xffffffff;
 volatile uint32_t RTG_VRAM_SIZE;
 volatile bool RTG_RAMLOCK;
+volatile bool RAMLOCK;
 volatile int cpu_emulation_running = 0;
 volatile int passthrough = 0;
 volatile uint32_t do_reset=0;
@@ -76,7 +77,7 @@ unsigned int loop_cycles = 20, irq_status = 0;
 struct emulator_config *cfg = NULL;
 
 
-extern uint8_t IDE_IDE_enabled;
+extern uint8_t IDEenabled;
 extern volatile unsigned int *gpio;
 extern uint8_t fc;
 extern volatile int g_irq;
@@ -88,6 +89,7 @@ extern bool RTG_enabled;
 extern bool ET4000Initialised;
 extern volatile unsigned int *gpio;
 extern const char *cpu_types[];
+extern bool VSYNC;
 
 
 
@@ -245,7 +247,7 @@ execute:
     if ( g_buserr ) 
       m68ki_exception_bus_error ( state ); 
 
-    else
+    //else
       USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
 
     if ( GET_CYCLES () > 0 ) // cryptodad make sure m68kcpu.h m68ki_set_sr() has relevent line commented out
@@ -284,10 +286,6 @@ void sigint_handler ( int sig_num )
     usleep ( 0 );
   }
 
-  /* free up RTG memory */
-  if ( RTGbuffer )
-    free ( RTGbuffer );
-
   /* reset stdio tty properties */
   oldt.c_lflag |= ECHO;
   tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
@@ -318,7 +316,7 @@ void *cpu_task()
 
 run:
   m68k_execute_bef ( state, loop_cycles );
-#if (1)
+#if (0)
   status = ps_read_status_reg ();
   //if ( status == 0xFFFF )
   //  printf ( "bad status\n" );
@@ -621,7 +619,7 @@ static inline uint32_t check_ff_st( uint32_t add )
 
 
 /* levels 2 and 4 are video syncs, so thousands are coming in */
-uint16_t cpu_irq_ack ( int level ) 
+inline uint16_t cpu_irq_ack ( int level ) 
 {
   static uint32_t ack;
   static uint8_t vec;
@@ -641,8 +639,9 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
 {
   static int r;
   
-
-  /* Set Ataris date/time - picked up by TOS program */
+  /* Set Atari's date/time - picked up by TOS program -> pistorm.prg */
+  /* FFFC40 is undefined in the Atari-Compendium, coming after MSTe RTC defines */
+  /* pistorm.prg reads these two 16bit addresses, then writes date/time to IKBD */
   if ( addr >= 0x00FFFC40 && addr < 0x00FFFC44 )
   {
     uint16_t atari_dt;
@@ -650,11 +649,11 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
     time_t t = time ( NULL );
     struct tm tm = *localtime ( &t );
 
-    atari_dt = (tm.tm_year - 80) << 9;
+    atari_dt  = (tm.tm_year - 80) << 9;
     atari_dt |= (tm.tm_mon + 1) << 5;
-    atari_dt |= tm.tm_mday;
+    atari_dt |=  tm.tm_mday;
 
-    atari_tm = tm.tm_hour << 11;
+    atari_tm  = tm.tm_hour << 11;
     atari_tm |= tm.tm_min << 5;
     atari_tm |= tm.tm_sec / 2;
 
@@ -666,11 +665,12 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
 
     return 1;
   }
-  
+    
   else if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
   {
     RTG_RAMLOCK = true;
 
+    //while ( RAMLOCK );
     r = et4000Read ( addr, res, type );
   
     RTG_RAMLOCK = false;
@@ -678,8 +678,10 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
     return r;
   }
 
-  else if ( IDE_IDE_enabled && addr >= IDEBASEADDR && addr < IDETOPADDR )
+  else if ( IDEenabled && addr >= IDEBASEADDR && addr < IDETOPADDR )
+  {
     addr &= 0x00ffffff;
+  }
 
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) )
   {
@@ -696,8 +698,12 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
 
 unsigned int m68k_read_memory_8 ( uint32_t address ) 
 {
+  static uint32_t d;
+
+  //RTG_RAMLOCK = true;
   if ( platform_read_check ( OP_TYPE_BYTE, address, &platform_res ) ) 
   {
+    //RTG_RAMLOCK = false;
     return platform_res;
   }
 
@@ -705,7 +711,10 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
     address &= 0x00FFFFFF;
 
   if ( address & 0xFF000000 )
+  {
+    //RTG_RAMLOCK = false;
     return 0;
+  }
 
 #ifdef STRAMCACHE
   unsigned int value;
@@ -713,14 +722,20 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
     return value;
 #endif
 
-  return ps_read_8 ( address );  
+  d = ps_read_8 ( address );  
+  //RTG_RAMLOCK = false;
+  return d;
 }
 
 
 unsigned int m68k_read_memory_16 ( uint32_t address ) 
 {
+  static uint32_t d;
+
+  //RTG_RAMLOCK = true;
   if ( platform_read_check ( OP_TYPE_WORD, address, &platform_res ) ) 
   {
+    //RTG_RAMLOCK = false;
     return platform_res;
   }
 
@@ -728,7 +743,10 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
     address &= 0x00FFFFFF;
 
   if ( address & 0xFF000000 )
+  {
+    //RTG_RAMLOCK = false;
     return 0;
+  }
 
 #ifdef STRAMCACHE
   unsigned int value;
@@ -736,14 +754,20 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
     return value;
 #endif
 
-  return ps_read_16 ( address );
+  d = ps_read_16 ( address );
+  //RTG_RAMLOCK = false;
+  return d;
 }
 
 
 unsigned int m68k_read_memory_32 ( uint32_t address ) 
 {
+  static uint32_t d;
+
+  //RTG_RAMLOCK = true;
   if (platform_read_check ( OP_TYPE_LONGWORD, address, &platform_res ) ) 
   {
+    //RTG_RAMLOCK = false;
     return platform_res;
   }
 
@@ -751,15 +775,19 @@ unsigned int m68k_read_memory_32 ( uint32_t address )
     address &= 0x00FFFFFF;
 
   if ( address & 0xFF000000 )
+  {
+    //RTG_RAMLOCK = false;
     return 0;
+  }
 
 #ifdef STRAMCACHE
   unsigned int value;
   if( do_cache( address, 4, &value, 1 ) )
     return value;
 #endif
-
-  return ps_read_32 ( address );
+  d = ps_read_32 ( address );
+  //RTG_RAMLOCK = false;
+  return d;
 }
 
 
@@ -794,6 +822,7 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   {
     RTG_RAMLOCK = true;
 
+    //while ( RAMLOCK );
     et4000Write ( addr, val, type );
 
     RTG_RAMLOCK = false;
@@ -861,31 +890,11 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   #endif
   }
 #endif
-  /* DMA check */
-  /*
-  else if ( (addr == 0xFFFF8604 || addr == 0xFFFF8606) && type == OP_TYPE_LONGWORD )
+
+  else if ( IDEenabled && addr >= IDEBASEADDR && addr < IDETOPADDR )
   {
-    //printf ( "LONGWORD DMA 0x%X\n", addr );
-    addr &= 0x00FFFFFF;
-    ps_write_16 ( addr, val >> 16 );
-    ps_write_16 ( addr + 2, val & 0xffff );
-
-    return 1;
-  }
-  */
- // if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
- // {
- //   RTG_RAMLOCK = true;
-
- //   et4000Write ( addr, val, type );
-
- //   RTG_RAMLOCK = false;
-
-  //  return 1;
-  //}
-
-  else if ( IDE_IDE_enabled && addr >= IDEBASEADDR && addr < IDETOPADDR )
     addr &= 0x00ffffff;
+  }
 
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) ) 
   {
@@ -900,55 +909,79 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
 
 void m68k_write_memory_8 ( uint32_t address, unsigned int value ) 
 {
+  //RTG_RAMLOCK = true;
   if ( platform_write_check ( OP_TYPE_BYTE, address, value ) )
+  {
+    //RTG_RAMLOCK = false;
     return;
+  }
    
   if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
     address &= 0x00FFFFFF;
 
   if ( address & 0xFF000000 )
+  {
+    //RTG_RAMLOCK = false;
     return;
+  }
 
   ps_write_8 ( address, value );
 #ifdef STRAMCACHE
   do_cache( address, 1, &value, 0 );
 #endif
+  //RTG_RAMLOCK = false;
 }
 
 
 void m68k_write_memory_16 ( uint32_t address, unsigned int value ) 
 {
+  //RTG_RAMLOCK = true;
   if ( platform_write_check ( OP_TYPE_WORD, address, value ) )
+  {
+    //RTG_RAMLOCK = false;
     return;
+  }
 
   if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
     address &= 0x00FFFFFF;
 
   if ( address & 0xFF000000 )
+  {
+    //RTG_RAMLOCK = false;
     return;
+  }
 
   ps_write_16 ( address, value );
 #ifdef STRAMCACHE
   do_cache( address, 2, &value, 0 );
 #endif
+  //RTG_RAMLOCK = false;
 }
 
 
 void m68k_write_memory_32 ( uint32_t address, unsigned int value ) 
 {
+  //RTG_RAMLOCK = true;
   if ( platform_write_check ( OP_TYPE_LONGWORD, address, value ) )
+  {
+   // RTG_RAMLOCK = false;
     return;
+  }
 
   if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
     address &= 0x00FFFFFF;
 
   if ( address & 0xFF000000 )
+  {
+   // RTG_RAMLOCK = false;
     return;
+  }
 
   ps_write_32 ( address, value );
 #ifdef STRAMCACHE
   do_cache( address, 4, &value, 0 );
 #endif
+  //RTG_RAMLOCK = false;
 }
 
 

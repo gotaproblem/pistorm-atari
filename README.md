@@ -25,13 +25,21 @@ Sep 2023 - Firmware development has resolved the different latch/flip-flop type 
 
 Sep 2023 - Pi3A+ now offers acceptible performance
 
+Oct 2023 - Pi3B is working but needs to be overclocked
+
+Oct 2023 - Pi Zero 2W is working but needs to be overslocked
+
 # Extended functionality
 
-A virtual IDE interface is included which allows for two disk drive images to be attached, each up to 8GB in size. The BBaN Solutions HDC (available in the exxos shop), has been tested extensively and offers good performance via the ACSI bus.
+A virtual IDE interface is included which allows for two disk drive images to be attached, each up to 8GB in size. 
+**UPDATE Oct 2023**
+An additional three virtual IDE interfaces are now included, allowing for a total of eight disk drive images - a potential 64GB of disk space.
+
 * Atari ST ROM images can be loaded at initialisation. For example, the emulation can boot using TOS 1.04 (ST only), TOS 1.06, TOS 1.62, TOS 2.06 or even EMUTos
 * Alt-RAM/TT-RAM option can be added to increase performance
 * 68020 CPU can be used with an FPU
-* SVGA is now available primarily for the Mint OS
+* ET4000 SVGA graphics is now available with 1MB VRAM
+* Screen dumps can be taken when using ET4000
 * Additional interfaces will be added with time
 
 # Now to get up-and-running
@@ -54,7 +62,8 @@ You can now reach the Pi over SSH, check your router web/settings page to find t
 Now the final steps to get things up and running, all of this is done from a command prompt (terminal) either locally on the Pi or over ssh:
 * `sudo apt-get update`
 * `sudo apt full-upgrade` (If you get mysterious 'not found' messages from running the line in the next step.)
-* `sudo apt-get install git libasound2-dev`
+* ~~`sudo apt-get install git libasound2-dev`~~
+* `sudo apt-get install git ffmpeg`
 * `git clone https://github.com/gotaproblem/pistorm-atari`
 * `cd pistorm-atari`
 * `make clean`
@@ -146,6 +155,7 @@ floppy disk drive and/or an attached ACSI bus device.
 **The disk images are too large for GitHub. Please find the disk images at https://bbansolutions.co.uk**
 Download the disks.zip file, copy to the Pi dkimages/ directory. Uncompress the file to give two disk images.
 * `cd ../dkimages`
+* `wget http://bbansolutions.co.uk/wp-content/uploads/2023/10/disks.zip`
 * `unzip disks.zip`
 * `cd ../pistorm-atari`
 

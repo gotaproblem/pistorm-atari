@@ -10,7 +10,7 @@
 uint8_t atari_rtc_emulation_enabled = 1;
 //extern uint8_t IDE_emulation_enabled;
 //extern uint8_t Blitter_enabled;
-extern uint8_t IDE_IDE_enabled;
+extern uint8_t IDEenabled;
 //extern int IDEIF;
 
 extern volatile uint32_t RTG_ATARI_SCREEN_RAM;
@@ -28,35 +28,63 @@ void configure_rtc_emulation_atari(uint8_t enabled) {
     printf("Atari RTC emulation is now %s.\n", (enabled) ? "enabled" : "disabled");
 }
 
+
+
+
+bool first = true;
+
 int handle_register_read_atari ( uint32_t addr, unsigned char type, uint32_t *val ) 
 {
+    static int res;
     //printf ("%s IDE read\n", __func__ );
         
-    if ( IDE_IDE_enabled ) 
+    if ( IDEenabled ) 
     {
         if ( addr >= IDEBASE && addr < IDETOP ) 
         {
-            //printf ("IDE read 0x%X\n", addr );
+            res = 1;
+            //printf ("IDE read 0x%X, type = %d\n", addr, type );
             //IDEIF = (addr & 0xF0) + IDEBASE;
 
             switch(type) 
             {
                 case OP_TYPE_BYTE:
                     *val = readIDEB ( addr );
-                    return 1;
+                    
                     break;
+
                 case OP_TYPE_WORD:
                     *val = readIDE ( addr );
-                    return 1;
+                    
                     break;
+
                 case OP_TYPE_LONGWORD:
                     *val = readIDEL ( addr );
-                    return 1;
+                    
                     break;
+
                 case OP_TYPE_MEM:
-                    return -1;
+                    res = -1;
+
                     break;
             }
+
+            /*
+            uint8_t mfp = ps_read_8 ( 0x00FFFA03 );
+            if ( !(mfp & 0x20) && first )
+            {
+                ps_write_8 ( 0x00FFFA03, mfp |= (1 << 5) ); // set
+                first = false;
+            }
+            printf ( "%s mfp = 0x%X\n", __func__, mfp );
+            printf ( "%s 0x00FFFA09 = 0x%X\n", __func__, ps_read_8 ( 0x00FFFA09 ) );
+            printf ( "%s 0x00FFFA0D = 0x%X\n", __func__, ps_read_8 ( 0x00FFFA0D ) );
+            printf ( "%s 0x11C = 0x%X\n", __func__, ps_read_8 ( 0x11C ) );
+            //ps_write_8 ( 0xFFFFFA03, mfp & ~(1 << 5) ); // clear
+            //ps_write_8 ( 0x00FFFA03, mfp |= (1 << 5) ); // set
+            printf ( "IDE read returns 0x%X\n", *val );
+            */
+            return res;
         }
     }
 
@@ -85,33 +113,47 @@ int handle_register_read_atari ( uint32_t addr, unsigned char type, uint32_t *va
 
 int handle_register_write_atari ( uint32_t addr, unsigned int value, unsigned char type) 
 {
+    static int res;
     //printf ( "%s REGISTER write address 0x%X, value 0x%X\n", __func__, addr, value );
 
-    if ( IDE_IDE_enabled ) 
+    if ( IDEenabled ) 
     {
         if ( addr >= IDEBASE && addr < IDETOP ) 
         {
-            //printf ( "IDE write\n" );
+            res = 1;
+            //printf ("IDE write 0x%X, type = %d\n", addr, type );
             //IDEIF = (addr & 0xF0) + IDEBASE;
 
             switch ( type ) 
             {
                 case OP_TYPE_BYTE:
                     writeIDEB ( addr, value);
-                    return 1;
+                    
                     break;
+
                 case OP_TYPE_WORD:
                     writeIDE ( addr, value);
-                    return 1;
+                    
                     break;
+
                 case OP_TYPE_LONGWORD:
                     writeIDEL ( addr, value);
-                    return 1;
+                    
                     break;
+                    
                 case OP_TYPE_MEM:
-                    return -1;
+                    res = -1;
+
                     break;
             }
+
+            //uint8_t mfp = ps_read_8 ( 0x00FFFA03 );
+            //if ( mfp & 0x20 )
+            //printf ( "%s mfp = 0x%X\n", __func__, mfp );
+            //ps_write_8 ( 0x00FFFA03, mfp & ~(1 << 5) ); // clear
+            //ps_write_8 ( 0x00FFFA03, mfp |= (1 << 5) ); // set
+
+            return res;
         }
     }
 

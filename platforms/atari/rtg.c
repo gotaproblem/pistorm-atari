@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <linux/fb.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
@@ -28,7 +29,7 @@
 
 #define MAX_WIDTH  1024
 #define MAX_HEIGHT 768
-#define MAX_VRAM   (1024 * 768 * 2)
+#define MAX_VRAM   (MAX_WIDTH * 768 * 2)
 #define ATARI_VRAM_BASE   0x003f8000 /* 4MB machine - will get changed at detection */
 #define GETRES() (uint16_t)( ((xcb->crtc_index [0x35] & 0x02) >> 1 ) << 10 | ((xcb->crtc_index [7] & 0x20) >> 5) << 9 | (xcb->crtc_index [7] & 0x01) << 8 | xcb->crtc_index [6] )
 #define HZ50       20000
@@ -51,6 +52,8 @@ volatile uint16_t RTG_PALETTE_REG [16]; /* palette colours */
 int ix;
 bool RTG_enabled = false;
 bool screenGrab = false;
+long RTG_fps = 0;
+volatile bool VSYNC;
 
 extern volatile uint32_t RTG_VRAM_BASE;
 extern volatile uint32_t RTG_VRAM_SIZE;
@@ -61,6 +64,7 @@ extern volatile int cpu_emulation_running;
 
 // 'global' variables to store screen info
 static int fbfd;
+static int rtgfd;
 void *fbp = 0;
 struct fb_var_screeninfo vinfo;
 struct fb_fix_screeninfo finfo;
@@ -68,7 +72,7 @@ size_t screensize = 0;
 void *fbptr;
 
 void et4000Draw ( int, int );
-int FRAME_RATE = HZ60;
+int FRAME_RATE;
 
 void logo ( void );
 
@@ -296,6 +300,7 @@ void *rtgRender ( void* vptr )
     int    windowHeight;
     int    SCREEN_SIZE;
     struct timeval stop, start;
+    bool   unknown = false;
 
 
     while ( !cpu_emulation_running )
@@ -306,10 +311,12 @@ void *rtgRender ( void* vptr )
         /* get time and wait for end-of-frame */
         /* 50 Hz 20000 (20ms), 60 Hz 16666 (16.6ms), 70 Hz 14285 (14.2ms) */
         gettimeofday ( &start, NULL );
+        unknown = false;
 
-        if ( ET4000enabled && RTGresChanged )
+        if ( ET4000enabled && RTGresChanged && !unknown )
         {
             COLOURDEPTH = 1;
+            
 #ifdef NATIVE_RES
             if ( thisRES == LOW_RES )
             {
@@ -383,115 +390,333 @@ void *rtgRender ( void* vptr )
 
             else if ( thisRES > HI_RES )
 #endif
-            if ( (xcb->VGAmode & 0x80) == 0x80 )
+            /* VGA mode enabled */
+            //if ( (xcb->VGAmode & 0x80) == 0x80 )
+            if ( xcb->VGAmode )
             {
-                if ( GETRES () == 523 )
+                int et4000Res = GETRES ();
+              
+                
+                if ( et4000Res == 429 )
+                {
+                    /* NVDI 640x400 Monochrome 71 Hz, 30.0 KHz */
+                    if ( xcb->MISC_Wr == 0xA3 )
+                    {
+                        windowWidth = 640;
+                        windowHeight = 400;
+                        COLOURDEPTH = 1;
+                    }
+
+                    /* NVDI 640x480 Monochrome 68 Hz, 34.0 KHz */
+                    else if ( xcb->MISC_Wr == 0xE7 )
+                    {
+                        windowWidth = 640;
+                        windowHeight = 480;
+                        COLOURDEPTH = 1;
+                    }
+
+                    /* NVDI 800x600 Monochrome 60 Hz, 38.0 KHz */
+                    else if ( xcb->MISC_Wr == 0xE3 )
+                    {
+                        windowWidth = 800;
+                        windowHeight = 600;
+                        COLOURDEPTH = 1;
+                    }
+
+                    /* NVDI 1024x768 Monochrome 60 Hz, 50.0 KHz */
+                    else if ( xcb->MISC_Wr == 0x2B )
+                    {
+                        windowWidth = 1024;
+                        windowHeight = 768;
+                        COLOURDEPTH = 1;
+                    }   
+
+                    /* NVDI 1280x960 Monochrome 50 Hz, 54.0 KHz */
+                    else if ( xcb->MISC_Wr == 0xA7 )
+                    {
+                        windowWidth = 1280;
+                        windowHeight = 960;
+                        COLOURDEPTH = 1;
+                    }   
+                }
+
+                else if ( et4000Res == 447 )
+                {
+                    windowWidth = 640;
+                    windowHeight = 400;
+                    COLOURDEPTH = 1;
+                }
+
+                /* NOVA */
+                else if ( et4000Res == 523 ||
+                    /* NVDI 640x480 16 Colour 68 Hz, 34.0 KHz */
+                    et4000Res == 503 )
                 {
                     windowWidth = 640;
                     windowHeight = 480;
+                    COLOURDEPTH = 1;
                 }
 
-                else if ( GETRES () == 626 )
+                /* NOVA */
+                else if ( et4000Res == 626 )
                 {
                     windowWidth = 800;
                     windowHeight = 600;
+
+                    if ( xcb->ts_index [TS_AUX_MODE] == 0xB4 )
+                        COLOURDEPTH = 4;
+
+                    else if ( xcb->ts_index [TS_AUX_MODE] == 0xF4 && xcb->ts_index [WRITE_PLANE_MASK] == 0x0F )
+                        COLOURDEPTH = 2;
+
+                    else if ( xcb->ts_index [TS_AUX_MODE] == 0xF4 && xcb->ts_index [WRITE_PLANE_MASK] == 0x01 )
+                        COLOURDEPTH = 1;
                 }
 
-                else if ( GETRES () == 803 )
+                /* NVDI 800x600 Monochrome 60 Hz, 38.0 KHz */
+                else if ( et4000Res == 632 )
+                {
+                    windowWidth = 800;
+                    windowHeight = 600;
+                    COLOURDEPTH = 1;
+                }
+
+                /* NOVA */
+                else if ( et4000Res == 803 ||
+                    /* NVDI 1024x768 Monochrome 60 Hz, 50.0 KHz */
+                    et4000Res == 828 )
                 {
                     windowWidth = 1024;
                     windowHeight = 768;
+                    COLOURDEPTH = 1;
+                }
+
+                /* NVDI 1280x960 Monochrome 50 Hz, 54.0 KHz */
+                else if ( et4000Res == 1079 )
+                {
+                    windowWidth = 1280;
+                    windowHeight = 960;
+                    COLOURDEPTH = 1;
                 }
 
                 else 
                 {
-                    windowWidth = 640;
-                    windowHeight = 480;
+                    unknown = true;
+                    //windowWidth = 640;
+                    //windowHeight = 480;
+                    //printf ( "error - unknown resolution - GETRES = %d\n", et4000Res );
                 }
 
-                vinfo.xres = windowWidth;
-                vinfo.yres = windowHeight;
-                vinfo.xres_virtual = windowWidth;
-                vinfo.yres_virtual = windowHeight;
-                vinfo.bits_per_pixel = 16;
-
-                if ( ioctl ( fbfd, FBIOPUT_VSCREENINFO, &vinfo ) )
+                if ( !unknown )
                 {
-                    printf ( "RESOLUTION2 error setting virtual; width / height\n" );
-                }
+                    vinfo.xres = windowWidth;
+                    vinfo.yres = windowHeight;
+                    vinfo.xres_virtual = windowWidth;
+                    vinfo.yres_virtual = windowHeight;
+                    vinfo.bits_per_pixel = 16;
 
-                else
-                    printf ( "[RTG] Resolution change to %dx%d ", windowWidth, windowHeight );
-
-                /*
-                * **************************
-                * check for Linear or Planar
-                * ************************** 
-                */
-
-                /* Chain 4 (Linear) */
-                if ( (xcb->ts_index [4] & 0x08) == 0x08 && xcb->ts_index [2] == 0x0F )
-                {
-                    /* res 256 colours */
-                    if ( xcb->ts_index [7] == 0xF4 && (xcb->MISC_Wr & 0x0C) == 0x00 || (xcb->MISC_Wr & 0x0C) == 0x08 ) 
+                    if ( ioctl ( fbfd, FBIOPUT_VSCREENINFO, &vinfo ) )
                     {
-                        COLOURDEPTH      = 2; 
-                        SCREEN_SIZE      = windowWidth * windowHeight;
+                        printf ( "RESOLUTION2 error setting virtual; width / height\n" );
                     }
+
+                    else
+                        printf ( "[RTG] Resolution change to %dx%d GETRES %d\n", windowWidth, windowHeight, et4000Res );
+
+                    /*
+                    * **************************
+                    * check for Linear or Planar
+                    * ************************** 
+                    */
+#if (0)
+                    /* Chain 4 (Linear) */
+                    if ( (xcb->ts_index [4] & 0x08) == 0x08 && xcb->ts_index [2] == 0x0F )
+                    //if ( xcb->ts_index [MEMORY_MODE] == 0x00 )//&& xcb->ts_index [WRITE_PLANE_MASK] == 0x0F )
+                    {
+                        printf ( "linear - GETRES = %d, MISC_WR = 0x%X\n", GETRES (), xcb->MISC_Wr  );
+                        /* res 256 colours */
+                        //if ( xcb->ts_index [7] == 0xF4 && (xcb->MISC_Wr & 0x0C) == 0x00 || (xcb->MISC_Wr & 0x0C) == 0x08 ) 
+                        if ( xcb->MISC_Wr == 0xE7 || xcb->MISC_Wr == 0xE3 || xcb->MISC_Wr == 0x2B ) 
+                        {
+                            COLOURDEPTH      = 2; 
+                            SCREEN_SIZE      = windowWidth * windowHeight;
+                        }
+                        
+                        /* res 32K/64K colours */
+                        // TS Memory mode = 0xE
+                        // TS Auxillary mode = 0xB4
+                        // MISC_W MCLK = 0x0
+                        else if ( xcb->ts_index [7] == 0xB4 && (xcb->MISC_Wr & 0x0C) == 0x00 )
+                        {
+                            COLOURDEPTH      = 4;
+                            SCREEN_SIZE      = windowWidth * windowHeight;
+                        }
                     
-                    /* res 32K/64K colours */
-                    // TS Memory mode = 0xE
-                    // TS Auxillary mode = 0xB4
-                    // MISC_W MCLK = 0x0
-                    else if ( xcb->ts_index [7] == 0xB4 && (xcb->MISC_Wr & 0x0C) == 0x00 )
-                    {
-                        COLOURDEPTH      = 4;
-                        SCREEN_SIZE      = windowWidth * windowHeight;
+                        /* Chain 4 (Linear) 24bit */
+                        // TS Memory mode = 0xE
+                        // TS Auxillary mode = 0xB4
+                        // MISC_W MCLK = 0xC
+                        if ( xcb->ts_index [7] == 0xB4 && (xcb->MISC_Wr & 0x0C) == 0x0C )
+                        {
+                            COLOURDEPTH      = 5;
+                            SCREEN_SIZE      = windowWidth * windowHeight;
+                        }
+
+                        printf ( "COLOURDEPTH = %d\n", COLOURDEPTH );
                     }
-                
-                    /* Chain 4 (Linear) 24bit */
-                    // TS Memory mode = 0xE
-                    // TS Auxillary mode = 0xB4
-                    // MISC_W MCLK = 0xC
-                    if ( xcb->ts_index [7] == 0xB4 && (xcb->MISC_Wr & 0x0C) == 0x0C )
+#if (0)
+                    /* Planar */
+                    else if ( xcb->ts_index [MEMORY_MODE] == 0 && xcb->ts_index [WRITE_PLANE_MASK] == 0x0F  )
                     {
-                        COLOURDEPTH      = 5;
-                        SCREEN_SIZE      = windowWidth * windowHeight;
+                        printf ( "planar - GETRES = %d, MISC_WR = 0x%X\n", GETRES (), xcb->MISC_Wr  );
+                        /* Monochrome */
+                        if ( xcb->ts_index [2] == 0x01 )//&& xcb->ts_index [4] == 0x06 ) // plane mask
+                        {       
+                            printf ( "here 2\n" );            
+                            COLOURDEPTH      = 1;
+                            SCREEN_SIZE      = windowWidth * windowHeight;
+                        }
+
+                        /* Colour */
+                        else if ( xcb->ts_index [4] == 0x01 ) 
+                       // else if ( xcb->ts_index [2] == 0x0F && xcb->ts_index [4] == 0x01 ) // plane mask
+                        {            
+                            printf ( "here 3\n" );         
+                            COLOURDEPTH      = 3;
+                            SCREEN_SIZE      = windowWidth * windowHeight;
+                        }
+
+                       // else 
+                       // {
+                       //     SCREEN_SIZE      = windowWidth * windowHeight;
+                        //}
                     }
+#endif
+#else
+                    printf ( "---------------------------\n" );
+                    printf ( "TS MEMORY MODE = 0x%X\n", xcb->ts_index [MEMORY_MODE] );
+                    printf ( "TS WRITE_PLAN_MASK = 0x%X\n", xcb->ts_index [WRITE_PLANE_MASK] );
+                    printf ( "GETRES = %d\n", GETRES () );
+                    printf ( "MISC_OUTPUT reg = 0x%X\n", xcb->MISC_Wr );
+                    printf ( "TS AUX_MODE = 0x%X\n", xcb->ts_index [TS_AUX_MODE] );
+                    printf ( "---------------------------\n" );
+#if (0)
+                    /* linear (chain 4) */
+                    //if ( (xcb->ts_index [4] & 0x08) == 0x08 && xcb->ts_index [2] == 0x0F )
+                    if ( xcb->ts_index [MEMORY_MODE] == 0 && xcb->ts_index [WRITE_PLANE_MASK] == 0x0F && RTGresChanged )
+                    {
+                        //printf ( "linear MISC_OUTPUT = 0x%X\n", xcb->MISC_Wr );
+                        /* res 256 colours */
+                        //if ( xcb->ts_index [7] == 0xF4 && (xcb->MISC_Wr & 0x0C) == 0x00 || (xcb->MISC_Wr & 0x0C) == 0x08 ) 
+                        if ( xcb->MISC_Wr == 0xA3 || xcb->MISC_Wr == 0xE3 || xcb->MISC_Wr == 0x2B ) 
+                        {
+                            COLOURDEPTH      = 2; 
+                            SCREEN_SIZE      = windowWidth * windowHeight;
+                        }
+                        
+                        /* res 32K/64K colours */
+                        // TS Memory mode = 0xE
+                        // TS Auxillary mode = 0xB4
+                        // MISC_W MCLK = 0x0
+                        //else if ( xcb->ts_index [7] == 0xB4 && (xcb->MISC_Wr & 0x0C) == 0x00 )
+                        //else if ( xcb->MISC_Wr == 0xB3 )
+                        //{
+                        //    COLOURDEPTH      = 4;
+                        //    SCREEN_SIZE      = windowWidth * windowHeight;
+                        //}
+
+                        printf ( "COLOURDEPTH = %d\n", COLOURDEPTH );
+                    }
+
+                    else if ( xcb->ts_index [MEMORY_MODE] == 0 && xcb->ts_index [WRITE_PLANE_MASK] == 0x00 && RTGresChanged )
+                    {
+                        if ( xcb->MISC_Wr == 0xA3 || xcb->MISC_Wr == 0xE3 || xcb->MISC_Wr == 0x2B ) 
+                        {
+                            COLOURDEPTH      = 4; 
+                            SCREEN_SIZE      = windowWidth * windowHeight;
+                        }
+
+                        printf ( "COLOURDEPTH = %d\n", COLOURDEPTH );
+                    }
+#endif
+                    SCREEN_SIZE = windowHeight * windowWidth;
+#endif                
+                   // printf ( "%d bpp\n", COLOURDEPTH == 1 ? 1 : COLOURDEPTH == 2 ? 8 : COLOURDEPTH == 3 ? 4 : COLOURDEPTH == 4 ? 16 : 24 );
+                //}
+            //}
+#if (1)
+            //if ( !unknown )
+            //{
+                /* reallocate framebuffer */
+                    if ( fbp )
+                        munmap ( (void *)fbp, screensize );
+
+                    /* Get fixed screen information */
+                    if ( ioctl ( fbfd, FBIOGET_FSCREENINFO, &finfo ) ) 
+                    {
+                        printf ( "%s Error reading fixed information.\n", __func__ );
+                    }
+
+                    screensize = finfo.smem_len; 
+
+                    fbp = (void *)mmap ( 0, 
+                                screensize, 
+                                PROT_READ | PROT_WRITE, 
+                                MAP_SHARED, 
+                                fbfd, 
+                                0 );
+ 
+                    fbptr = (uint16_t *)fbp;    
+
+                    /* clear screen to WHITE */
+                    memset ( RTGbuffer, 0x00, MAX_VRAM );
+#endif
+                    RTGresChanged = 0;     
                 }
+            }       
+        }
 
-                /* Planar */
-                else if ( (xcb->ts_index [4] & 0x08) == 0x00 )
-                {
-                    /* Monochrome */
-                    if ( xcb->ts_index [2] == 0x01 ) // plane mask
-                    {                    
-                        COLOURDEPTH      = 1;
-                        SCREEN_SIZE      = windowWidth * windowHeight;
-                    }
+        RTG_VSYNC = 0;
+#if (0)
+        /* listen for colour configuration */
 
-                    /* Colour */
-                    else if ( xcb->ts_index [2] == 0x0F ) // plane mask
-                    {                    
-                        COLOURDEPTH      = 3;
-                        SCREEN_SIZE      = windowWidth * windowHeight * 2;
-                    }
-
-                    else 
-                    {
-                        SCREEN_SIZE      = windowWidth * windowHeight;
-                    }
-                }
-                
-                printf ( "%d bpp\n", COLOURDEPTH == 1 ? 1 : COLOURDEPTH == 2 ? 8 : COLOURDEPTH == 3 ? 4 : COLOURDEPTH == 4 ? 16 : 24 );
-            }
-
-            /* reallocate framebuffer */
-            if ( fbp )
-                munmap ( (void *)fbp, screensize );
-
-            if ( COLOURDEPTH == 5 )
+        /* linear (chain 4) */
+        //if ( (xcb->ts_index [4] & 0x08) == 0x08 && xcb->ts_index [2] == 0x0F )
+        if ( xcb->ts_index [MEMORY_MODE] > 0 && xcb->ts_index [WRITE_PLANE_MASK] == 0x0F && COLOURDEPTH < 2 )
+        {
+            printf ( "linear MISC_OUTPUT = 0x%X\n", xcb->MISC_Wr );
+            /* res 256 colours */
+            //if ( xcb->ts_index [7] == 0xF4 && (xcb->MISC_Wr & 0x0C) == 0x00 || (xcb->MISC_Wr & 0x0C) == 0x08 ) 
+            if ( xcb->MISC_Wr == 0xA3 ) 
             {
+                COLOURDEPTH      = 2; 
+                SCREEN_SIZE      = windowWidth * windowHeight;
+            }
+            
+            /* res 32K/64K colours */
+            // TS Memory mode = 0xE
+            // TS Auxillary mode = 0xB4
+            // MISC_W MCLK = 0x0
+            //else if ( xcb->ts_index [7] == 0xB4 && (xcb->MISC_Wr & 0x0C) == 0x00 )
+            else if ( xcb->MISC_Wr == 0xE3 )
+            {
+                COLOURDEPTH      = 4;
+                SCREEN_SIZE      = windowWidth * windowHeight;
+            }
+        
+            /* Chain 4 (Linear) 24bit */
+            // TS Memory mode = 0xE
+            // TS Auxillary mode = 0xB4
+            // MISC_W MCLK = 0xC
+            //if ( xcb->ts_index [7] == 0xB4 && (xcb->MISC_Wr & 0x0C) == 0x0C )
+            else if ( xcb->MISC_Wr == 0xEF )
+            {
+                COLOURDEPTH      = 5;
+                SCREEN_SIZE      = windowWidth * windowHeight;
+
+                if ( fbp )
+                    munmap ( (void *)fbp, screensize );
+
                 vinfo.xres = windowWidth;
                 vinfo.yres = windowHeight;
                 vinfo.xres_virtual = windowWidth;
@@ -502,37 +727,38 @@ void *rtgRender ( void* vptr )
                 {
                     printf ( "COLOURDEPTH 5 error setting virtual; width / height\n" );
                 }
+                
+                /* Get fixed screen information */
+                if ( ioctl ( fbfd, FBIOGET_FSCREENINFO, &finfo ) ) 
+                {
+                    printf ( "%s Error reading fixed information.\n", __func__ );
+                }
+
+                screensize = finfo.smem_len; 
+
+                fbp = (void *)mmap ( 0, 
+                            screensize, 
+                            PROT_READ | PROT_WRITE, 
+                            MAP_SHARED, 
+                            fbfd, 
+                            0 );
+
+                fbptr = (uint32_t *)fbp;    
+
+                /* clear screen to WHITE */
+                memset ( RTGbuffer, 0x00, MAX_VRAM );
             }
 
-            /* Get fixed screen information */
-            if ( ioctl ( fbfd, FBIOGET_FSCREENINFO, &finfo ) ) 
-            {
-                printf ( "%s Error reading fixed information.\n", __func__ );
-            }
-
-            screensize = finfo.smem_len; 
-
-            fbp = (void *)mmap ( 0, 
-                        screensize, 
-                        PROT_READ | PROT_WRITE, 
-                        MAP_SHARED, 
-                        fbfd, 
-                        0 );
-
-            if ( COLOURDEPTH == 5 )
-                fbptr = (uint32_t *)fbp;  
-
-            else 
-                fbptr = (uint16_t *)fbp;    
-
-            /* clear screen to WHITE */
-            //memset ( fbptr, 0xFF, screensize );
-            memset ( RTGbuffer, 0x00, MAX_VRAM );
-
-            RTGresChanged = 0;            
+            printf ( "COLOURDEPTH = %d\n", COLOURDEPTH );            
         }
 
-        RTG_VSYNC = 0;
+        /* planar then */
+        else if ( xcb->ts_index [MEMORY_MODE]== 0 && xcb->ts_index [WRITE_PLANE_MASK] == 0x0F && COLOURDEPTH < 2 )
+        {
+            printf ( "must be planar then...\n" );
+        }
+#endif
+
 
         /* draw the screen */
 #ifdef NATIVE_RES
@@ -543,20 +769,20 @@ void *rtgRender ( void* vptr )
 #endif
         /* only draw screen if VGA sub-system has been enabled */
         //if ( ET4000enabled )
-        if ( ET4000enabled && !RTGresChanged )
+        if ( ET4000enabled && !RTGresChanged && !unknown )
             et4000Draw ( windowWidth, windowHeight );
 
         RTG_VSYNC = 1;
         took = 0;
-
+#if (1)
         /* rough frame rate delay */
-        while ( 1 )
+        while ( took < FRAME_RATE )
+        //while ( VSYNC )
         {
             /* simple screengrab - could be improved A LOT */
-            /* pressing 'p' on the keyboard executes a system call to grab the framebuffer */
+            /* pressing 's' on the keyboard executes a system call to grab the framebuffer */
             /* followed by a second system call to ffmpeg which converts the screendump to a .png file */
             
-            //if ( screenGrab && thisRES > HI_RES && kbhit () )
             if ( screenGrab && kbhit () )
             {
                 int c = getchar ();
@@ -568,20 +794,28 @@ void *rtgRender ( void* vptr )
             gettimeofday ( &stop, NULL );
 
             took = ( (stop.tv_sec - start.tv_sec) * 1000000 ) + (stop.tv_usec - start.tv_usec);
-            
-            if ( took >= FRAME_RATE )
-                break;
 
             //usleep ( 100 );
         }
 
         /* debug */
-        if ( took > FRAME_RATE + 200 )
-            printf ( "[ET4000] Frame Overrun - Expected %dus, Actual %dus\n", FRAME_RATE, took );
+        //if ( took > (FRAME_RATE + 200) )
+            //printf ( "[ET4000] Frame Overrun - Expected %dus, Actual %dus\n", FRAME_RATE, took );
+        //    printf ( "[ET4000] Frame Overrun\n" );
+#else
+        usleep ( 10000 );
+#endif
     }
 
-    /* if we are here then emulation has ended probably from a user break */
+    /* if we are here then emulation has ended, hopefully from a user interrupt */
     ET4000enabled = false;
+
+    /* free up RTG memory */
+    if ( RTGbuffer )
+        free ( RTGbuffer );
+        //munmap ( RTGbuffer, MAX_VRAM );
+
+    close ( fbfd );
 }
 
 
@@ -662,6 +896,21 @@ void rtgInit ( void )
     //RTG_ATARI_SCREEN_RAM = ATARI_VRAM_BASE;
     //RTG_RES = RESOLUTION1;
    // RTGresChanged = 1;
+   if ( RTG_fps )
+   {
+        if ( RTG_fps > 75 )
+            RTG_fps = 75;
+            
+        FRAME_RATE = (float)( 1.0 / RTG_fps ) * 1000000.0;
+   }
+
+    else 
+    {
+        RTG_fps = 60;
+        FRAME_RATE = HZ60;
+    }
+
+    printf ( "%sFPS %ld\n", func, RTG_fps );
 }
 
 
@@ -718,32 +967,51 @@ int et4000Init ( void )
     xcb->KEY = false;
     xcb->ISr0 = 0;
     xcb->FCr = 0;
+    xcb->ts_index [0] = 0x03;
+    xcb->ts_index [3] = 0x00;
+    xcb->ts_index [6] = 0x00;
+    xcb->ts_index [7] = 0xBC;
+
+    //memcpy ( (void *)xcb->user_palette, palette16, sizeof palette16 );
+    for ( int i = 0, a = 0; i < 16; i++, a++ )
+    {
+        
+       // xcb->user_palette [a++] = palette16 [i] & 0x1f; //(palette16 [i] >> 11) & 0x1f;
+       // xcb->user_palette [a++] = (palette16 [i] >> 5) & 0x2f;
+      //  xcb->user_palette [a]   = (palette16 [i] >> 11) & 0x1f; //palette16 [i] & 0x1f;
+    }
 
     first = true;
 
     /* this might be a re-initialise, so don't allocate more memory */
     if ( RTGbuffer == NULL )
-        RTGbuffer = malloc ( MAX_VRAM ); /* allocate max size */
-
-    RTG_VSYNC = 1;
-
-    if ( RTGbuffer == NULL )
     {
-        printf ( "[RTG] ET4000 Initialisation failed\n" );
-        ET4000Initialised = false;
+        RTGbuffer = malloc ( MAX_VRAM ); /* allocate max size */
+        //RTGbuffer = mmap ( NULL, MAX_VRAM, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0 );
 
-        return 0;
+        RTG_VSYNC = 1;
+
+        if ( RTGbuffer == NULL )
+        //if ( RTGbuffer == MAP_FAILED )
+        {
+            printf ( "[RTG] ET4000 Initialisation failed - %d\n", errno );
+
+            ET4000Initialised = false;
+
+            return 0;
+        }
+
+        ET4000Initialised = true;
+
+        logo ();
     }
-
-    ET4000Initialised = true;
-
-    logo ();
 
     return 1;
 }
 
 
 extern volatile bool RTG_RAMLOCK;
+extern volatile bool RAMLOCK;
 
 void et4000Draw ( int windowWidth, int windowHeight )
 {
@@ -769,8 +1037,10 @@ void et4000Draw ( int windowWidth, int windowHeight )
             {
                 while ( RTG_RAMLOCK );
             
+                //RAMLOCK = true;
                 //*( dptr + pixel ) = ( *( sptr + address ) >> ( 7 - ppb ) ) & 0x1 ? 0x20 : 0xffff;
                 dptr [pixel++] = ( sptr [address] >> (7 - ppb) ) & 0x1 ? 0x0020 : 0xffff;
+                //RAMLOCK = false;
             }
         }
         
@@ -790,16 +1060,19 @@ void et4000Draw ( int windowWidth, int windowHeight )
         {
             while ( RTG_RAMLOCK );
 
+            //RAMLOCK = true;
             ix = sptr [address] * 3;                // pointer to palette index
             
             r  = xcb->user_palette [ix++] >> 1;     // 6 bit red to 5 bit
             g  = xcb->user_palette [ix++];          // 6 bit green 
             b  = xcb->user_palette [ix] >> 1;       // 6 bit blue t 5 bit
 
-            x = pixel % windowWidth;
-            y = pixel / windowWidth;
+            //x = pixel % windowWidth;
+            //y = pixel / windowWidth;
            
-            dptr [ x + (y * windowWidth) ] = r << 11 | g << 5 | b;
+            //dptr [ x + (y * windowWidth) ] = r << 11 | g << 5 | b;
+            dptr [ pixel ] = r << 11 | g << 5 | b;
+            //RAMLOCK = false;
         }
     }
 
@@ -808,7 +1081,7 @@ void et4000Draw ( int windowWidth, int windowHeight )
     else if ( COLOURDEPTH == 3 )
     {
         uint16_t *dptr = fbptr;
-        uint8_t *sptr = RTGbuffer;
+        uint32_t *sptr = RTGbuffer;
         //ABPP = 4;
         uint32_t colour;
         uint8_t r, g, b;
@@ -821,15 +1094,21 @@ void et4000Draw ( int windowWidth, int windowHeight )
         
         for ( uint32_t address = 0, pixel = 0; pixel < SCREEN_SIZE; address += 4 ) 
         {
-            for ( int ppb = 0; ppb < 8; ppb++, pixel++ )
+            for ( int ppb = 0; ppb < 32; ppb++, pixel++ )
             {
-#if (0)
-                plane0 = xcb->ts_index [2] & 0x01 ? ( be16toh ( sptr [address] ) >> ( 15 - ppb ) ) & 0x1 : 0; // Blue      
-                plane1 = xcb->ts_index [2] & 0x02 ? ( be16toh ( sptr [address + 1] ) >> ( 15 - ppb ) ) & 0x1 : 0; // Green     
-                plane2 = xcb->ts_index [2] & 0x04 ? ( be16toh ( sptr [address + 2] ) >> ( 15 - ppb ) ) & 0x1 : 0; // Red       
-                plane3 = xcb->ts_index [2] & 0x08 ? ( be16toh ( sptr [address + 3] ) >> ( 15 - ppb ) ) & 0x1 : 0; // Intensity 
+                while ( RTG_RAMLOCK );
+#if (1)
+                plane0 = xcb->ts_index [2] & 0x01 ? (  ( sptr [address] ) >> ( 31 - ppb ) ) & 0x1 : 0; // Blue      
+                plane1 = xcb->ts_index [2] & 0x02 ? (  ( sptr [address + 1] ) >> ( 31 - ppb ) ) & 0x1 : 0; // Green     
+                plane2 = xcb->ts_index [2] & 0x04 ? (  ( sptr [address + 2] ) >> ( 31 - ppb ) ) & 0x1 : 0; // Red       
+                plane3 = xcb->ts_index [2] & 0x08 ? (  ( sptr [address + 3] ) >> ( 31 - ppb ) ) & 0x1 : 0; // Intensity 
 
                 colour = vga_palette [plane3 << 3 | plane2 << 2 | plane1 << 1 | plane0];
+
+                r = ((colour >> 16) & 0xff);
+                g = ((colour >> 8) & 0xff);
+                b = (colour & 0xff);
+                //printf ( "colour = 0x%X\n", colour );
 #else
                 plane0 = ( ( sptr [address    ] ) >> ( 7 - ppb ) ) & 0x1; // Blue      
                 plane1 = ( ( sptr [address + 1] ) >> ( 7 - ppb ) ) & 0x1; // Green     
@@ -837,17 +1116,17 @@ void et4000Draw ( int windowWidth, int windowHeight )
                 plane3 = ( ( sptr [address + 3] ) >> ( 7 - ppb ) ) & 0x1; // Intensity 
 
                 colour = vga_palette [plane3 << 3 | plane2 << 2 | plane1 << 1 | plane0];
-#endif
+
                 r = ((colour >> 16) & 0xff) >> 3;
                 g = ((colour >> 8) & 0xff) >> 2;
                 b = (colour & 0xff) >> 3;
-                
-                x = pixel % windowWidth;
-                y = pixel / windowWidth;
-                zoomY  = y * Y_SCALE;
-                zoomX  = x * X_SCALE;
-                dptr [ zoomX + (zoomY * windowWidth) ] = r << 11 | g << 5 | b;
-                //dptr [pixel++] = r << 11 | g << 5 | b;
+#endif
+                //x = pixel % windowWidth;
+               // y = pixel / windowWidth;
+                //zoomY  = y * Y_SCALE;
+                //zoomX  = x * X_SCALE;
+                //dptr [ zoomX + (zoomY * windowWidth) ] = r << 11 | g << 5 | b;
+                dptr [pixel] = colour;// r << 11 | g << 5 | b;
             }
             //printf ( "SCREEN SIZE %d - pixel %d, address %d\n", SCREEN_SIZE, pixel, address );
         }
@@ -864,7 +1143,10 @@ void et4000Draw ( int windowWidth, int windowHeight )
         {
             while ( RTG_RAMLOCK );
 
+            //RAMLOCK = true;
             dptr [pixel] = sptr [pixel];
+            //dptr [pixel] = htobe16 ( sptr [pixel] );
+            //RAMLOCK = false;
         }
     }
 
@@ -878,7 +1160,9 @@ void et4000Draw ( int windowWidth, int windowHeight )
         {
             while ( RTG_RAMLOCK );
 
+            //RAMLOCK = true;
             dptr [pixel++] = (uint32_t)( sptr [address++] << 16 | sptr [address++] << 8 | sptr [address++] );
+            //RAMLOCK = false;
         }
     }
 }
@@ -891,9 +1175,9 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
     {
         *value = 1;
 
-       // printf ( "ET4000 reg read 0x%X\n", addr );
+        //printf ( "ET4000 reg read 0x%X\n", addr );
 
-        uint32_t a = addr - NOVA_ET4000_REGBASE;
+        uint32_t a = addr & 0x3ff; //- NOVA_ET4000_REGBASE;
 
         switch ( a )
         {
@@ -908,6 +1192,7 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
                 printf ( "ET4000 iw register = 0x%X\n", ix );
                 break;
             case 0x3cc: /* GENERAL register - Miscellaneous Output */
+                *value = xcb->MISC_Wr;
                 break;
             case 0x3ca: /* Feature Control Register */
                 *value = xcb->FCr;
@@ -921,8 +1206,12 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
             case 0x3d5:
                 break;
             case 0x3c4:
+                *value = xcb->ts_ix;
+              //  printf ( "read reg 0x%X TS INDEX = 0x%x\n", a, *value );
                 break;
             case 0x3c5:
+                *value = xcb->ts_index [xcb->ts_ix];
+               // printf ( "read reg 0x%X TS REGISTER %d = 0x%x\n", a, xcb->ts_ix, *value );
                 break;
             case 0x3c3: /* Video Subsystem Register */
             case 0x46e8:
@@ -935,22 +1224,21 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
                     printf ( "et4000 raise bus error\n" );
                 }
 
-                //else
-                    *value = xcb->videoSubsystemr;
+                *value = xcb->videoSubsystemr;
 
                 /* stop emutos initialising ET4000 */
                 if ( first )
                 {
-                //    *value = 0;
                     first = false;
-                    g_buserr = 1; /* uncomment this line if you don't want EMUtos to init ET4000 */
+                    //g_buserr = 1; /* uncomment this line if you don't want EMUtos to init ET4000 */
                 }
 
                 break;
             case 0x3c2: /* Input Status Register Zero */
                 *value = xcb->ISr0;
                 break;
-            case 0x3c6: /* */
+            case 0x3c6: /* PEL Mask */
+                *value = 0x0f; /* TODO */
                 break;
             case 0x3c8: /* */
                 break;
@@ -972,37 +1260,45 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
                 break;
 
             default:
-               // printf ( "ET4000 unknown read register 0x%X\n", a );
+                printf ( "ET4000 unknown read register 0x%X\n", a );
+
+                return 0;
                 break;
         }
 
         return 1;
     }
 
+    else if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMTOP )
+    {
 //printf ( "et4000Read () -> type = %d, addr = 0x%X\n", type, addr );
 
 
-    if ( type == OP_TYPE_BYTE )
-        *value = *( uint8_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) );
+        if ( type == OP_TYPE_BYTE )
+            *value = *( uint8_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) );
 
-    else if ( type == OP_TYPE_WORD )
-        *value = be16toh ( *( uint16_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
+        else if ( type == OP_TYPE_WORD )
+            *value = be16toh ( *( uint16_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
 
-    else if ( type == OP_TYPE_LONGWORD )
-        *value = be32toh ( *(uint32_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
+        else if ( type == OP_TYPE_LONGWORD )
+            *value = be32toh ( *(uint32_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
 
-    return 1;
+        return 1;
+    }
+
+    return 0;
 }
 
 
 uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
 {
     static uint32_t offset;
+    static int invalid = 0;
 
 
     if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGTOP )
     {
-        uint32_t a = addr - NOVA_ET4000_REGBASE;
+        uint32_t a = addr & 0x3ff; //- NOVA_ET4000_REGBASE;
 
         //printf ( "ET4000 reg write 0x%X, 0x%X\n", addr, value );
 
@@ -1021,32 +1317,39 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
             case 0x3ba: /* monochrome */
                 break;
             case 0x3cd:
+                printf ( "TODO GDC Segment Select 0x%X\n", value );
                 break;
             case 0x3ce: /* GDC (Graphics Data Controller) Index register */
                 xcb->gdc_ix = value & 0x0f;
+                printf ( "TODO GDC Index 0x%X\n", value );
                 break;
             case 0x3cf:
                 xcb->gdc_index [xcb->gdc_ix] = value;
+                printf ( "TODO GDC Register 0x%X = 0x%X\n", xcb->gdc_ix, value );
+
+                if ( xcb->gdc_ix == 5 )
+                    if ( xcb->gdc_index [xcb->gdc_ix] & 0x40 )
+                        printf ( "GDC Register 5 = 256 colour enabled\n" );
                 break;
             case 0x3c4: /* TS Index */
                 xcb->ts_ix = value & 0x07;
                 break;
             case 0x3c5: /* TS Indexed Register 2: Write Plane Mask */
 
-                //if ( xcb->ts_ix == 2 )
-                //    printf ( "TS Write Plane Mask = 0x%X\n", value );
+                if ( xcb->ts_ix == 2 )
+                    //printf ( "TS Write Plane Mask = 0x%X\n", value );
 
                 if ( xcb->ts_ix == 4 )
                 {
                     if ( (xcb->ts_index [xcb->ts_ix] & 0x08) != (value & 0x08) )
                     {
-                       // printf ( "ET4000 Resolution changed\n" );
+                        //printf ( "ET4000 Resolution changed\n" );
                         
-                        RTGresChanged = 1;
+                        //RTGresChanged = 1;
                         //RTG_RES = RESOLUTION3; // arbitrary value - will be set later, but needs to be > HI_RES
                     }
                 
-                   // printf ( "TS Memory Mode = 0x%X - Map mask = %d, %s mode enabled\n", value, value & 0x04, value & 0x08 ? "Chain 4 (Linear)" : "Planer" );
+                    //printf ( "TS Memory Mode = 0x%X - Map mask = %d, %s mode enabled\n", value, value & 0x04, value & 0x08 ? "Chain 4 (Linear)" : "Planer" );
                 }
 
                 else if ( xcb->ts_ix == 7 )
@@ -1058,14 +1361,41 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
                 xcb->ts_index [xcb->ts_ix] = value;
 
                 break;
-            case 0x3c2: /* GENERAL register - Miscellaneous Output */
-                //printf ( "MISC_W using CRTC addresses %s\n",
-                //    value & 0x01 ? "3Dx Colour" : "3Bx Monochrome" );
-                //printf ( "MISC_W DMA access %s\n",
-                //    value & 0x02 ? "enabled" : "disabled" );
+            case 0x3c2: /* GENERAL register - Miscellaneous Output Register */
+                printf ( "MISC_W using CRTC addresses %s\n",
+                    value & 0x01 ? "3Dx Colour" : "3Bx Monochrome" );
+                printf ( "MISC_W DMA access %s\n",
+                    value & 0x02 ? "enabled" : "disabled" );
+                
+                /* ref - Tseng Labs pg32 2.2.2 */
+                /* 
+                 * cs [1,0] bits (clock select)
+                 * 0 = VGA Mode
+                 * 1 = VGA mode/CGA
+                 * 2 = EGA mode
+                 * 3 = Extended mode 
+                 * */
                 //printf ( "MISC_W MCLK = 0x%X\n", value & 0x0c );
+               // printf ( "MISC_W CS bits = 0x%X\n", value & 0x03 );
+                //printf ( "MISC_W all bits = 0x%X\n", value );
 
+                /* Mode of Operation */
+
+                /* EGA MODES */
+                /*     0      1       2      3   4  5  6    7   D  E  F  10 */
+                /* 63/A3/63 63/A3 63/A3/63 63/A3 63 63 63 A2/62 63 63 A2 A3 */
+
+                /* VGA MODES = EGA MODES + */
+                /* 11 12 13 */
+                /* E3 E3 63 */
+
+                /* TLI EXTENDED MODES */
+                /* 22 23 24 25 26 29 2A 2D 2E 30 37i 37n 2F 38i 38n */
+                /* A7 A7 A7 E3 E3 EF EF A3 E3 EF 2F  3F  63 2F  3F  */
+
+                RTGresChanged = 1;   
                 xcb->MISC_Wr = value;
+
                 break;
             case 0x3c3:
             case 0x46e8:
@@ -1073,13 +1403,13 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
                 if ( value == 0x01 )
                 {
                     ET4000enabled = true;
-                    //printf ( "ET4000 Enable VGA SubSystem\n" );
+                    printf ( "ET4000 Enable VGA SubSystem\n" );
                 }
 
                 else
                 {
                     ET4000enabled = false;
-                    //printf ( "ET4000 Disable VGA SubSystem 0x%X\n", value );
+                    printf ( "ET4000 Disable VGA SubSystem 0x%X\n", value );
                 }
 
                 xcb->videoSubsystemr = value;
@@ -1111,8 +1441,6 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
                 if ( xcb->paletteWrite == true )
                     xcb->user_palette [xcb->palette_ix++] = value;
 
-                //xcb->palette_ix += 1;
-
                 break;
             case 0x3c0: /* ATC (Attribute Controller) register - Address/Index (23 registers) */
                 
@@ -1135,8 +1463,8 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
                 if ( (xcb->crtc_ix < 0x32) || (xcb->crtc_ix == 0x33) || (xcb->crtc_ix == 0x35) || (xcb->crtc_ix > 0x18 && xcb->KEY) )
                     xcb->crtc_index [xcb->crtc_ix] = value;
 
-                //if ( xcb->crtc_ix > 0x35 && xcb->KEY )
-                //    printf ( "6845 Video System Configuration %d = 0x%X\n", xcb->crtc_ix == VSCONF1 ? 1 : 2, xcb->crtc_index [xcb->crtc_ix] );
+                if ( xcb->crtc_ix > 0x35 && xcb->KEY )
+                    printf ( "6845 Video System Configuration %d = 0x%X\n", xcb->crtc_ix == VSCONF1 ? 1 : 2, xcb->crtc_index [xcb->crtc_ix] );
 
                 if ( xcb->crtc_ix == VSCONF1 && xcb->KEY )
                 {
@@ -1148,7 +1476,7 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
 
                 if ( xcb->crtc_ix == VSCONF2 && xcb->KEY )
                 {
-                    //printf ( "6845 VSCONF2 Addressing Mode %s\n", value & 0x20 ? "TLI" : "IBM" );
+                    printf ( "6845 VSCONF2 Addressing Mode %s\n", value & 0x20 ? "TLI" : "IBM" );
                     xcb->VSCONF2r = value;
                 }
 
@@ -1175,32 +1503,57 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
 
             default:
                 printf ( "ET4000 unknown write register 0x%X\n", a );
+
+                /* occasionaly will see continuous writes to succesive words. If this happens, re-initialise */
+                //if ( invalid++ > 5 )
+                //{
+                    //printf ( "ET4000 too many unknown register writes - reinitialising\n" );
+
+                //    invalid = 0;
+
+                    //et4000Init ();
+                //}
+                return 0;
                 break;
         }
 
         return 1;
     }
 
-    /* must be a VRAM address */
-    //printf ( "ET4000 VRAM write 0x%X, 0x%X\n", addr, value );
-    offset = addr - NOVA_ET4000_VRAMBASE;
-
-    if ( type == OP_TYPE_BYTE )
+    /* should then be a VRAM address */
+    
+    else if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMTOP )
     {
-        *( (uint8_t *)( RTGbuffer + offset ) ) = value;
+        offset = addr - NOVA_ET4000_VRAMBASE;
+
+        /* graphics mode enabled */
+        if ( xcb->gdc_index [6] & 0x01 )
+        {
+            //printf ( "ET4000 VRAM write 0x%X, 0x%X\n", addr, value );
+
+            if ( type == OP_TYPE_BYTE )
+            {
+                //printf ( "%s BYTE\n", __func__ );
+                *( (uint8_t *)( RTGbuffer + offset ) ) = value & xcb->gdc_index [8];
+            }
+
+            else if ( type == OP_TYPE_WORD )
+            {
+                //printf ( "%s WORD\n", __func__ );
+                *( (uint16_t *)( RTGbuffer + offset) ) = htobe16 (value);
+            }
+
+            else if ( type == OP_TYPE_LONGWORD )
+            {
+                //printf ( "%s LONG\n", __func__ );
+                *( (uint32_t *)( RTGbuffer + offset ) ) = htobe32 (value);
+            }
+        }
+
+        return 1;
     }
 
-    else if ( type == OP_TYPE_WORD )
-    {
-        *( (uint16_t *)( RTGbuffer + offset) ) = htobe16 (value);
-    }
-
-    else if ( type == OP_TYPE_LONGWORD )
-    {
-        *( (uint32_t *)( RTGbuffer + offset ) ) = htobe32 (value);
-    }
-
-    return 1;
+    return 0;
 }
 
 
@@ -1231,6 +1584,7 @@ void screenDump ( int w, int h )
     char filename [13];
     char command [300];
 
+    printf ( "Performing Screendump\n" );
     sprintf ( command, "ffmpeg -vcodec rawvideo -f rawvideo -pix_fmt rgb565le -s %dx%d -i %s -f image2 -frames 1 -hide_banner -y -loglevel quiet -vcodec png screendump.png", w, h, dumpfile );
     system ( "cat /dev/fb0 > screendump.raw" );
     system ( command );
@@ -1243,12 +1597,15 @@ void screenDump ( int w, int h )
 void logo ( void )
 {
     uint16_t *dstptr; 
-    uint32_t buff;
+    uint8_t buff;
     uint32_t lineLength;
     uint32_t x, y;
+    int start;
     FILE *fp;
-    char *logofile = "configs/AtariLogo800x600.bin";
-    
+    char hdr [0x0f];
+    /* bitmap needs to be 8bit no alpha flipped */
+    char *logofile = "configs/AtariLogo800x600.bmp";
+
 
     if ( ( fp = fopen ( logofile, "r" ) ) == NULL )
         return;
@@ -1290,16 +1647,17 @@ void logo ( void )
                 0 );    
 
     dstptr     = fbp;
-    //printf ( "fbp = %p, screensize = %d\n", fbp, screensize );
+  
+    fread ( &hdr, 0x0e, 1, fp ); 
+    start = hdr [0x0b] << 8 | hdr [0x0a]; /* read bitmap offset */
+    fseek ( fp, start, SEEK_SET );
 
-    for ( int pixel = 0; pixel < screensize; pixel++ )
+    /* bitmap origin is bottom right - needs to be top left */
+    for ( int pixel = screensize / 2; pixel > 0; pixel-- )
     {  
-        fread ( &buff, 3, 1, fp );     
+        fread ( &buff, 1, 1, fp ); 
 
-        y      = pixel / lineLength;
-        x      = pixel % lineLength;
-        
-        dstptr [x + (y * lineLength)] = buff;
+        dstptr [pixel] =  (buff > 0x80 ? 0x00 : 0xffff) ;
     }
   
     fclose ( fp );
