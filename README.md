@@ -73,6 +73,14 @@ If using a Pi3, make must be given an option
 If using a Pi4, no option is needed
 * `make`
 
+**STRAM CACHE**
+The experimental full memory cache-enabled version may be built with
+* `make CACHE=ON`
+or
+* `make POMODEL=PI3 CACHE=ON`
+
+This feature greatly improves STRAM read operations (and hence is mostly applicable to games), but is not yet compatible with operation of the Blitter, so please disable this at the Desktop.
+
 Copy the boot configuration file:
 * `sudo cp configs/config.txt /boot/`
 

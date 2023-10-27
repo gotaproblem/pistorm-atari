@@ -19,6 +19,8 @@
 #include <termios.h>
 #include <fcntl.h>
 
+// Done in Makefile
+// #define STRAMCACHE
 
 #define DEBUGPRINT 1
 #if DEBUGPRINT
@@ -108,6 +110,121 @@ void cpu3 ( void )
 	sched_setaffinity ( 0, sizeof (cpu_set_t), &cpuset );
 }
 
+#ifdef STRAMCACHE
+#define CACHETYPE uint16_t
+#define CACHESIZE 4096*1024
+#define CACHESIZEBYTES CACHESIZE * sizeof(CACHETYPE)
+
+static CACHETYPE cache[CACHESIZE]; // top byte used as valid flag
+static short flushstate = 0; // 0 active, 1 flush request
+pthread_mutex_t cachemutex;
+
+int do_cache( uint32_t address, int size, unsigned int *value, int isread ) {
+	// size is 1,2,4
+  static short flushstatereq = 0; // go around the houses a bit as don't want to lock for mutex
+
+  if( flushstate > 0) // cache is invalid
+    return 0;
+
+  if( flushstatereq && !flushstate ) { // there's been a request to flush and it's not yet set the flush thread's state variable
+      if( !pthread_mutex_trylock(&cachemutex) ) {
+        flushstate = 1;
+        flushstatereq = 0;
+        pthread_mutex_unlock(&cachemutex);
+      }
+      return 0;
+  }
+
+  // DMA registers of interest are at 0x00FF8604 (trigger DMA) and 0x00FFFA01 (MFP GPIP bits to check for completion).
+  // Sniff reads from 0x00FFFA01 with a mask against 0x20. If this results is 0, a DMA interrupt has triggered
+  // Blitter not yet sniffed (disable it)
+  if( isread && (address) == 0x00FFFA01 ) {
+    *value = ps_read_8 ( address );
+    if( ( *value & 0x20 ) == 0 ) {
+      flushstatereq=1;
+    }
+    return 1; // we return success here as we've done the read for you
+  }
+
+  if( !(address >= 0x000800 && address < 0x400000 ) ) // STRAM only without low RAM (have to perform this check late as sniffing registers above)
+    return 0;
+
+	if( isread ) {
+    switch(size) {
+      case(4):
+        if( !(cache[address] & 0x1000) || !(cache[address+1] & 0x01000) || !(cache[address+2] & 0x1000) || !(cache[address+3] & 0x01000) ){
+//          printf("MISS\n");
+          return 0;
+        }
+        *value = ((0xff & cache[address]) << 24) | ((0xff & cache[address+1]) << 16) | ((0xff & cache[address+2]) << 8 ) | ((0xff & cache[address+3]));
+        return 1;
+        break;
+      case(2):
+        if( !(cache[address] & 0x1000) || !(cache[address+1] & 0x01000) ) {
+//          printf("MISS\n");
+          return 0;
+        }
+        *value = ((0xff & cache[address]) << 8) | (0xff & cache[address+1]);
+        return 1;
+        break;
+      case(1):
+      default:
+        if( (cache[address] & 0x1000) == 0 ) {
+//          printf("MISS\n");
+          return 0;
+        }
+        *value = 0xff & cache[address];
+//        printf("HIT (%8.8x = %2.2x)\n", address, *value);
+        return 1;
+        break;
+    }
+  }
+  else {
+    switch( size ) {
+      case(4):
+        cache[address]    = 0x1000 | ( *value >> 24 ); // the 0x10 in top byte indicates valid cache entry
+        cache[address+1]  = 0x1000 | ( 0xff & ( *value >> 16 ) );
+        cache[address+2]  = 0x1000 | ( 0xff & ( *value >> 8 ) );
+        cache[address+3]  = 0x1000 | ( 0xff & *value );
+        break;
+      case(2):
+        cache[address]    = 0x1000 | ( *value >> 8 );
+        cache[address+1]  = 0x1000 | ( 0xff & *value );
+        break;
+      case(1):
+      default:
+        cache[address]    = 0x1000 | *value;
+        break;
+    }
+  }
+  return 1;
+}
+
+// separate thread to reduce impact of flushing 8MB memory each time!
+void *cacheflusher( void *dummy ) {
+  static uint8_t c = 0;
+
+  while( !cpu_emulation_running ) {
+    sleep(1);
+  }
+
+  while( cpu_emulation_running ) {
+    if( flushstate ) {
+      memset( cache, 0, CACHESIZEBYTES );
+      pthread_mutex_lock( &cachemutex );
+      flushstate = 0;
+      pthread_mutex_unlock( &cachemutex );
+      printf("Cache flushed [%d]     \r", c++ );
+      fflush(stdout);
+    }
+    else
+      usleep(1e5);
+  }
+  printf("End of Flushing thread\n");
+}
+
+
+#endif
 
 static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 {
@@ -268,12 +385,13 @@ run:
 extern void rtgInit ( void );
 extern void *rtgRender ( void* );
 
+
 int main ( int argc, char *argv[] ) 
 {
   const struct sched_param priority = {99};
   int g;
   int err;
-  pthread_t rtg_tid, cpu_tid;
+  pthread_t rtg_tid, cpu_tid, flush_tid;
 
 
   RTG_enabled = 0;
@@ -420,6 +538,19 @@ int main ( int argc, char *argv[] )
     }
   }
 
+#ifdef STRAMCACHE
+    pthread_mutex_init(&cachemutex, NULL);
+    err = pthread_create ( &flush_tid, NULL, &cacheflusher, NULL );
+
+    if ( err != 0 )
+      DEBUG_PRINTF ( "[ERROR] Cannot create Cache Flushing thread: [%s]", strerror (err) );
+    else 
+    {
+      pthread_setname_np ( rtg_tid, "pistorm: flusher" );
+      DEBUG_PRINTF ( "[MAIN] Cache Flushing thread created successfully\n" );
+    }
+#endif
+
   /* cryptodad optimisation - .cfg no mappings */
   if ( cfg->mapped_high == 0 && cfg-> mapped_low == 0 )
     passthrough = 1;
@@ -458,10 +589,14 @@ void cpu_pulse_reset ( void )
 {
   ps_pulse_reset ();
 
+#ifdef STRAMCACHE
+  pthread_mutex_lock( &cachemutex );
+  flushstate = 1;
+  pthread_mutex_unlock( &cachemutex );
+#endif  
   /* clear ATARI system vectors and system variables */
   for ( uint32_t n = 0x380; n < 0x5B4; n += 2 )
     ps_write_16 ( n, 0 );
-
   /* re-initialise graphics */
   if ( ET4000Initialised )
     et4000Init ();
@@ -561,7 +696,6 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
   return 0;
 }
 
-
 unsigned int m68k_read_memory_8 ( uint32_t address ) 
 {
   static uint32_t d;
@@ -581,6 +715,12 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
     //RTG_RAMLOCK = false;
     return 0;
   }
+
+#ifdef STRAMCACHE
+  unsigned int value;
+  if( do_cache( address, 1, &value, 1 ) )
+    return value;
+#endif
 
   d = ps_read_8 ( address );  
   //RTG_RAMLOCK = false;
@@ -608,6 +748,12 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
     return 0;
   }
 
+#ifdef STRAMCACHE
+  unsigned int value;
+  if( do_cache( address, 2, &value, 1 ) )
+    return value;
+#endif
+
   d = ps_read_16 ( address );
   //RTG_RAMLOCK = false;
   return d;
@@ -634,6 +780,11 @@ unsigned int m68k_read_memory_32 ( uint32_t address )
     return 0;
   }
 
+#ifdef STRAMCACHE
+  unsigned int value;
+  if( do_cache( address, 4, &value, 1 ) )
+    return value;
+#endif
   d = ps_read_32 ( address );
   //RTG_RAMLOCK = false;
   return d;
@@ -756,7 +907,6 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   return 0;
 }
 
-
 void m68k_write_memory_8 ( uint32_t address, unsigned int value ) 
 {
   //RTG_RAMLOCK = true;
@@ -776,6 +926,9 @@ void m68k_write_memory_8 ( uint32_t address, unsigned int value )
   }
 
   ps_write_8 ( address, value );
+#ifdef STRAMCACHE
+  do_cache( address, 1, &value, 0 );
+#endif
   //RTG_RAMLOCK = false;
 }
 
@@ -799,6 +952,9 @@ void m68k_write_memory_16 ( uint32_t address, unsigned int value )
   }
 
   ps_write_16 ( address, value );
+#ifdef STRAMCACHE
+  do_cache( address, 2, &value, 0 );
+#endif
   //RTG_RAMLOCK = false;
 }
 
@@ -822,6 +978,9 @@ void m68k_write_memory_32 ( uint32_t address, unsigned int value )
   }
 
   ps_write_32 ( address, value );
+#ifdef STRAMCACHE
+  do_cache( address, 4, &value, 0 );
+#endif
   //RTG_RAMLOCK = false;
 }
 
