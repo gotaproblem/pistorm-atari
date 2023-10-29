@@ -451,10 +451,21 @@ void *rtgRender ( void* vptr )
                     COLOURDEPTH = 1;
                 }
 
+                /* NVDI 640x480 68 Hz, 34.0 KHz */
+                else if ( et4000Res == 503 )
+                {
+                    windowWidth = 640;
+                    windowHeight = 480;
+
+                    if ( xcb->ts_index [TS_AUX_MODE] == 0xB4 && xcb->ts_index [WRITE_PLANE_MASK] == 0x0F )
+                        COLOURDEPTH = 2;
+
+                    else if ( xcb->ts_index [TS_AUX_MODE] == 0xB4 && xcb->ts_index [WRITE_PLANE_MASK] == 0x00 )
+                        COLOURDEPTH = 5;
+                }
+
                 /* NOVA */
-                else if ( et4000Res == 523 ||
-                    /* NVDI 640x480 16 Colour 68 Hz, 34.0 KHz */
-                    et4000Res == 503 )
+                else if ( et4000Res == 523 )
                 {
                     windowWidth = 640;
                     windowHeight = 480;
@@ -499,13 +510,16 @@ void *rtgRender ( void* vptr )
                 {
                     windowWidth = 800;
                     windowHeight = 600;
-                    COLOURDEPTH = 1;
+
+                    if ( xcb->ts_index [TS_AUX_MODE] == 0xB4 && xcb->ts_index [WRITE_PLANE_MASK] == 0x0F )
+                        COLOURDEPTH = 2;
+                    
+                    else
+                        COLOURDEPTH = 1;
                 }
 
                 /* NOVA */
-                else if ( et4000Res == 803 ||
-                    /* NVDI 1024x768 Monochrome 60 Hz, 50.0 KHz */
-                    et4000Res == 828 )
+                else if ( et4000Res == 803 )
                 {
                     windowWidth = 1024;
                     windowHeight = 768;
@@ -523,6 +537,17 @@ void *rtgRender ( void* vptr )
                     else if ( xcb->ts_index [TS_AUX_MODE] == 0xB4 && xcb->ts_index [WRITE_PLANE_MASK] == 0x01 )
                         COLOURDEPTH = 1;
 
+                }
+
+                /* NVDI 1024x768 Monochrome 60 Hz, 50.0 KHz */
+                else if ( et4000Res == 828 )
+                {
+                    windowWidth = 1024;
+                    windowHeight = 768;
+
+                    if ( xcb->ts_index [TS_AUX_MODE] == 0xB4 
+                                && xcb->ts_index [WRITE_PLANE_MASK] == 0x0F )
+                        COLOURDEPTH = 2;
                 }
 
                 /* NVDI 1280x960 Monochrome 50 Hz, 54.0 KHz */
@@ -1170,14 +1195,16 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
 
 
     if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGTOP )
-    //if ( (addr >= 0x00D00000 && addr < 0x00D00400) )//|| (addr >= 0x00CC0000 && addr < 0x00CC0400) )
     {
         *value = 1;
 
-        //printf ( "ET4000 reg read 0x%X\n", addr );
+       // printf ( "ET4000 reg read 0x%X\n", addr );
 
-        a = addr & 0x3FF; //- NOVA_ET4000_REGBASE;
-        //a = addr - NOVA_ET4000_REGBASE;
+        if ( (addr - NOVA_ET4000_REGBASE) < 0x50 )
+            a = 0x3B0 + (addr - NOVA_ET4000_REGBASE);
+        
+        else
+            a = addr & 0x3FF;
 
         switch ( a )
         {
@@ -1214,17 +1241,7 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
                // printf ( "read reg 0x%X TS REGISTER %d = 0x%x\n", a, xcb->ts_ix, *value );
                 break;
             case 0x3c3: /* Video Subsystem Register */
-            case 0x46e8:
-                /* if emulator cnf file has not `setenv rtg` then do not enable ET4000 */
-                //if ( !ET4000enabled && !RTG_enabled )
-                //if ( !RTG_enabled )
-                //{
-                //    *value = 0xff;
-                //    g_buserr = 1; 
-                //    printf ( "et4000 raise bus error\n" );
-                //}
-
-                
+            case 0x46e8:                
 
                 /* stop emutos initialising ET4000 */
                 if ( first )
@@ -1268,21 +1285,17 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
             default:
                 printf ( "ET4000 unknown read register 0x%X\n", a );
 
-                //pthread_mutex_unlock ( &rtgmutex );
                 //g_buserr = 1;
 
                 return 1;
         }
 
-        //pthread_mutex_unlock ( &rtgmutex );
-
         return 1;
     }
 
-    else //if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMTOP )
+    else
     {
         //printf ( "et4000Read () -> type = %d, addr = 0x%X\n", type, addr );
-
 
         if ( type == OP_TYPE_BYTE )
             *value = *( uint8_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) );
@@ -1293,12 +1306,8 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
         else if ( type == OP_TYPE_LONGWORD )
             *value = be32toh ( *(uint32_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
 
-        //pthread_mutex_unlock ( &rtgmutex );
-
         return 1;
     }
-
-    //pthread_mutex_unlock ( &rtgmutex );
 
     return 0;
 }
@@ -1310,15 +1319,16 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
     static uint32_t a;
     static int invalid = 0;
 
-    //pthread_mutex_lock ( &rtgmutex );
 
     if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGTOP )
-    //if ( addr >= 0x00D00000 && addr < NOVA_ET4000_REGTOP )
-    //if ( (addr >= 0x00D00000 && addr < 0x00D00400) || (addr >= 0x00CC0000 && addr < 0x00CC0400) )
     {
         //printf ( "ET4000 reg write 0x%X\n", addr );
 
-        a = addr & 0x3FF; //- NOVA_ET4000_REGBASE;
+        if ( (addr - NOVA_ET4000_REGBASE) < 0x50 )
+            a = 0x3B0 + (addr - NOVA_ET4000_REGBASE);
+        
+        else
+            a = addr & 0x3FF;
 
         switch ( a )
         {
@@ -1520,7 +1530,7 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
                 break;
 
             default:
-                printf ( "ET4000 unknown write register 0x%X\n", a );
+                printf ( "ET4000 unknown write register 0x%X\n", addr );
 
                 /* occasionaly will see continuous writes to succesive words. If this happens, re-initialise */
                 //if ( invalid++ > 5 )
@@ -1532,19 +1542,15 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
                     //et4000Init ();
                 //}
 
-                //pthread_mutex_unlock ( &rtgmutex );
-
                 return 0;
         }
-
-        //pthread_mutex_unlock ( &rtgmutex );
 
         return 1;
     }
 
     /* should then be a VRAM address */
     
-    else //if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMTOP )
+    else
     {
         //printf ( "et4000Read () -> type = %d, addr = 0x%X\n", type, addr );
 
@@ -1574,12 +1580,8 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
             }
         }
 
-        //pthread_mutex_unlock ( &rtgmutex );
-
         return 1;
     }
-
-    //pthread_mutex_unlock ( &rtgmutex );
 
     return 0;
 }
