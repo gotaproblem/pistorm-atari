@@ -1,1 +1,1 @@
-quiet vt.global_cursor_default=0
+quiet vt.global_cursor_default=0 fsck.mode=force fsck.repair=yes

@@ -1268,7 +1268,7 @@ inline unsigned int  m68k_read_pcrelative_32(m68ki_cpu_core *state, unsigned int
 
 
 
-extern volatile int g_buserr;
+extern volatile uint32_t g_buserr;
 
 //inline uint m68ki_read_imm16_addr_slowpath(m68ki_cpu_core *state, uint32_t pc, address_translation_cache *cache)
 inline uint m68ki_read_imm16_addr_slowpath ( m68ki_cpu_core *state, uint32_t pc )

@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -79,38 +80,6 @@ static void setup_io()
   gpclk = ((volatile unsigned *)gpio_map) + GPCLK_ADDR / 4;
 }
 
-/* cryptodad */
-/* PI_CLK (GPIO 4) definitions */
-#define PLLC 5 /* ARM CLOCK  - cpu_freq */
-#define PLLD 6 /* CORE CLOCK - gpu_freq this should be used for a stable 200 MHz PI_CLK as it is NOT affected by overclocking CPU */
-
-//#define PLLC_200MHZ 6  /* ARM clock / 6 eg. 1200 MHz / 6 = 200 MHz*/
-//#define PLLC_100MHZ 7  /* ARM clock / 7 = 100 MHz */
-//#define PLLC_50MHZ  8  /* ARM clock / 8 = 50 MHz */
-//#define PLLC_25MHZ  9  /* ARM clock / 8 = 25 MHz */
-//#define PLLC_12MHZ  10
-//#define PLLC_6MHZ   25
-
-/* pi3 BCM 2837 */
-/* GPIO max clock is 200 MHz */
-/* PLLD GPU_FREQ (500 MHz) as defined in /boot/config.txt */
-
-/* Pi4 BCM 2711 */
-/* GPIO max clock is 125 MHz */
-/* PLLD GPU_FREQ (750 MHz) as defined in /boot/config.txt */
-
-/* max target frequency for PI_CLK (MHz) */
-/*
-#ifndef PI3
-  #define PI_CLK 125
-  #define PLL_DIVISOR 9 //5
-  #define PLL_TO_USE PLLD
-#else
-  #define PI_CLK 200
-  #define PLL_DIVISOR 11 //6
-  #define PLL_TO_USE PLLC
-#endif*/
-
 
 /* cryptodad */
 /* PI_CLK (GPIO 4) definitions */
@@ -143,45 +112,60 @@ static void setup_io()
 
 #else /* THIS IS FOR PI3 */
 
-  #define PLL_TO_USE PLLD
   #define MAX_PI_CLK 200
-  #define PLL_DIVISOR 4
-  
+  #define PLL_TO_USE PLLC
+  #define PLL_DIVISOR 8
+
+  //#define PLL_TO_USE PLLD
+  //#define PLL_DIVISOR 2
 #endif
+
 
 /* Enable PI_CLK output on GPIO4, adjust divider and pll source depending on pi model */
 static void setup_gpclk() 
 {
-  int cpuf;
+  int cpuf, coref;
   FILE *fp;
+  char junk[80];
+  char *ptr;
 
+  fp = popen ( "vcgencmd measure_clock arm", "r" );
+  fgets ( junk, sizeof (junk), fp );
+  pclose ( fp );
 
-  if ( ( fp = fopen ( "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", "r" ) ) == NULL )
-  {
-    printf ( "FATAL: %s could not read maximum cpu freq - error %d\n", __func__, errno );
-    return;
-  }
+  ptr = strchr ( junk, '=' );
+  sscanf ( (ptr + 1), "%d", &cpuf );
+  cpuf /= 1000000;
 
-  fscanf ( fp, "%d", &cpuf );
-  fclose ( fp );
-  
+  fp = popen ( "vcgencmd measure_clock core", "r" );
+  fgets ( junk, sizeof (junk), fp );
+  pclose ( fp );
+
+  ptr = strchr ( junk, '=' );
+  sscanf ( (ptr + 1), "%d", &coref );
+  coref /= 1000000;
+
+  printf ( "[INIT] CPU clock is %d MHz\n", cpuf );
+  printf ( "[INIT] CORE clock is %d MHz\n", coref );
+  printf ( "[INIT] Using clock divisor %d with PLL%c\n", PLL_DIVISOR, PLL_TO_USE == PLLC ? 'C' : 'D' );
+  printf ( "[INIT] GPIO clock is %d MHz\n", PLL_TO_USE == PLLC ? cpuf / PLL_DIVISOR : coref / PLL_DIVISOR );
 
   *(gpclk + (CLK_GP0_CTL / 4)) = CLK_PASSWD | (1 << 5);
-  usleep(30);
+  usleep (30);
 
-  while ((*(gpclk + (CLK_GP0_CTL / 4))) & (1 << 7));
-  usleep(100);
+  while ( (*(gpclk + (CLK_GP0_CTL / 4))) & (1 << 7) );
+  usleep (100);
 
   *(gpclk + (CLK_GP0_DIV / 4)) = CLK_PASSWD | (PLL_DIVISOR << 12);  // bits 23:12 integer part of divisor
-  usleep(30);
+  usleep (30);
 
   *(gpclk + (CLK_GP0_CTL / 4)) = CLK_PASSWD | PLL_TO_USE | (1 << 4); // 6=plld, 5=pllc
-  usleep(30);
+  usleep (30);
 
-  while (((*(gpclk + (CLK_GP0_CTL / 4))) & (1 << 7)) == 0);
-  usleep(100);
+  while ( ((*(gpclk + (CLK_GP0_CTL / 4))) & (1 << 7)) == 0 );
+  usleep (100);
 
-  SET_GPIO_ALT(PIN_CLK, 0);  // assign clock to gpio pin 4 (PI_CLK)
+  SET_GPIO_ALT (PIN_CLK, 0);  // assign clock to gpio pin 4 (PI_CLK)
 }
 
 
@@ -222,7 +206,7 @@ gpio + 34 = GPAFEN  GPIO Pin Asysnchronous Falling Edge Detect Enable 0
 
 
 volatile int g_irq;
-volatile int g_buserr;
+volatile uint32_t g_buserr;
 
 
 #ifdef STATS
@@ -275,7 +259,7 @@ void ps_write_16 ( uint32_t address, uint16_t data )
 	while ( ( l = gpio [13] ) & 1 ) // wait for firmware to signal command completed
     ;
 
-  g_irq = CHECK_IRQ (l);
+  //g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -321,7 +305,7 @@ void ps_write_8 ( uint32_t address, uint16_t data )
 	while ( ( l = gpio [13] ) & 1 )
     ;
 
-  g_irq = CHECK_IRQ (l);
+  //g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -370,23 +354,24 @@ uint16_t ps_read_16 ( uint32_t address )
     ;
 
 #ifdef PI3
-  value = (*(gpio + 13) >> 8);
+  l = gpio [13];
+  //value = l >> 8; //gpio [13] >> 8; //(*(gpio + 13) >> 8);
 #endif
 
  	gpio [10] = TXN_END;
 
-  g_irq = CHECK_IRQ (l);
+  //g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
   RWstats.r16++;
 #endif
 
-#ifdef PI3
-  return value;
-#else
-  return (l >> 8);
-#endif
+//#ifdef PI3
+//  return value;
+//#else
+  return l >> 8;
+//#endif
 }
 
 
@@ -422,12 +407,13 @@ uint8_t ps_read_8 ( uint32_t address )
     ;
 
 #ifdef PI3
-  value = *(gpio + 13);
+  //value = *(gpio + 13);
+  l = gpio [13];
 #endif
 
   gpio [10] = TXN_END;
 
-  g_irq = CHECK_IRQ (l);
+  //g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -435,7 +421,7 @@ uint8_t ps_read_8 ( uint32_t address )
 #endif
 
 #ifdef PI3
-  value = (value >> 8) & 0xffff;
+  value = (l >> 8) & 0xffff;
 
   if ( (address & 1) == 0 )
     return (value >> 8) & 0xff;  // EVEN, A0=0,UDS

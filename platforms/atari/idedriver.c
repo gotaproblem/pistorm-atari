@@ -922,10 +922,10 @@ int ide_attach_hdf ( struct ide_controller *c, int drive, int fd )
   d->cylinders = (file_size / 512) / (d->sectors * d->heads);
   
 
-  printf ("[IDE/HDL] Cylinders: %d Heads: %d Sectors: %d - filesize = %llu\n", d->cylinders, d->heads, d->sectors, file_size );
+  //printf ("[IDE/HDL] Cylinders: %d Heads: %d Sectors: %d - filesize = %llu\n", d->cylinders, d->heads, d->sectors, file_size );
 
 
-  ide_make_ident(drive, d->cylinders, d->heads, d->sectors, "PISTORM IDE DK", d->identify);
+  ide_make_ident ( drive, d->cylinders, d->heads, d->sectors, "PISTORM IDE DK", d->identify );
 
   return 0;
 }
@@ -1043,7 +1043,7 @@ static void padstr(char *str, const char *src, int len)
 }
 
 
-int ide_make_ident (int drive, uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *target )
+int ide_make_ident ( int drive, uint16_t c, uint8_t h, uint8_t s, char *name, uint16_t *target )
 {
 	uint32_t oldsize;
 	char buf[40];

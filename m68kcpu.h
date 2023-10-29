@@ -1129,7 +1129,7 @@ extern uint32 pmmu_translate_addr(m68ki_cpu_core *state, uint32 addr_in, uint16 
 
 // read immediate word using the instruction cache
 
-extern volatile int g_buserr;
+extern volatile uint32_t g_buserr;
 
 static inline uint32 m68ki_ic_readimm16(m68ki_cpu_core *state, uint32 address)
 {
@@ -2062,7 +2062,7 @@ static inline void m68ki_stack_frame_0010(m68ki_cpu_core *state, uint sr, uint v
 /* Bus error stack frame (68000 only).
  */
 #define IDLE_DEBUG //printf
-#if (0)
+#if (1)
 //static inline void m68ki_stack_frame_buserr_orig(m68ki_cpu_core *state, uint sr)
 static inline void m68ki_stack_frame_buserr ( m68ki_cpu_core *state, uint sr )
 {

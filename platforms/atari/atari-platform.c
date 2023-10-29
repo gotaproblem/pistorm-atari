@@ -44,6 +44,7 @@ extern int handle_register_write_atari ( uint32_t addr, unsigned int value, unsi
 extern bool RTG_enabled;
 extern bool screenGrab;
 extern long RTG_fps;
+extern bool RTG_EMUTOS_VGA;
 //#endif
 extern int FPU68020_SELECTED;
 
@@ -256,6 +257,9 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val)
     /* cryptodad allow selection of fpu for 68020 CPU */
     if CHKVAR ( "68020fpu" )
         FPU68020_SELECTED = 1;
+
+    if CHKVAR ( "emutos_vga" )
+        RTG_EMUTOS_VGA = true;
         
 #ifdef PISCSI
     // PiSCSI stuff

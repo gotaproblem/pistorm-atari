@@ -59,7 +59,7 @@ volatile uint32_t last_irq = 8;
 volatile uint32_t last_last_irq = 8;
 volatile uint32_t RTG_VRAM_BASE = 0xffffffff;
 volatile uint32_t RTG_VRAM_SIZE;
-volatile bool RTG_RAMLOCK;
+//volatile bool RTG_RAMLOCK;
 volatile bool RAMLOCK;
 volatile int cpu_emulation_running = 0;
 volatile int passthrough = 0;
@@ -75,13 +75,13 @@ FILE *console = NULL;
 unsigned int cpu_type = M68K_CPU_TYPE_68000;
 unsigned int loop_cycles = 20, irq_status = 0;
 struct emulator_config *cfg = NULL;
-
+//pthread_mutex_t rtgmutex;
 
 extern uint8_t IDEenabled;
 extern volatile unsigned int *gpio;
 extern uint8_t fc;
 extern volatile int g_irq;
-extern volatile int g_buserr;
+extern volatile uint32_t g_buserr;
 extern volatile uint32_t RTG_ATARI_SCREEN_RAM;
 extern volatile uint32_t RTG_VSYNC;
 extern void *RTGbuffer;
@@ -90,6 +90,8 @@ extern bool ET4000Initialised;
 extern volatile unsigned int *gpio;
 extern const char *cpu_types[];
 extern bool VSYNC;
+extern bool RTG_EMUTOS_VGA;
+extern bool RTG_LOCK;
 
 
 
@@ -208,19 +210,22 @@ void *cacheflusher( void *dummy ) {
     sleep(1);
   }
 
-  while( cpu_emulation_running ) {
-    if( flushstate ) {
+  while( cpu_emulation_running ) 
+  {
+    if( flushstate ) 
+    {
       memset( cache, 0, CACHESIZEBYTES );
       pthread_mutex_lock( &cachemutex );
       flushstate = 0;
       pthread_mutex_unlock( &cachemutex );
-      printf("Cache flushed [%d]     \r", c++ );
-      fflush(stdout);
+      //printf("Cache flushed [%d]     \r", c++ );
+      //fflush(stdout);
     }
+
     else
       usleep(1e5);
   }
-  printf("End of Flushing thread\n");
+  //printf("End of Flushing thread\n");
 }
 
 
@@ -244,10 +249,14 @@ execute:
       
     m68ki_instruction_jump_table [REG_IR] (state);
 
-    if ( g_buserr ) 
+    if ( g_buserr != 0 ) 
+    {
+      //printf ( "BERR\n" );
+    //if ( !(g_buserr & 0x20) )
       m68ki_exception_bus_error ( state ); 
+    }
 
-    //else
+    else
       USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
 
     if ( GET_CYCLES () > 0 ) // cryptodad make sure m68kcpu.h m68ki_set_sr() has relevent line commented out
@@ -316,7 +325,7 @@ void *cpu_task()
 
 run:
   m68k_execute_bef ( state, loop_cycles );
-#if (0)
+#if (1)
   status = ps_read_status_reg ();
   //if ( status == 0xFFFF )
   //  printf ( "bad status\n" );
@@ -392,8 +401,9 @@ int main ( int argc, char *argv[] )
   int g;
   int err;
   pthread_t rtg_tid, cpu_tid, flush_tid;
+  time_t t;
 
-
+  RTG_EMUTOS_VGA = false;
   RTG_enabled = 0;
   FPU68020_SELECTED = 0;
 
@@ -480,7 +490,7 @@ int main ( int argc, char *argv[] )
     if (!cfg->platform)
     {
       cfg->platform = make_platform_config ( "atari", "st" );
-      printf ( "[CFG] Plaform not specified - using atari st\n" );
+      printf ( "[CFG] Plaform not specified - using Atari ST\n" );
     }
 
     cfg->platform->platform_initial_setup ( cfg );
@@ -516,7 +526,7 @@ int main ( int argc, char *argv[] )
   err = pthread_create ( &cpu_tid, NULL, &cpu_task, NULL );
 
   if ( err != 0 )
-    printf ( "[ERROR] Cannot create CPU thread: [%s]", strerror ( err ) );
+    DEBUG_PRINTF ( "[ERROR] Cannot create CPU thread: [%s]", strerror ( err ) );
 
   else 
   {
@@ -526,6 +536,7 @@ int main ( int argc, char *argv[] )
 
   if ( ET4000Initialised )
   {
+    //pthread_mutex_init ( &rtgmutex, NULL );
     err = pthread_create ( &rtg_tid, NULL, &rtgRender, NULL );
 
     if ( err != 0 )
@@ -534,7 +545,7 @@ int main ( int argc, char *argv[] )
     else 
     {
       pthread_setname_np ( rtg_tid, "pistorm: rtg" );
-      DEBUG_PRINTF ( "[MAIN] RTG thread created successfully\n" );
+      printf ( "[MAIN] RTG thread created successfully\n" );
     }
   }
 
@@ -544,10 +555,11 @@ int main ( int argc, char *argv[] )
 
     if ( err != 0 )
       DEBUG_PRINTF ( "[ERROR] Cannot create Cache Flushing thread: [%s]", strerror (err) );
+
     else 
     {
       pthread_setname_np ( rtg_tid, "pistorm: flusher" );
-      DEBUG_PRINTF ( "[MAIN] Cache Flushing thread created successfully\n" );
+      printf ( "[MAIN] Cache Flushing thread created successfully\n" );
     }
 #endif
 
@@ -560,13 +572,18 @@ int main ( int argc, char *argv[] )
 
   cpu_emulation_running = 1; /* start the threads running - up until now, they are just waiting/looping  */
 
-  DEBUG_PRINTF ( "[MAIN] Emulation Running [%s%s]\n", cpu_types [cpu_type - 1], (cpu_type == M68K_CPU_TYPE_68020 && FPU68020_SELECTED) ? " + FPU" : "" );
+  time ( &t ); /* get date and time */
+
+  printf ( "[MAIN] Emulation Running [%s%s] %s\n", 
+    cpu_types [cpu_type - 1], 
+    (cpu_type == M68K_CPU_TYPE_68020 && FPU68020_SELECTED) ? " + FPU" : "",
+    ctime ( &t ) );
 
   if ( passthrough )
-    DEBUG_PRINTF ( "[MAIN] %s Native Performance\n", cpu_types [cpu_type - 1] );
+    printf ( "[MAIN] %s Native Performance\n", cpu_types [cpu_type - 1] );
 
-  DEBUG_PRINTF ( "[MAIN] Press CTRL-C to terminate\n" );
-  DEBUG_PRINTF ( "\n" );
+  printf ( "[MAIN] Press CTRL-C to terminate\n" );
+  printf ( "\n" );
 
   //sched_setscheduler ( 0, SCHED_FIFO, &priority );
   //system ( "echo -1 >/proc/sys/kernel/sched_rt_runtime_us" );
@@ -578,7 +595,12 @@ int main ( int argc, char *argv[] )
   else
     pthread_join ( cpu_tid, NULL );
 
-  DEBUG_PRINTF ("[MAIN] Emulation Ended\n");
+  printf ("[MAIN] Emulation Ended\n");
+
+#ifdef STRAMCACHE
+  pthread_mutex_destroy ( &cachemutex );
+#endif
+  //pthread_mutex_destroy ( &rtgmutex );
 
   return 0;
 }
@@ -594,12 +616,14 @@ void cpu_pulse_reset ( void )
   flushstate = 1;
   pthread_mutex_unlock( &cachemutex );
 #endif  
+
   /* clear ATARI system vectors and system variables */
-  for ( uint32_t n = 0x380; n < 0x5B4; n += 2 )
-    ps_write_16 ( n, 0 );
+  //for ( uint32_t n = 0x380; n < 0x5B4; n += 2 )
+  //  ps_write_16 ( n, 0 );
+
   /* re-initialise graphics */
-  if ( ET4000Initialised )
-    et4000Init ();
+  //if ( ET4000Initialised )
+  //  et4000Init ();
 }
 
 
@@ -635,6 +659,9 @@ inline uint16_t cpu_irq_ack ( int level )
 }
 
 
+
+extern volatile bool ET4000enabled;
+
 static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_t *res ) 
 {
   static int r;
@@ -666,14 +693,14 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
     return 1;
   }
     
-  else if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
+  //else if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
+  else if ( ET4000Initialised && addr >= 0x00A00000 && addr < 0x00DFFFFF )
   {
-    RTG_RAMLOCK = true;
-
-    //while ( RAMLOCK );
+    RTG_LOCK = true;
+   
     r = et4000Read ( addr, res, type );
-  
-    RTG_RAMLOCK = false;
+    
+    RTG_LOCK = false;
 
     return r;
   }
@@ -699,11 +726,12 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
 unsigned int m68k_read_memory_8 ( uint32_t address ) 
 {
   static uint32_t d;
+#ifdef STRAMCACHE
+  static uint32_t value;
+#endif
 
-  //RTG_RAMLOCK = true;
   if ( platform_read_check ( OP_TYPE_BYTE, address, &platform_res ) ) 
   {
-    //RTG_RAMLOCK = false;
     return platform_res;
   }
 
@@ -712,18 +740,16 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
 
   if ( address & 0xFF000000 )
   {
-    //RTG_RAMLOCK = false;
     return 0;
   }
 
 #ifdef STRAMCACHE
-  unsigned int value;
-  if( do_cache( address, 1, &value, 1 ) )
+  if ( do_cache ( address, 1, &value, 1 ) )
     return value;
 #endif
 
   d = ps_read_8 ( address );  
-  //RTG_RAMLOCK = false;
+
   return d;
 }
 
@@ -731,11 +757,12 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
 unsigned int m68k_read_memory_16 ( uint32_t address ) 
 {
   static uint32_t d;
+#ifdef STRAMCACHE
+  static uint32_t value;
+#endif
 
-  //RTG_RAMLOCK = true;
   if ( platform_read_check ( OP_TYPE_WORD, address, &platform_res ) ) 
   {
-    //RTG_RAMLOCK = false;
     return platform_res;
   }
 
@@ -744,18 +771,16 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
 
   if ( address & 0xFF000000 )
   {
-    //RTG_RAMLOCK = false;
     return 0;
   }
 
 #ifdef STRAMCACHE
-  unsigned int value;
-  if( do_cache( address, 2, &value, 1 ) )
+  if ( do_cache ( address, 2, &value, 1 ) )
     return value;
 #endif
 
   d = ps_read_16 ( address );
-  //RTG_RAMLOCK = false;
+
   return d;
 }
 
@@ -763,11 +788,12 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
 unsigned int m68k_read_memory_32 ( uint32_t address ) 
 {
   static uint32_t d;
+#ifdef STRAMCACHE
+  static uint32_t value;
+#endif
 
-  //RTG_RAMLOCK = true;
   if (platform_read_check ( OP_TYPE_LONGWORD, address, &platform_res ) ) 
   {
-    //RTG_RAMLOCK = false;
     return platform_res;
   }
 
@@ -776,17 +802,16 @@ unsigned int m68k_read_memory_32 ( uint32_t address )
 
   if ( address & 0xFF000000 )
   {
-    //RTG_RAMLOCK = false;
     return 0;
   }
 
 #ifdef STRAMCACHE
-  unsigned int value;
-  if( do_cache( address, 4, &value, 1 ) )
+  if ( do_cache( address, 4, &value, 1 ) )
     return value;
 #endif
+
   d = ps_read_32 ( address );
-  //RTG_RAMLOCK = false;
+
   return d;
 }
 
@@ -818,14 +843,14 @@ extern void rtg ( int size, uint32_t address, uint32_t data );
 
 static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32_t val ) 
 {
-  if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
+  //if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
+  if ( ET4000Initialised && addr >= 0x00A00000 && addr < 0x00DFFFFF )
   {
-    RTG_RAMLOCK = true;
+    RTG_LOCK = true;
 
-    //while ( RAMLOCK );
     et4000Write ( addr, val, type );
 
-    RTG_RAMLOCK = false;
+    RTG_LOCK = false;
 
     return 1;
   }
@@ -909,10 +934,8 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
 
 void m68k_write_memory_8 ( uint32_t address, unsigned int value ) 
 {
-  //RTG_RAMLOCK = true;
   if ( platform_write_check ( OP_TYPE_BYTE, address, value ) )
   {
-    //RTG_RAMLOCK = false;
     return;
   }
    
@@ -921,24 +944,20 @@ void m68k_write_memory_8 ( uint32_t address, unsigned int value )
 
   if ( address & 0xFF000000 )
   {
-    //RTG_RAMLOCK = false;
     return;
   }
 
   ps_write_8 ( address, value );
 #ifdef STRAMCACHE
-  do_cache( address, 1, &value, 0 );
+  do_cache ( address, 1, &value, 0 );
 #endif
-  //RTG_RAMLOCK = false;
 }
 
 
 void m68k_write_memory_16 ( uint32_t address, unsigned int value ) 
 {
-  //RTG_RAMLOCK = true;
   if ( platform_write_check ( OP_TYPE_WORD, address, value ) )
   {
-    //RTG_RAMLOCK = false;
     return;
   }
 
@@ -947,24 +966,20 @@ void m68k_write_memory_16 ( uint32_t address, unsigned int value )
 
   if ( address & 0xFF000000 )
   {
-    //RTG_RAMLOCK = false;
     return;
   }
 
   ps_write_16 ( address, value );
 #ifdef STRAMCACHE
-  do_cache( address, 2, &value, 0 );
+  do_cache ( address, 2, &value, 0 );
 #endif
-  //RTG_RAMLOCK = false;
 }
 
 
 void m68k_write_memory_32 ( uint32_t address, unsigned int value ) 
 {
-  //RTG_RAMLOCK = true;
   if ( platform_write_check ( OP_TYPE_LONGWORD, address, value ) )
   {
-   // RTG_RAMLOCK = false;
     return;
   }
 
@@ -973,15 +988,13 @@ void m68k_write_memory_32 ( uint32_t address, unsigned int value )
 
   if ( address & 0xFF000000 )
   {
-   // RTG_RAMLOCK = false;
     return;
   }
 
   ps_write_32 ( address, value );
 #ifdef STRAMCACHE
-  do_cache( address, 4, &value, 0 );
+  do_cache ( address, 4, &value, 0 );
 #endif
-  //RTG_RAMLOCK = false;
 }
 
 
