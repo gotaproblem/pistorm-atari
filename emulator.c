@@ -382,7 +382,7 @@ run:
 
   if ( !cpu_emulation_running )
   {
-    print ("[CPU] End of CPU thread\n");
+    printf ("[CPU] End of CPU thread\n");
 
     return (void *)NULL;
   }
