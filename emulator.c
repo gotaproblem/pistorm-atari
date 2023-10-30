@@ -325,7 +325,7 @@ void *cpu_task()
 
 run:
   m68k_execute_bef ( state, loop_cycles );
-#if (1)
+#if (0)
   status = ps_read_status_reg ();
   //if ( status == 0xFFFF )
   //  printf ( "bad status\n" );
@@ -364,7 +364,7 @@ run:
     {
       M68K_END_TIMESLICE;
 
-      DEBUG_PRINTF ( "[CPU] Emulation reset\n");
+      printf ( "[CPU] Emulation reset\n");
 
       usleep ( 1000000 ); 
 
@@ -382,7 +382,7 @@ run:
 
   if ( !cpu_emulation_running )
   {
-    DEBUG_PRINTF ("[CPU] End of CPU thread\n");
+    print ("[CPU] End of CPU thread\n");
 
     return (void *)NULL;
   }
@@ -575,9 +575,9 @@ int main ( int argc, char *argv[] )
   time ( &t ); /* get date and time */
 
   printf ( "[MAIN] Emulation Running [%s%s] %s\n", 
-    cpu_types [cpu_type - 1], 
-    (cpu_type == M68K_CPU_TYPE_68020 && FPU68020_SELECTED) ? " + FPU" : "",
-    ctime ( &t ) );
+      cpu_types [cpu_type - 1], 
+      (cpu_type == M68K_CPU_TYPE_68020 && FPU68020_SELECTED) ? " + FPU" : "",
+      ctime ( &t ) );
 
   if ( passthrough )
     printf ( "[MAIN] %s Native Performance\n", cpu_types [cpu_type - 1] );
@@ -618,12 +618,12 @@ void cpu_pulse_reset ( void )
 #endif  
 
   /* clear ATARI system vectors and system variables */
-  //for ( uint32_t n = 0x380; n < 0x5B4; n += 2 )
-  //  ps_write_16 ( n, 0 );
+  for ( uint32_t n = 0x380; n < 0x5B4; n += 2 )
+    ps_write_16 ( n, 0 );
 
   /* re-initialise graphics */
-  //if ( ET4000Initialised )
-  //  et4000Init ();
+  if ( ET4000Initialised )
+    et4000Init ();
 }
 
 

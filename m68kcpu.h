@@ -2062,7 +2062,7 @@ static inline void m68ki_stack_frame_0010(m68ki_cpu_core *state, uint sr, uint v
 /* Bus error stack frame (68000 only).
  */
 #define IDLE_DEBUG //printf
-#if (1)
+#if (0)
 //static inline void m68ki_stack_frame_buserr_orig(m68ki_cpu_core *state, uint sr)
 static inline void m68ki_stack_frame_buserr ( m68ki_cpu_core *state, uint sr )
 {
