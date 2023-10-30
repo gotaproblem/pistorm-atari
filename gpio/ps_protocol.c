@@ -419,7 +419,7 @@ uint8_t ps_read_8 ( uint32_t address )
 #endif
 
 #ifdef PI3
-  value = (l >> 8) & 0xffff;
+  value = (value >> 8) & 0xffff;
 
   if ( (address & 1) == 0 )
     return (value >> 8) & 0xff;  // EVEN, A0=0,UDS
