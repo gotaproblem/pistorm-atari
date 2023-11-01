@@ -868,7 +868,7 @@ inline uint16_t cpu_irq_ack ( int level )
 static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_t *res ) 
 {
   static int r;
-
+#if (0)
   /* EMUtos disable 68000 Blitter */
   if ( addr == 0x00FF8A3C )
   {
@@ -876,7 +876,7 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
     g_buserr = 1;
     return 1;
   }
-
+#endif
   /* Set Atari's date/time - picked up by TOS program -> pistorm.prg */
   /* FFFC40 is undefined in the Atari-Compendium, coming after MSTe RTC defines */
   /* pistorm.prg reads these two 16bit addresses, then writes date/time to IKBD */
