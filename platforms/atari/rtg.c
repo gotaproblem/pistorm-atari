@@ -1633,7 +1633,8 @@ void logo ( void )
     int start;
     FILE *fp;
     char hdr [0x0f];
-    /* bitmap needs to be 8bit no alpha flipped */
+
+    /* bitmap needs to be 8bit no alpha flipped - black & white for now too */
     char *logofile = "configs/AtariLogo800x600.bmp";
 
 

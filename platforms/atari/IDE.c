@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <time.h>
 #include <endian.h>
@@ -43,7 +44,7 @@ static struct ide_controller *atariIDE [4] = {NULL, NULL, NULL, NULL};
 
 int atarifd;
 char *atari_image_file[IDE_MAX_HARDFILES];
-uint8_t IDEenabled;
+bool IDE_enabled;
 
 struct ide_controller *get_ide ( int index ) 
 {
@@ -114,10 +115,10 @@ void InitIDE (void)
 
 
   if ( num_IDE_drives == 0 ) 
-    IDEenabled = 0;
+    IDE_enabled = false;
 
   else
-    IDEenabled = 1;
+    IDE_enabled = true;
 }
 
 
