@@ -1987,9 +1987,9 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 /* Set the status register and check for interrupts */
 static inline void m68ki_set_sr(m68ki_cpu_core *state, uint value)
 {
-	m68ki_set_sr_noint(state, value);
+	m68ki_set_sr_noint ( state, value );
 	
-	//m68ki_check_interrupts(state); // cryptodad commented out for performance 
+	//m68ki_check_interrupts (state); // cryptodad commented out for performance 
 
 	//if ( RTG_enabled )
 	//	m68ki_exception_interrupt ( state, 0 ); // cryptodad use this instead AND ONLY with 
@@ -2062,7 +2062,7 @@ static inline void m68ki_stack_frame_0010(m68ki_cpu_core *state, uint sr, uint v
 /* Bus error stack frame (68000 only).
  */
 #define IDLE_DEBUG //printf
-#if (0)
+#if (1)
 //static inline void m68ki_stack_frame_buserr_orig(m68ki_cpu_core *state, uint sr)
 static inline void m68ki_stack_frame_buserr ( m68ki_cpu_core *state, uint sr )
 {

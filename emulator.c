@@ -53,7 +53,7 @@ extern void set_pistorm_cfg_filename (char *);
 extern uint m68ki_read_imm16_addr_slowpath ( m68ki_cpu_core *state, uint32_t pc );
 
 
-int FPU68020_SELECTED;
+bool FPU68020_SELECTED;
 uint8_t emulator_exiting = 0;
 volatile uint32_t last_irq = 8;
 volatile uint32_t last_last_irq = 8;
@@ -76,8 +76,10 @@ unsigned int cpu_type = M68K_CPU_TYPE_68000;
 unsigned int loop_cycles = 20, irq_status = 0;
 struct emulator_config *cfg = NULL;
 //pthread_mutex_t rtgmutex;
+bool RTC_enabled;
 
-extern uint8_t IDEenabled;
+extern volatile bool ET4000enabled;
+extern bool IDE_enabled;
 extern volatile unsigned int *gpio;
 extern uint8_t fc;
 extern volatile int g_irq;
@@ -112,6 +114,7 @@ void cpu3 ( void )
 	sched_setaffinity ( 0, sizeof (cpu_set_t), &cpuset );
 }
 
+#if (0)
 #ifdef STRAMCACHE
 #define CACHETYPE uint16_t
 #define CACHESIZE 4096*1024
@@ -148,7 +151,8 @@ int do_cache( uint32_t address, int size, unsigned int *value, int isread ) {
     return 1; // we return success here as we've done the read for you
   }
 
-  if( !(address >= 0x000800 && address < 0x400000 ) ) // STRAM only without low RAM (have to perform this check late as sniffing registers above)
+  //if( !(address >= 0x000800 && address < 0x400000 ) ) // STRAM only without low RAM (have to perform this check late as sniffing registers above)
+  if( !(address >= 0x0005B0 && address < 0x400000 ) ) 
     return 0;
 
 	if( isread ) {
@@ -231,6 +235,199 @@ void *cacheflusher( void *dummy ) {
 
 #endif
 
+#else
+
+//#ifdef STRAMCACHE
+
+#define CACHETYPE uint8_t
+#define CACHESIZE 4096*1024
+#define CACHESIZ//EBYTES CACHESIZE //* sizeof(CACHETYPE)
+
+static CACHETYPE cache[CACHESIZE]; // top byte used as valid flag
+static uint16_t cacheTable [CACHESIZE / 16];
+static short flushstate = 0; // 0 active, 1 flush request
+pthread_mutex_t cachemutex;
+
+int do_cache ( uint32_t address, int size, uint32_t *value, int isread ) 
+{
+  static uint32_t cacheTblAddress;
+  static uint16_t cacheHitBits;
+  static uint8_t  offset;
+  static short    flushstatereq = 0; // go around the houses a bit as don't want to lock for mutex
+
+  //if ( flushstate > 0 ) // cache is invalid
+  //  return 0;
+
+  if ( flushstatereq )//&& !flushstate ) // there's been a request to flush and it's not yet set the flush thread's state variable
+  {
+      //if ( !pthread_mutex_trylock ( &cachemutex ) ) 
+      //{
+        //flushstate = 1;
+        flushstatereq = 0;
+       // pthread_mutex_unlock ( &cachemutex );
+      //}
+      memset ( cacheTable, 0, CACHESIZE / 16 );
+
+      return 0;
+  }
+
+  // DMA registers of interest are at 0x00FF8604 (trigger DMA) and 0x00FFFA01 (MFP GPIP bits to check for completion).
+  // Sniff reads from 0x00FFFA01 with a mask against 0x20. If this results is 0, a DMA interrupt has triggered
+  // Blitter not yet sniffed (disable it)
+  if ( isread ) //&& (address == 0x00FFFA01) ) 
+  {
+    if ( address == 0x00FFFA01 ) 
+    {
+      *value = ps_read_8 ( address );
+
+      if ( ! ( *value & 0x20 ) ) 
+      {
+        flushstatereq = 1;
+      }
+
+      return 1; // we return success here as we've done the read for you
+    }
+
+    //if ( address == 0x10C )//&& (ps_read_8 ( 0xFF8A3C ) & 0x80) )
+    //{
+    //  *value = ps_read_32 ( address );
+      //printf ( "blitter vector = 0x%X\n", *value );
+      //flushstatereq = 1;
+      //return 1;
+    //}
+    
+  }
+
+  // STRAM only without low RAM (have to perform this check late as sniffing registers above)
+  //if ( ! ( address >= 0x0005B0 && address < 0x400000 ) ) 
+  if ( ! ( address < 0x400000 ) )
+    return 0;
+
+
+	if ( isread ) 
+  {
+    cacheTblAddress = address >> 4;
+    offset = address & 0x0f;    
+
+    switch ( size ) 
+    {
+      case 4:
+        cacheHitBits = 0x0F << offset;
+        
+        if ( ! ( cacheTable [cacheTblAddress] & cacheHitBits ) )
+        {
+         // printf ( "4 MISS\n" );
+          return 0;
+        }
+
+        //ptr = (uint32_t *) &cache [address];
+        //*value = be32toh ( *(uint32_t *)ptr ); //( cache [address] << 24 ) | ( cache [address + 1] << 16 ) | ( cache [address + 2] << 8 ) | cache [address + 3];
+        *value = be32toh ( *(uint32_t *) &cache [address] );
+        return 1;
+
+      case 2:
+        cacheHitBits = 0x03 << offset;
+       
+        if ( ! ( cacheTable [cacheTblAddress] & cacheHitBits ) )
+        {
+         // printf ( "2 MISS\n" );
+          return 0;
+        }
+
+        //ptr = (uint16_t *) &cache [address];
+        //*value = be16toh ( *(uint16_t *)ptr ); //cache [address] << 8 | cache [address + 1];
+        *value = be16toh ( *(uint16_t *) &cache [address] ); 
+        return 1;
+
+      case 1:
+      default:
+        cacheHitBits = 0x01 << offset;
+     
+        if ( ! ( cacheTable [cacheTblAddress] & cacheHitBits ) )
+        {
+         // printf ( "1 MISS\n" ) ;
+          return 0;
+        }
+
+        *value = cache [address];
+//      printf("HIT (%8.8x = %2.2x)\n", address, *value);
+        return 1;
+    }
+  }
+
+  else 
+  {
+    cacheTblAddress = address >> 4;
+    offset = address & 0x0f;
+
+    switch ( size ) 
+    {
+      case 4:
+        //ptr = (uint32_t *) &cache [address];
+        //*(uint32_t *)ptr = be32toh ( *value );
+        cache [address]     = *value >> 24;
+        cache [address + 1] = *value >> 16;
+        cache [address + 2] = *value >> 8;
+        cache [address + 3] = *value;
+        
+        cacheTable [cacheTblAddress] |= (0x0F << offset);
+        break;
+
+      case 2:
+        //ptr = (uint16_t *) &cache [address];
+        //*(uint16_t *)ptr = be16toh ( *value );
+
+        cache [address]     = *value >> 8;
+        cache [address + 1] = *value;
+
+        cacheTable [cacheTblAddress] |= (0x03 << offset);
+        break;
+
+      case 1:
+      default:
+        cache [address]     = *value;
+
+        cacheTable [cacheTblAddress] |= (0x01 << offset);
+        break;
+    }
+  }
+
+  return 1;
+}
+
+// separate thread to reduce impact of flushing 8MB memory each time!
+// overhead reduced now by using cache bit table - from 8MB down to 512KB
+void *cacheflusher ( void *dummy ) 
+{
+  static uint8_t c = 0;
+
+  while ( !cpu_emulation_running ) 
+  {
+    sleep(1);
+  }
+
+  while ( cpu_emulation_running ) 
+  {
+    if ( flushstate ) 
+    {
+      //memset( cache, 0, CACHESIZEBYTES );
+      memset ( cacheTable, 0, CACHESIZE / 16 );
+      pthread_mutex_lock ( &cachemutex );
+      flushstate = 0;
+      pthread_mutex_unlock ( &cachemutex );
+      //printf("Cache flushed [%d]     \r", c++ );
+      //fflush(stdout);
+    }
+
+    else
+      usleep(1e5);
+  }
+  //printf("End of Flushing thread\n");
+}
+//#endif
+
+#endif
+
 static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 {
 	/* Set our pool of clock cycles available */
@@ -249,11 +446,12 @@ execute:
       
     m68ki_instruction_jump_table [REG_IR] (state);
 
-    if ( g_buserr != 0 ) 
+    if ( g_buserr ) 
     {
       //printf ( "BERR\n" );
     //if ( !(g_buserr & 0x20) )
       m68ki_exception_bus_error ( state ); 
+      g_buserr = 0;
     }
 
     else
@@ -357,7 +555,7 @@ run:
     if ( last_irq != 0 )
     {
       m68k_set_irq ( last_irq );
-      m68ki_check_interrupts ( state );
+      //m68ki_check_interrupts ( state );
     }
 
     if ( status & 0x2 ) 
@@ -375,8 +573,10 @@ run:
   else
   {
     m68k_set_irq ( 0 );
-    m68ki_check_interrupts ( state );
+    //m68ki_check_interrupts ( state );
   }
+
+  m68ki_check_interrupts ( state );
   
 #endif
 
@@ -404,8 +604,9 @@ int main ( int argc, char *argv[] )
   time_t t;
 
   RTG_EMUTOS_VGA = false;
-  RTG_enabled = 0;
-  FPU68020_SELECTED = 0;
+  RTG_enabled = false;
+  FPU68020_SELECTED = false;
+  RTC_enabled = false;
 
   /* save stdio tty properties and ammend for emulator use */
   /* tty properties are restored in sigint_handler () */
@@ -549,6 +750,7 @@ int main ( int argc, char *argv[] )
     }
   }
 
+#if (0)
 #ifdef STRAMCACHE
     pthread_mutex_init(&cachemutex, NULL);
     err = pthread_create ( &flush_tid, NULL, &cacheflusher, NULL );
@@ -561,6 +763,7 @@ int main ( int argc, char *argv[] )
       pthread_setname_np ( rtg_tid, "pistorm: flusher" );
       printf ( "[MAIN] Cache Flushing thread created successfully\n" );
     }
+#endif
 #endif
 
   /* cryptodad optimisation - .cfg no mappings */
@@ -631,16 +834,16 @@ void cpu_pulse_reset ( void )
 static uint32_t target = 0;
 static uint32_t platform_res, rres;
 
-
+#if (0)
 /* return 24 bit address */
-static inline uint32_t check_ff_st( uint32_t add ) 
+static inline uint32_t check_ff_st ( uint32_t add ) 
 {
 	if ( ( add & 0xFF000000 ) == 0xFF000000 ) 
     add &= 0x00FFFFFF;
 
 	return add;
 }
-
+#endif
 
 /* levels 2 and 4 are video syncs, so thousands are coming in */
 inline uint16_t cpu_irq_ack ( int level ) 
@@ -660,16 +863,24 @@ inline uint16_t cpu_irq_ack ( int level )
 
 
 
-extern volatile bool ET4000enabled;
+
 
 static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_t *res ) 
 {
   static int r;
-  
+
+  /* EMUtos disable 68000 Blitter */
+  if ( addr == 0x00FF8A3C )
+  {
+    printf ( "Disable Blitter\n" );
+    g_buserr = 1;
+    return 1;
+  }
+
   /* Set Atari's date/time - picked up by TOS program -> pistorm.prg */
   /* FFFC40 is undefined in the Atari-Compendium, coming after MSTe RTC defines */
   /* pistorm.prg reads these two 16bit addresses, then writes date/time to IKBD */
-  if ( addr >= 0x00FFFC40 && addr < 0x00FFFC44 )
+  if ( RTC_enabled && (addr >= 0x00FFFC40 && addr < 0x00FFFC44) )
   {
     uint16_t atari_dt;
     uint16_t atari_tm;
@@ -694,7 +905,7 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
   }
     
   //else if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
-  else if ( ET4000Initialised && addr >= 0x00A00000 && addr < 0x00DFFFFF )
+  else if ( ET4000Initialised && (addr >= 0x00A00000 && addr < 0x00DFFFFF) )
   {
     RTG_LOCK = true;
    
@@ -705,7 +916,7 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
     return r;
   }
 
-  else if ( IDEenabled && addr >= IDEBASEADDR && addr < IDETOPADDR )
+  else if ( IDE_enabled && (addr >= IDEBASEADDR && addr < IDETOPADDR) )
   {
     addr &= 0x00ffffff;
   }
@@ -725,7 +936,6 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
 
 unsigned int m68k_read_memory_8 ( uint32_t address ) 
 {
-  static uint32_t d;
 #ifdef STRAMCACHE
   static uint32_t value;
 #endif
@@ -735,28 +945,27 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
     return platform_res;
   }
 
-  if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  if ( ( address & 0xFF000000 ) == 0xFF000000 )
     address &= 0x00FFFFFF;
 
-  if ( address & 0xFF000000 )
-  {
-    return 0;
-  }
+  /* this check is only needed for EMUtos determining amount of ALT-RAM - looks like only the write is needed */
+  //if ( address & 0xFF000000 )
+  //{
+  //  printf ( "8rd why here? address = 0x%X\n", address );
+   // return 0;
+  //}
 
 #ifdef STRAMCACHE
   if ( do_cache ( address, 1, &value, 1 ) )
     return value;
 #endif
 
-  d = ps_read_8 ( address );  
-
-  return d;
+  return ps_read_8 ( address );  
 }
 
 
 unsigned int m68k_read_memory_16 ( uint32_t address ) 
 {
-  static uint32_t d;
 #ifdef STRAMCACHE
   static uint32_t value;
 #endif
@@ -769,25 +978,23 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
   if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
     address &= 0x00FFFFFF;
 
-  if ( address & 0xFF000000 )
-  {
-    return 0;
-  }
+  //if ( address & 0xFF000000 )
+  //{
+  //  printf ( "16rd why here? address = 0x%X\n", address );
+  //  return 0;
+  //}
 
 #ifdef STRAMCACHE
   if ( do_cache ( address, 2, &value, 1 ) )
     return value;
 #endif
 
-  d = ps_read_16 ( address );
-
-  return d;
+  return ps_read_16 ( address );
 }
 
 
 unsigned int m68k_read_memory_32 ( uint32_t address ) 
 {
-  static uint32_t d;
 #ifdef STRAMCACHE
   static uint32_t value;
 #endif
@@ -800,19 +1007,18 @@ unsigned int m68k_read_memory_32 ( uint32_t address )
   if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
     address &= 0x00FFFFFF;
 
-  if ( address & 0xFF000000 )
-  {
-    return 0;
-  }
+  //if ( address & 0xFF000000 )
+  //{
+  //  printf ( "32rd why here? address = 0x%X\n", address );
+  //  return 0;
+  //}
 
 #ifdef STRAMCACHE
   if ( do_cache( address, 4, &value, 1 ) )
     return value;
 #endif
 
-  d = ps_read_32 ( address );
-
-  return d;
+  return ps_read_32 ( address );
 }
 
 
@@ -844,7 +1050,7 @@ extern void rtg ( int size, uint32_t address, uint32_t data );
 static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32_t val ) 
 {
   //if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
-  if ( ET4000Initialised && addr >= 0x00A00000 && addr < 0x00DFFFFF )
+  if ( ET4000Initialised && (addr >= 0x00A00000 && addr < 0x00DFFFFF) )
   {
     RTG_LOCK = true;
 
@@ -916,7 +1122,7 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   }
 #endif
 
-  else if ( IDEenabled && addr >= IDEBASEADDR && addr < IDETOPADDR )
+  else if ( IDE_enabled && (addr >= IDEBASEADDR && addr < IDETOPADDR) )
   {
     addr &= 0x00ffffff;
   }
@@ -932,6 +1138,7 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   return 0;
 }
 
+
 void m68k_write_memory_8 ( uint32_t address, unsigned int value ) 
 {
   if ( platform_write_check ( OP_TYPE_BYTE, address, value ) )
@@ -942,8 +1149,10 @@ void m68k_write_memory_8 ( uint32_t address, unsigned int value )
   if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
     address &= 0x00FFFFFF;
 
+  /* this check is only needed for EMUtos determining amount of ALT-RAM */
   if ( address & 0xFF000000 )
   {
+    //printf ( "8wr why here? address = 0x%X\n", address );
     return;
   }
 
@@ -964,10 +1173,11 @@ void m68k_write_memory_16 ( uint32_t address, unsigned int value )
   if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
     address &= 0x00FFFFFF;
 
-  if ( address & 0xFF000000 )
-  {
-    return;
-  }
+  //if ( address & 0xFF000000 )
+  //{
+  //  printf ( "16wr why here? address = 0x%X\n", address );
+  //  return;
+  //}
 
   ps_write_16 ( address, value );
 #ifdef STRAMCACHE
@@ -986,10 +1196,11 @@ void m68k_write_memory_32 ( uint32_t address, unsigned int value )
   if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
     address &= 0x00FFFFFF;
 
-  if ( address & 0xFF000000 )
-  {
-    return;
-  }
+  //if ( address & 0xFF000000 )
+  //{
+  //  printf ( "32wr why here? address = 0x%X\n", address );
+  //  return;
+  //}
 
   ps_write_32 ( address, value );
 #ifdef STRAMCACHE
