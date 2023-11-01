@@ -98,26 +98,14 @@ static void setup_io()
 
 #ifndef PI3 /* THIS IS FOR PI4 */
 
-  #define PLL_TO_USE PLLD
   #define MAX_PI_CLK 125
-
-  #if PLL_TO_USE == PLLC
-    #define PI_CLK_DIV (1500 / MAX_PI_CLK)
-    #define PLL_DIVISOR PI_CLK_DIV
-  #elif PLL_TO_USE == PLLD
-    #define PI_CLK_DIV (750 / MAX_PI_CLK)
-    //#define PLL_DIVISOR PI_CLK_DIV
-    #define PLL_DIVISOR 6
-  #endif
+  #define PLL_TO_USE PLLD
 
 #else /* THIS IS FOR PI3 */
 
   #define MAX_PI_CLK 200
   #define PLL_TO_USE PLLC
-  #define PLL_DIVISOR 8
 
-  //#define PLL_TO_USE PLLD
-  //#define PLL_DIVISOR 2
 #endif
 
 
@@ -145,10 +133,16 @@ static void setup_gpclk()
   sscanf ( (ptr + 1), "%d", &coref );
   coref /= 1000000;
 
+  int clk = PLL_TO_USE == PLLC ? cpuf : coref;
+  int div = clk / MAX_PI_CLK;
+
+  if ( div * MAX_PI_CLK != clk )
+    div += 1;
+
   printf ( "[INIT] CPU clock is %d MHz\n", cpuf );
   printf ( "[INIT] CORE clock is %d MHz\n", coref );
-  printf ( "[INIT] Using clock divisor %d with PLL%c\n", PLL_DIVISOR, PLL_TO_USE == PLLC ? 'C' : 'D' );
-  printf ( "[INIT] GPIO clock is %d MHz\n", PLL_TO_USE == PLLC ? cpuf / PLL_DIVISOR : coref / PLL_DIVISOR );
+  printf ( "[INIT] Using clock divisor %d with PLL%c\n", div, PLL_TO_USE == PLLC ? 'C' : 'D' );
+  printf ( "[INIT] GPIO clock is %d MHz\n", PLL_TO_USE == PLLC ? cpuf / div : coref / div );
 
   *(gpclk + (CLK_GP0_CTL / 4)) = CLK_PASSWD | (1 << 5);
   usleep (30);
@@ -156,7 +150,7 @@ static void setup_gpclk()
   while ( (*(gpclk + (CLK_GP0_CTL / 4))) & (1 << 7) );
   usleep (100);
 
-  *(gpclk + (CLK_GP0_DIV / 4)) = CLK_PASSWD | (PLL_DIVISOR << 12);  // bits 23:12 integer part of divisor
+  *(gpclk + (CLK_GP0_DIV / 4)) = CLK_PASSWD | (div << 12);  // bits 23:12 integer part of divisor
   usleep (30);
 
   *(gpclk + (CLK_GP0_CTL / 4)) = CLK_PASSWD | PLL_TO_USE | (1 << 4); // 6=plld, 5=pllc
