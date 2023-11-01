@@ -46,7 +46,8 @@ extern bool screenGrab;
 extern long RTG_fps;
 extern bool RTG_EMUTOS_VGA;
 //#endif
-extern int FPU68020_SELECTED;
+extern bool FPU68020_SELECTED;
+extern bool RTC_enabled;
 
 extern const char *op_type_names[OP_TYPE_NUM];
 //extern uint8_t cdtv_mode;
@@ -246,20 +247,23 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val)
     }
 
     if CHKVAR ( "rtg" ) 
-        RTG_enabled = 1;
+        RTG_enabled = true;
 
     if CHKVAR ( "screengrab" ) 
-        screenGrab = 1;
+        screenGrab = true;
 
     if CHKVAR ( "fps" )
         RTG_fps = strtol ( val, &endptr, 0 );
 
     /* cryptodad allow selection of fpu for 68020 CPU */
     if CHKVAR ( "68020fpu" )
-        FPU68020_SELECTED = 1;
+        FPU68020_SELECTED = true;
 
     if CHKVAR ( "emutos_vga" )
         RTG_EMUTOS_VGA = true;
+
+    if CHKVAR ( "rtc" )
+        RTC_enabled = true;
         
 #ifdef PISCSI
     // PiSCSI stuff

@@ -10,7 +10,7 @@
 uint8_t atari_rtc_emulation_enabled = 1;
 //extern uint8_t IDE_emulation_enabled;
 //extern uint8_t Blitter_enabled;
-extern uint8_t IDEenabled;
+extern bool IDE_enabled;
 //extern int IDEIF;
 
 extern volatile uint32_t RTG_ATARI_SCREEN_RAM;
@@ -38,7 +38,7 @@ int handle_register_read_atari ( uint32_t addr, unsigned char type, uint32_t *va
     static int res;
     //printf ("%s IDE read\n", __func__ );
         
-    if ( IDEenabled ) 
+    if ( IDE_enabled ) 
     {
         if ( addr >= IDEBASE && addr < IDETOP ) 
         {
@@ -116,7 +116,7 @@ int handle_register_write_atari ( uint32_t addr, unsigned int value, unsigned ch
     static int res;
     //printf ( "%s REGISTER write address 0x%X, value 0x%X\n", __func__, addr, value );
 
-    if ( IDEenabled ) 
+    if ( IDE_enabled ) 
     {
         if ( addr >= IDEBASE && addr < IDETOP ) 
         {
