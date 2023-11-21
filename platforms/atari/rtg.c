@@ -29,7 +29,7 @@
 
 
 #define MAX_WIDTH  1024
-#define MAX_HEIGHT 768
+#define MAX_HEIGHT 1024
 #define MAX_VRAM   (MAX_WIDTH * MAX_HEIGHT * 2)
 #define ATARI_VRAM_BASE   0x003f8000 /* 4MB machine - will get changed at detection */
 #define GETRES() (uint16_t)( ((xcb->crtc_index [0x35] & 0x02) >> 1 ) << 10 | ((xcb->crtc_index [7] & 0x20) >> 5) << 9 | (xcb->crtc_index [7] & 0x01) << 8 | xcb->crtc_index [6] )
@@ -534,7 +534,8 @@ void *rtgRender ( void* vptr )
                                 && xcb->ts_index [WRITE_PLANE_MASK] == 0x0F )
                         COLOURDEPTH = 2;
 
-                    else if ( xcb->ts_index [TS_AUX_MODE] == 0xB4 && xcb->ts_index [WRITE_PLANE_MASK] == 0x01 )
+                    else if ( xcb->ts_index [TS_AUX_MODE] == 0xB4 
+                                && xcb->ts_index [WRITE_PLANE_MASK] == 0x01 )
                         COLOURDEPTH = 1;
 
                 }
@@ -711,7 +712,10 @@ void *rtgRender ( void* vptr )
                 
 #if (1)
                     if ( fbp )
+                    {
                         munmap ( (void *)fbp, screensize );
+                        fbptr = (void *)NULL;
+                    }
 
                     /* Get fixed screen information */
                     if ( ioctl ( fbfd, FBIOGET_FSCREENINFO, &finfo ) ) 
@@ -729,6 +733,7 @@ void *rtgRender ( void* vptr )
                                 0 );
  
                     fbptr = (uint16_t *)fbp;    
+                    //printf ( "screensize %d fbptr %p\n", screensize, fbptr );
 
                     /* clear screen to WHITE */
                     memset ( RTGbuffer, 0x00, MAX_VRAM );
@@ -832,8 +837,11 @@ void *rtgRender ( void* vptr )
         /* only draw screen if VGA sub-system has been enabled */
         if ( !RTGresChanged && !unknown )
         {
+            //while ( RTG_LOCK );
             if ( !RTG_LOCK )
+            {
                 et4000Draw ( windowWidth, windowHeight );
+            }
         }
 
         RTG_VSYNC = 1;
@@ -931,7 +939,7 @@ void rtgInit ( void )
     */
     //RTG_ATARI_SCREEN_RAM = ATARI_VRAM_BASE;
     //RTG_RES = RESOLUTION1;
-    RTGresChanged = 1;
+    //RTGresChanged = 1;
 
    if ( RTG_fps )
    {
@@ -1070,7 +1078,6 @@ void et4000Draw ( int windowWidth, int windowHeight )
         uint16_t *dptr = fbptr;
         uint8_t  *sptr = RTGbuffer;
 
-
         for ( uint32_t address = 0, pixel = 0; pixel < SCREEN_SIZE; address++ ) 
         {
             for ( int ppb = 0; ppb < 8; ppb++ )
@@ -1089,7 +1096,6 @@ void et4000Draw ( int windowWidth, int windowHeight )
         uint8_t  r, g, b;
         int      x;
         int      y;
-
 
         for ( address = 0, pixel = 0; pixel < SCREEN_SIZE; pixel++, address++ ) 
         {
@@ -1192,6 +1198,7 @@ void et4000Draw ( int windowWidth, int windowHeight )
 uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
 {
     static uint32_t a;
+    static uint32_t offset;
 
 
     if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGTOP )
@@ -1295,16 +1302,17 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
 
     else
     {
+        offset = addr - NOVA_ET4000_VRAMBASE;
         //printf ( "et4000Read () -> type = %d, addr = 0x%X\n", type, addr );
 
         if ( type == OP_TYPE_BYTE )
-            *value = *( uint8_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) );
+            *value = *( uint8_t *)( RTGbuffer + offset );
 
         else if ( type == OP_TYPE_WORD )
-            *value = be16toh ( *( uint16_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
+            *value = be16toh ( *( uint16_t *)( RTGbuffer + offset ) );
 
         else if ( type == OP_TYPE_LONGWORD )
-            *value = be32toh ( *(uint32_t *)( RTGbuffer + (addr - NOVA_ET4000_VRAMBASE) ) );
+            *value = be32toh ( *(uint32_t *)( RTGbuffer + offset ) );
 
         return 1;
     }
@@ -1467,7 +1475,10 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
             case 0x3c9: /* PEL DATA - NOTE must have three consecutive writes to populate RGB */
                 //printf ( "palette index 0x%04X = 0x%X\n", xcb->palette_ix, value );
                 if ( xcb->paletteWrite == true )
-                    xcb->user_palette [xcb->palette_ix++] = value;
+                {
+                    xcb->user_palette [xcb->palette_ix] = value;
+                    xcb->palette_ix += 1;
+                }
 
                 break;
             case 0x3c0: /* ATC (Attribute Controller) register - Address/Index (23 registers) */
@@ -1552,30 +1563,25 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
     
     else
     {
-        //printf ( "et4000Read () -> type = %d, addr = 0x%X\n", type, addr );
+        //printf ( "et4000Write () -> type = %d, addr = 0x%X\n", type, addr );
 
         offset = addr - NOVA_ET4000_VRAMBASE;
 
         /* graphics mode enabled */
-        if ( xcb->gdc_index [6] & 0x01 )
+        //if ( xcb->gdc_index [6] & 0x01 )
         {
-            //printf ( "ET4000 VRAM write 0x%X, 0x%X\n", addr, value );
-
             if ( type == OP_TYPE_BYTE )
             {
-                //printf ( "%s BYTE\n", __func__ );
-                *( (uint8_t *)( RTGbuffer + offset ) ) = value & xcb->gdc_index [8];
+                *( (uint8_t *)( RTGbuffer + offset ) ) = value;// & xcb->gdc_index [8];
             }
 
             else if ( type == OP_TYPE_WORD )
             {
-                //printf ( "%s WORD\n", __func__ );
                 *( (uint16_t *)( RTGbuffer + offset) ) = htobe16 (value);
             }
 
             else if ( type == OP_TYPE_LONGWORD )
             {
-                //printf ( "%s LONG\n", __func__ );
                 *( (uint32_t *)( RTGbuffer + offset ) ) = htobe32 (value);
             }
         }

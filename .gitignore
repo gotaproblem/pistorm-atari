@@ -6,6 +6,7 @@
 *.dll
 *.exe
 *.stackdump
+*.vscode
 ._*
 !/platforms/atari/*.img.bak
 /m68kmake

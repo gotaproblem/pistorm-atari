@@ -82,7 +82,7 @@ void InitIDE (void)
 
       if (atarifd == -1) 
       {
-        printf ( "[IDE%d:] [HDD%d] HDD Image %s failed to open\n", port, i, atari_image_file[i] );
+        printf ( "[IDE%d] HDD%d Image %s failed to open\n", port, i, atari_image_file[i] );
       } 
       
       else 
@@ -103,7 +103,7 @@ void InitIDE (void)
           ide_attach_hdf ( atariIDE [port], i, atarifd );
           num_IDE_drives++;
           
-          printf ("[IDE%d:] [HDD%d] HDD Image %s attached\n", port, i, atari_image_file[i]);
+          printf ("[IDE%d] HDD%d Image %s attached\n", port, i, atari_image_file[i]);
         }
       }
     }

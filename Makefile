@@ -12,7 +12,8 @@ MAINFILES        = emulator.c \
 				platforms/atari/idedriver.c \
 				platforms/dummy/dummy-platform.c \
 				platforms/dummy/dummy-registers.c \
-				platforms/atari/rtg.c
+				platforms/atari/rtg.c \
+				platforms/atari/blitter.c
 #				platforms/atari/et4000.c
 
 
@@ -26,8 +27,6 @@ MUSASHIGENERATOR = m68kmake
 
 CC        = gcc
 
-#RAYLIB    = -I./raylib-test -L./raylib-test -lraylib -lGLESv2 -lEGL -ldrm -lgbm -lm
-
 PIOPTS	  = -march=armv8-a -mfloat-abi=hard -mfpu=neon-fp-armv8
 
 ifeq ($(PIMODEL),PI3)
@@ -36,11 +35,11 @@ else
 	PI = -DPI4
 endif
 
-ifeq ($(CACHE),ON)
-	STRAMCACHE = -DSTRAMCACHE=1
-else
-	STRAMCACHE =
-endif
+#ifeq ($(CACHE),ON)
+#	STRAMCACHE = -DSTRAMCACHE=1
+#else
+#	STRAMCACHE =
+#endif
 
 #ifeq ($(USERAYLIB),YES)
 #	CFLAGS = -I. $(PI4OPTS) -O3 $(RAYLIB) -DRTG -DRAYLIB #-DT_CACHE_ON -DCACHE_ON
@@ -48,7 +47,7 @@ endif
 #	CFLAGS = -I. $(PI4OPTS) -O3 #-DT_CACHE_ON -DCACHE_ON
 #endif
 
-CFLAGS    = -I. $(PIOPTS) -O3 $(PI) $(STRAMCACHE)
+CFLAGS    = -I. $(PIOPTS) -O3 $(PI) #$(STRAMCACHE)
 TARGET    = $(EXENAME)
 
 DELETEFILES = $(MUSASHIGENCFILES) $(.OFILES) $(.OFILES:%.o=%.d) $(TARGET) $(MUSASHIGENERATOR) ataritest

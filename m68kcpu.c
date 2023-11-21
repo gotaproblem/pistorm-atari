@@ -578,6 +578,7 @@ static int default_tas_instr_callback(void)
 static int default_illg_instr_callback(int opcode)
 {
 	(void)opcode;
+	printf ( "Illegal Instruction - opcode 0x%X\n", opcode );
 	return 0; // not handled : exception will occur
 }
 

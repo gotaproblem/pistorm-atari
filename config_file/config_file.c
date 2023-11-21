@@ -88,7 +88,7 @@ char *uppercase ( char *str )
 unsigned int get_m68k_cpu_type(char *name) {
   for (int i = 0; i < M68K_CPU_TYPES; i++) {
     if (strcmp(name, cpu_types[i]) == 0) {
-      DEBUG_PRINTF ("[CFG] Set CPU type to %s.\n", cpu_types[i]);
+      DEBUG_PRINTF ("[CFG] Set CPU type to %s\n", cpu_types[i]);
       return i + 1;
     }
   }
@@ -550,7 +550,7 @@ struct emulator_config *load_config_file(char *filename) {
       }
       case CONFITEM_LOOPCYCLES:
         cfg->loop_cycles = get_int(parse_line + str_pos);
-        DEBUG_PRINTF ("[CFG] Set CPU loop cycles to %d.\n", cfg->loop_cycles);
+        DEBUG_PRINTF ("[CFG] Set CPU loop cycles to %d\n", cfg->loop_cycles);
         break;
       case CONFITEM_MOUSE:
         get_next_string(parse_line, cur_cmd, &str_pos, ' ');

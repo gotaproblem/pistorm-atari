@@ -48,6 +48,7 @@ extern bool RTG_EMUTOS_VGA;
 //#endif
 extern bool FPU68020_SELECTED;
 extern bool RTC_enabled;
+extern bool WTC_enabled;
 
 extern const char *op_type_names[OP_TYPE_NUM];
 //extern uint8_t cdtv_mode;
@@ -62,6 +63,7 @@ extern uint8_t rtc_type;
 //extern int spoof_df0_id;
 //extern int move_slow_to_chip;
 //extern int force_move_slow_to_chip;
+
 
 #define min(a, b) (a < b) ? a : b
 #define max(a, b) (a > b) ? a : b
@@ -264,6 +266,9 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val)
 
     if CHKVAR ( "rtc" )
         RTC_enabled = true;
+
+    if CHKVAR ( "wtc" )
+        WTC_enabled = true;
         
 #ifdef PISCSI
     // PiSCSI stuff
