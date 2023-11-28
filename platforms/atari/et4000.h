@@ -91,6 +91,7 @@ typedef struct
     bool    atc_paletteRAMaccess;
     uint8_t gdc_ix;
     uint8_t gdc_index [11];
+	uint8_t gdc_segment_select;
     bool    KEY;
 	bool    KEYenable;
     uint8_t ISr0;

@@ -61,7 +61,7 @@ volatile uint32_t last_last_irq = 8;
 volatile uint32_t RTG_VRAM_BASE = 0xffffffff;
 volatile uint32_t RTG_VRAM_SIZE;
 //volatile bool RTG_RAMLOCK;
-volatile bool RAMLOCK;
+//volatile bool RAMLOCK;
 volatile int cpu_emulation_running = 0;
 volatile int passthrough = 0;
 volatile uint32_t do_reset=0;
@@ -97,7 +97,8 @@ extern volatile unsigned int *gpio;
 extern const char *cpu_types[];
 //extern bool VSYNC;
 extern bool RTG_EMUTOS_VGA;
-extern bool RTG_LOCK;
+extern volatile bool RTG_LOCK;
+extern volatile bool PS_LOCK;
 
 
 
@@ -793,38 +794,34 @@ int main ( int argc, char *argv[] )
   fc = 6;
   ATARI_MEMORY_SIZE = 0;
 
-  ps_read_16 ( 0x00080000 );
+  for ( int m = 0, s = 0x00080000; m < 4; m++, s <<= 1 )
+  {
+    ps_read_16 ( s );
 
-  if ( g_buserr )
-    ATARI_MEMORY_SIZE = 512 * 1024;
+    if ( g_buserr )
+    {
+      ATARI_MEMORY_SIZE = s;
+      g_buserr = 0;
+
+      break;
+    }
+  }
+  
+  if ( ATARI_MEMORY_SIZE )
+    printf ( "found %d KB of RAM installed\n", ATARI_MEMORY_SIZE / 1024 );
 
   else
   {
-    ps_read_16 ( 0x00100000 );
+    printf ( "None found - Cannot proceed\n" );
+    printf ("[MAIN] Emulation Ended\n");
 
-    if ( g_buserr )
-      ATARI_MEMORY_SIZE = 1024 * 1024;
+    /* reset stdio tty properties */
+    oldt.c_lflag |= ECHO;
+    tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
+    fcntl ( STDIN_FILENO, F_SETFL, oldf );
 
-    else
-    {
-      ps_read_16 ( 0x00200000 );
-
-      if ( g_buserr )
-        ATARI_MEMORY_SIZE = 2048 * 1024;
-
-      else
-      {
-        ps_read_16 ( 0x00400000 );
-
-        if ( g_buserr )
-          ATARI_MEMORY_SIZE = 4096 * 1024;
-      }
-    }
+    return 0;
   }
-
-  g_buserr = 0;
-  
-  printf ( "found %d KB of RAM installed\n", ATARI_MEMORY_SIZE / 1024 );
 
   if ( WTC_enabled )
   {
@@ -965,7 +962,7 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
 
 /* Faux Blitter */
 #if (0)
-  if ( (addr >= 0x00FF8A00 && addr < 0x00FF8A3E) )// || (addr >= 0xFFFF8A00 && addr < 0xFFFF8A3E) )
+  if ( (addr >= 0x00FF8A00 && addr < 0x00FF8A3E) || (addr >= 0xFFFF8A00 && addr < 0xFFFF8A3E) )
   {
     addr &= 0x00FFFFFF;
 
@@ -990,11 +987,11 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
   if ( ET4000Initialised && (addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP) )
   //if ( ET4000Initialised && (addr >= 0x00A00000 && addr < 0x00DFFFFF) )
   {
-    RTG_LOCK = true;
+   // RTG_LOCK = true;
    
     r = et4000Read ( addr, res, type );
     
-    RTG_LOCK = false;
+    //RTG_LOCK = false;
 
     return r;
   }
@@ -1058,6 +1055,7 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
 unsigned int m68k_read_memory_8 ( uint32_t address ) 
 {
   static uint32_t value;
+  static uint32_t r;
 
   if ( platform_read_check ( OP_TYPE_BYTE, address, &platform_res ) ) 
   {
@@ -1080,13 +1078,18 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
       return value;
   }
 
-  return ps_read_8 ( address );  
+  //while ( RTG_LOCK );
+  //PS_LOCK = true;
+  r = ps_read_8 ( address );  
+  //PS_LOCK = false;
+  return r;
 }
 
 
 unsigned int m68k_read_memory_16 ( uint32_t address ) 
 {
   static uint32_t value;
+  static uint32_t r;
 
   if ( platform_read_check ( OP_TYPE_WORD, address, &platform_res ) ) 
   {
@@ -1108,13 +1111,18 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
       return value;
   }
 
-  return ps_read_16 ( address );
+  //while ( RTG_LOCK );
+  //PS_LOCK = true;
+  r = ps_read_16 ( address );
+  //PS_LOCK = false;
+  return r;
 }
 
 
 unsigned int m68k_read_memory_32 ( uint32_t address ) 
 {
   static uint32_t value;
+  static uint32_t r;
 
   if (platform_read_check ( OP_TYPE_LONGWORD, address, &platform_res ) ) 
   {
@@ -1136,7 +1144,12 @@ unsigned int m68k_read_memory_32 ( uint32_t address )
       return value;
   }
 
-  return ps_read_32 ( address );
+  //while ( RTG_LOCK );
+  
+  //PS_LOCK = true;
+  r = ps_read_32 ( address );
+  //PS_LOCK = false;
+  return r;
 }
 
 
@@ -1171,9 +1184,9 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
 
 /* Faux Blitter */
 #if (0)
-  if ( (addr >= 0x00FF8A00 && addr < 0x00FF8A3E) )// || (addr >= 0xFFFF8A00 && addr < 0xFFFF8A3E) )
+  if ( (addr >= 0x00FF8A00 && addr < 0x00FF8A3E) || (addr >= 0xFFFF8A00 && addr < 0xFFFF8A3E) )
   {
-    printf ( "blitter write 0x%X, data = 0x%X\n", addr, val );
+    //printf ( "blitter write 0x%X, data = 0x%X\n", addr, val );
 
     addr &= 0x00FFFFFF;
 
@@ -1196,11 +1209,11 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   if ( ET4000Initialised && addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP )
   //if ( ET4000Initialised && (addr >= 0x00A00000 && addr < 0x00DFFFFF) )
   {
-    RTG_LOCK = true;
+    //RTG_LOCK = true;
 
     et4000Write ( addr, val, type );
 
-    RTG_LOCK = false;
+    //RTG_LOCK = false;
 
     return 1;
   }
@@ -1309,7 +1322,10 @@ void m68k_write_memory_8 ( uint32_t address, unsigned int value )
     return;
   }
 
+  //while ( RTG_LOCK );
+  //PS_LOCK = true;
   ps_write_8 ( address, value );
+  //PS_LOCK = false;
 
   if ( WTC_initialised )
     do_cache ( address, 1, &value, 0 );
@@ -1332,7 +1348,10 @@ void m68k_write_memory_16 ( uint32_t address, unsigned int value )
   //  return;
   //}
 
+  //while ( RTG_LOCK );
+  //PS_LOCK = true;
   ps_write_16 ( address, value );
+  //PS_LOCK = false;
 
   if ( WTC_initialised )
     do_cache ( address, 2, &value, 0 );
@@ -1355,7 +1374,10 @@ void m68k_write_memory_32 ( uint32_t address, unsigned int value )
   //  return;
   //}
 
+  //while ( RTG_LOCK );
+  //PS_LOCK = true;
   ps_write_32 ( address, value );
+  //PS_LOCK = false;
 
   if ( WTC_initialised )
     do_cache ( address, 4, &value, 0 );

@@ -572,7 +572,7 @@ static void Blitter_Start(void)
 {
     static uint8_t interrupt;
 
-    Blitter_Info ();
+    //Blitter_Info ();
 
 //fprintf ( stderr , "blitter start %d video_cyc=%d %d@%d\n" , nCyclesMainCounter , FrameCycles , LineCycles, HblCounterVideo );
 //printf (  "blitter start addr=%x dst=%x xcount=%d ycount=%d fxsr=%d nfsr=%d skew=%d src_x_incr=%d src_y_incr=%d\n" , BlitterRegs.src_addr ,BlitterRegs.dst_addr, BlitterRegs.x_count , BlitterRegs.y_count , BlitterVars.fxsr , BlitterVars.nfsr , BlitterVars.skew , BlitterRegs.src_x_incr , BlitterRegs.src_y_incr );
@@ -583,15 +583,15 @@ static void Blitter_Start(void)
 
 	/* Busy=1, set line to high/1 and clear interrupt */
 	//MFP_GPIP_Set_Line_Input ( pMFP_Main , MFP_GPIP_LINE_GPU_DONE , MFP_GPIP_STATE_HIGH );
-    interrupt = ps_read_8 ( 0xFFFA01 );
-    ps_write_8 ( 0xFFFA01, interrupt |= 0x08 );
+    //interrupt = ps_read_8 ( 0xFFFA01 );
+    //ps_write_8 ( 0xFFFA01, interrupt |= 0x08 );
 
 	/* Now we enter the main blitting loop */
 	do
 	{
 		Blitter_Step();
 	}
-	while ( BlitterRegs.y_count > 0 && BlitterVars.hog );
+	while ( BlitterRegs.y_count > 0 ); //&& BlitterVars.hog );
 
 
 	BlitterRegs.ctrl = (BlitterRegs.ctrl & 0xF0) | BlitterVars.halftone_line;
@@ -604,10 +604,10 @@ static void Blitter_Start(void)
 
 		/* Busy=0, set line to low/0 and request interrupt */
 		//MFP_GPIP_Set_Line_Input ( pMFP_Main , MFP_GPIP_LINE_GPU_DONE , MFP_GPIP_STATE_LOW );
-        interrupt = ps_read_8 ( 0x00FFFA01 );
+        //interrupt = ps_read_8 ( 0x00FFFA01 );
       
-        if ( interrupt & 0x08 )
-            ps_write_8 ( 0x00FFFA01, interrupt &= 0xF7 );
+        //if ( interrupt & 0x08 )
+        //    ps_write_8 ( 0x00FFFA01, interrupt &= 0xF7 );
 	}
 }
 
@@ -1430,8 +1430,8 @@ int blitWrite ( uint8_t type, uint32_t addr, uint32_t value )
                 }
                 
                 /* still Busy so continue with Blit */
-                else 
-                    Blitter_Start ();
+                //else 
+                //    Blitter_Start ();
             }
 
             break;
