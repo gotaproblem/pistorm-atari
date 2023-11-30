@@ -20,7 +20,7 @@
 #include <fcntl.h>
 
 /* test defines */
-#define MYWTC 1
+#define MYWTC 0
 
 
 #define DEBUGPRINT 1
