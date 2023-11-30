@@ -223,23 +223,17 @@ void ps_write_16 ( uint32_t address, uint16_t data )
   gpio [2] = GPFSEL2_OUTPUT;
 
   gpio [7] = ( data << 8 ) | 0x80;//CMD_REG_DATA | (1 << PIN_WR);
-#ifdef PI4
   gpio [7] = 0x80;
-#endif
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
   gpio [7] = ( (address & 0xffff) << 8 ) | 0x84;//CMD_ADDR_LO | (1 << PIN_WR);
-#ifdef PI4
   gpio [7] = 0x80;
-#endif
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
   gpio [7] = ( ( (fc << 13) | (address >> 16) ) << 8 ) | 0x88;//CMD_ADDR_HI | (1 << PIN_WR);
-#ifdef PI4
   gpio [7] = 0x80;
-#endif
   gpio [10] = 0x80;
   gpio [10] = TXN_END; 
   
@@ -277,23 +271,17 @@ void ps_write_8 ( uint32_t address, uint16_t data )
   gpio [2] = GPFSEL2_OUTPUT;
 
   gpio [7] = data << 8 | 0x80;//CMD_REG_DATA | (1 << PIN_WR);
-#ifdef PI4
   gpio [7] = 0x80;
-#endif
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
   gpio [7] = ((address & 0xffff) << 8) | 0x84;//CMD_ADDR_LO | (1 << PIN_WR);
-#ifdef PI4
   gpio [7] = 0x80;
-#endif
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
   gpio [7] = (( (fc<<13) | 0x0100 | (address >> 16) ) << 8) | 0x88;//CMD_ADDR_HI | (1 << PIN_WR);
-#ifdef PI4
   gpio [7] = 0x80;
-#endif
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
@@ -336,16 +324,12 @@ uint16_t ps_read_16 ( uint32_t address )
   gpio [2] = GPFSEL2_OUTPUT;
 
   gpio [7] = ( (address & 0xffff) << 8 ) | 0x84;//CMD_ADDR_LO | (1 << PIN_WR);
-#ifdef PI4
   gpio [7] = 0x80;
-#endif
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
   gpio [7] = ( ( (fc << 13) | 0x0200 | (address >> 16)  ) << 8 ) | 0x88;//CMD_ADDR_HI | (1 << PIN_WR);
-#ifdef PI4
   gpio [7] = 0x80;
-#endif
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
@@ -390,16 +374,12 @@ uint8_t ps_read_8 ( uint32_t address )
   gpio [2] = GPFSEL2_OUTPUT;
 
   gpio [7] = ((address & 0xffff) << 8) | 0x84;//CMD_ADDR_LO | (1 << PIN_WR);
-#ifdef PI4
   gpio [7] = 0x80;
-#endif
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
   gpio [7] = (( (fc << 13) | 0x0300 | (address >> 16) ) << 8) | 0x88;//CMD_ADDR_HI | (1 << PIN_WR);
-#ifdef PI4
   gpio [7] = 0x80;
-#endif
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 

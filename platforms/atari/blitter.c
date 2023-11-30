@@ -38,8 +38,9 @@
 
 
 extern void *RTGbuffer;
-extern uint16_t cache[4096*1024];
+//extern uint16_t cache[4096*1024];
 extern bool WTC_initialised;
+extern uint32_t ATARI_MEMORY_SIZE;
 
 
 
@@ -126,10 +127,12 @@ static uint16_t Blitter_ReadWord(uint32_t addr)
 
     else
     {
-        if ( WTC_initialised && addr < 0x400000 )//x3F8000 )
+#if (0)
+        if ( WTC_initialised && addr < ATARI_MEMORY_SIZE )//x3F8000 )
             value = ((cache [addr] & 0xFF) << 8) | (cache [addr + 1] & 0xFF);
 
         else
+#endif
         {
 	        value = ps_read_16 ( addr ); //STMemory_DMA_ReadWord ( addr );
             //value = be16toh ( ps_read_16 ( addr ) );//STMemory_DMA_ReadWord ( addr );
@@ -155,13 +158,15 @@ static void Blitter_WriteWord(uint32_t addr, uint16_t value)
 
     else
     {
-        if ( WTC_initialised && addr < 0x3F8000 )
+#if (0)
+        if ( WTC_initialised && addr < ATARI_MEMORY_SIZE )
         {
             cache [addr] = value >> 8;
             cache [ addr + 1] = value & 0xFF;
         }
 
         else
+#endif
         {
 	        ps_write_16 ( addr, value ); //STMemory_DMA_WriteWord ( addr ,  value );
             //ps_write_16 ( addr, be16toh ( value ) ); //STMemory_DMA_WriteWord ( addr ,  value );

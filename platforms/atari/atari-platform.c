@@ -49,6 +49,7 @@ extern bool RTG_EMUTOS_VGA;
 extern bool FPU68020_SELECTED;
 extern bool RTC_enabled;
 extern bool WTC_enabled;
+extern bool Blitter_enabled;
 
 extern const char *op_type_names[OP_TYPE_NUM];
 //extern uint8_t cdtv_mode;
@@ -269,6 +270,9 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val)
 
     if CHKVAR ( "wtc" )
         WTC_enabled = true;
+
+    if CHKVAR ( "blitter" )
+        Blitter_enabled = true;
         
 #ifdef PISCSI
     // PiSCSI stuff

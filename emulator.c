@@ -20,7 +20,8 @@
 #include <fcntl.h>
 
 /* test defines */
-#define MYWTC 0
+#define MYWTC 1
+
 
 #define DEBUGPRINT 1
 #if DEBUGPRINT
@@ -80,7 +81,7 @@ struct emulator_config *cfg = NULL;
 bool RTC_enabled;
 bool WTC_enabled;
 bool WTC_initialised;
-static uint32_t ATARI_MEMORY_SIZE;
+uint32_t ATARI_MEMORY_SIZE;
 
 extern volatile bool ET4000enabled;
 extern bool IDE_enabled;
@@ -91,6 +92,7 @@ extern volatile uint32_t g_buserr;
 //extern volatile uint32_t RTG_ATARI_SCREEN_RAM;
 //extern volatile uint32_t RTG_VSYNC;
 //extern void *RTGbuffer;
+bool Blitter_enabled;
 extern bool RTG_enabled;
 extern bool ET4000Initialised;
 extern volatile unsigned int *gpio;
@@ -120,14 +122,12 @@ void cpu3 ( void )
 }
 
 #if !MYWTC
-//#define CACHETYPE uint16_t
 #define CACHESIZE 4096*1024
 #define CACHESIZEBYTES CACHESIZE * sizeof(uint16_t)
 
 uint16_t cache[CACHESIZE]; // top byte used as valid flag
 static short flushstate = 0; // 0 active, 1 flush request
 pthread_mutex_t cachemutex;
-//short flushstatereq;
 
 int do_cache( uint32_t address, int size, unsigned int *value, int isread ) {
 	// size is 1,2,4
@@ -168,7 +168,7 @@ int do_cache( uint32_t address, int size, unsigned int *value, int isread ) {
   }
 */
   //if( !(address >= 0x000800 && address < 0x400000 ) ) // STRAM only without low RAM (have to perform this check late as sniffing registers above)
-  if( !(address >= 0x0005B0 && address < 0x3F8000 ) ) 
+  if( !(address >= 0x0005B0 && (address < (ATARI_MEMORY_SIZE - 0x8000)) ) ) 
     return 0;
 
 	if( isread ) {
@@ -302,7 +302,7 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
   }    
 
   // STRAM only without low RAM (have to perform this check late as sniffing registers above)
-  if ( ! ( address >= 0x0005B0 && address < ATARI_MEMORY_SIZE ) )
+  if ( ! ( address >= 0x0005B0 && address < ATARI_MEMORY_SIZE  ) )
   //if ( address >= ATARI_MEMORY_SIZE )
     return 0;
 
@@ -643,6 +643,7 @@ int main ( int argc, char *argv[] )
   RTC_enabled = false;
   WTC_enabled = false;
   WTC_initialised = false;
+  Blitter_enabled = false;
 
   /* save stdio tty properties and ammend for emulator use */
   /* tty properties are restored in sigint_handler () */
@@ -961,8 +962,8 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
   static int r;
 
 /* Faux Blitter */
-#if (0)
-  if ( (addr >= 0x00FF8A00 && addr < 0x00FF8A3E) || (addr >= 0xFFFF8A00 && addr < 0xFFFF8A3E) )
+#if (1)
+  if ( Blitter_enabled && (addr >= 0x00FF8A00 && addr < 0x00FF8A3E) || (addr >= 0xFFFF8A00 && addr < 0xFFFF8A3E) )
   {
     addr &= 0x00FFFFFF;
 
@@ -1183,8 +1184,8 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   static int r;
 
 /* Faux Blitter */
-#if (0)
-  if ( (addr >= 0x00FF8A00 && addr < 0x00FF8A3E) || (addr >= 0xFFFF8A00 && addr < 0xFFFF8A3E) )
+#if (1)
+  if ( Blitter_enabled && (addr >= 0x00FF8A00 && addr < 0x00FF8A3E) || (addr >= 0xFFFF8A00 && addr < 0xFFFF8A3E) )
   {
     //printf ( "blitter write 0x%X, data = 0x%X\n", addr, val );
 
