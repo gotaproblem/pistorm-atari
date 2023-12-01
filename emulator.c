@@ -480,7 +480,8 @@ execute:
     else
       USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
 
-    if ( GET_CYCLES () > 0 ) // cryptodad make sure m68kcpu.h m68ki_set_sr() has relevent line commented out
+    // cryptodad make sure m68kcpu.h m68ki_set_sr() has relevent line commented out
+    if ( GET_CYCLES () > 0 && ( ( cpu_type == M68K_CPU_TYPE_68000 && !g_irq ) || cpu_type != M68K_CPU_TYPE_68000 )  )
       goto execute;
 
     REG_PPC = REG_PC;
@@ -552,8 +553,8 @@ void *cpu_task()
 
 run:
 
-  //m68k_execute_bef ( state, loop_cycles );
-#if (1)
+  m68k_execute_bef ( state, loop_cycles );
+#if (0)
   status = ps_read_status_reg ();
   
   if ( status == 0xFFFF )
@@ -612,7 +613,7 @@ run:
   m68ki_check_interrupts ( state );
 #endif  
 
-  m68k_execute_bef ( state, loop_cycles );
+  //m68k_execute_bef ( state, loop_cycles );
   
   if ( !cpu_emulation_running )
   {
@@ -624,6 +625,13 @@ run:
   goto run; /* cryptodad - goto is faster than using a while () */
 }
 
+
+
+#define ATARI_MMU_128K  0b00000000 // bank 0
+#define ATARI_MMU_512K  0b00000100 // bank 0
+#define ATARI_MMU_1M    0b00000101 // bank 0
+#define ATARI_MMU_2M    0b00001000 // bank 0
+#define ATARI_MMU_4M    0b00001010 // bank 0
 
 extern void rtgInit ( void );
 extern void *rtgRender ( void* );
@@ -795,14 +803,19 @@ int main ( int argc, char *argv[] )
   fc = 6;
   ATARI_MEMORY_SIZE = 0;
 
-  for ( int m = 0, s = 0x00080000; m < 4; m++, s <<= 1 )
-  {
-    ps_write_16 ( s, 0x1234 );
+  ps_write_8 ( ((uint32_t)0x00ff8001), ATARI_MMU_4M ); 
 
-    if ( g_buserr )
+  for ( int m = 0, s = 0x00080000; m < 4; m++, s <<= 1 )
+  {     
+    usleep ( 1 );
+
+    ps_write_8 ( s + 1, 0x12 );
+
+    usleep ( 1 );
+
+    if ( g_buserr || ps_read_8 ( s + 1 ) != 0x12 )
     {
       ATARI_MEMORY_SIZE = s;
-      g_buserr = 0;
 
       break;
     }
