@@ -797,7 +797,7 @@ int main ( int argc, char *argv[] )
 
   for ( int m = 0, s = 0x00080000; m < 4; m++, s <<= 1 )
   {
-    ps_read_16 ( s );
+    ps_write_16 ( s, 0x1234 );
 
     if ( g_buserr )
     {
