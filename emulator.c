@@ -168,7 +168,8 @@ int do_cache( uint32_t address, int size, unsigned int *value, int isread ) {
   }
 */
   //if( !(address >= 0x000800 && address < 0x400000 ) ) // STRAM only without low RAM (have to perform this check late as sniffing registers above)
-  if( !(address >= 0x0005B0 && (address < (ATARI_MEMORY_SIZE - 0x8000)) ) ) 
+  //if( !(address >= 0x0005B0 && (address < (ATARI_MEMORY_SIZE - 0x8000)) ) ) 
+  if( !(address >= 0x0005B0 && (address < ATARI_MEMORY_SIZE) ) ) 
     return 0;
 
 	if( isread ) {
@@ -481,7 +482,7 @@ execute:
       USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
 
     // cryptodad make sure m68kcpu.h m68ki_set_sr() has relevent line commented out
-    if ( GET_CYCLES () > 0 && ( ( cpu_type == M68K_CPU_TYPE_68000 && !g_irq ) || cpu_type != M68K_CPU_TYPE_68000 )  )
+    if ( GET_CYCLES () > 0 ) //&& ( ( cpu_type == M68K_CPU_TYPE_68000 && !g_irq ) || cpu_type != M68K_CPU_TYPE_68000 )  )
       goto execute;
 
     REG_PPC = REG_PC;
@@ -552,32 +553,31 @@ void *cpu_task()
     ;
 
 run:
-
   m68k_execute_bef ( state, loop_cycles );
+
 #if (0)
   status = ps_read_status_reg ();
   
   if ( status == 0xFFFF )
     printf ( "bad status\n" );
 
-  g_last_irq = status >> 13;
+  last_irq = status >> 13;
 
-  if ( status & 0x2 ) 
+  if ( last_irq && last_irq != last_last_irq ) 
   {
-    M68K_END_TIMESLICE;
-
-    DEBUG_PRINTF ( "[CPU] Emulation reset\n");
-
-    usleep ( 1000000 ); 
-
-    m68k_pulse_reset ( state );
+    last_last_irq = last_irq;
+    m68k_set_irq ( last_irq );
+    //m68ki_check_interrupts ( state );
   }
 
-  //else
-  //{
-    m68k_set_irq ( g_last_irq ); /* cryptodad NOTE this has to be called before m68ki_exception_interrupt () */
-    m68ki_check_interrupts ( state );
-  //}
+  else if ( !last_irq && last_last_irq != 0 ) 
+  {
+    last_last_irq = 0;
+    m68k_set_irq ( 0 );
+  } 
+
+  //m68k_set_irq ( g_last_irq ); /* cryptodad NOTE this has to be called before m68ki_exception_interrupt () */
+  m68ki_check_interrupts ( state );
 
 #else
   if ( g_irq )
@@ -614,7 +614,18 @@ run:
 #endif  
 
   //m68k_execute_bef ( state, loop_cycles );
-  
+  /*
+  if ( status & 0x2 ) 
+  {
+    M68K_END_TIMESLICE;
+
+    DEBUG_PRINTF ( "[CPU] Emulation reset\n");
+
+    usleep ( 1000000 ); 
+
+    m68k_pulse_reset ( state );
+  }
+  */
   if ( !cpu_emulation_running )
   {
     printf ("[CPU] End of CPU thread\n");
@@ -622,16 +633,16 @@ run:
     return (void *)NULL;
   }
 
-  goto run; /* cryptodad - goto is faster than using a while () */
+  goto run; /* cryptodad - goto is faster than using while () */
 }
 
 
 
-#define ATARI_MMU_128K  0b00000000 // bank 0
-#define ATARI_MMU_512K  0b00000100 // bank 0
-#define ATARI_MMU_1M    0b00000101 // bank 0
-#define ATARI_MMU_2M    0b00001000 // bank 0
-#define ATARI_MMU_4M    0b00001010 // bank 0
+#define ATARI_MMU_128K  0b00000000 // 0x00 bank 0
+#define ATARI_MMU_512K  0b00000100 // 0x04 bank 0
+#define ATARI_MMU_1M    0b00000101 // 0x05 bank 0 & 1
+#define ATARI_MMU_2M    0b00001000 // 0x08 bank 0 & 1
+#define ATARI_MMU_4M    0b00001010 // 0x0A bank 0 & 1
 
 extern void rtgInit ( void );
 extern void *rtgRender ( void* );

@@ -217,6 +217,7 @@ void ps_write_16 ( uint32_t address, uint16_t data )
   static uint32_t l;
 
   while ( PS_LOCK );
+  while ( gpio [13] & 1 );
 
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
@@ -244,7 +245,7 @@ void ps_write_16 ( uint32_t address, uint16_t data )
 	while ( ( l = gpio [13] ) & 1 ) // wait for firmware to signal transaction completed
     ;
 
-  //g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -259,6 +260,7 @@ void ps_write_8 ( uint32_t address, uint16_t data )
   static uint32_t l;
 
   while ( PS_LOCK );
+  while ( gpio [13] & 1 );
 
   if ((address & 1) == 0)
     data <<= 8;
@@ -292,7 +294,7 @@ void ps_write_8 ( uint32_t address, uint16_t data )
 	while ( ( l = gpio [13] ) & 1 )
     ;
 
-  //g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
   
 #ifdef STATS
@@ -318,6 +320,7 @@ uint16_t ps_read_16 ( uint32_t address )
 #endif
 
   while ( PS_LOCK );
+  while ( gpio [13] & 1 );
 
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
@@ -348,7 +351,7 @@ uint16_t ps_read_16 ( uint32_t address )
 
  	gpio [10] = TXN_END;
   
-  //g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -368,6 +371,7 @@ uint8_t ps_read_8 ( uint32_t address )
 #endif
   
   while ( PS_LOCK );
+  while ( gpio [13] & 1 );
 
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
@@ -398,7 +402,7 @@ uint8_t ps_read_8 ( uint32_t address )
 
   gpio [10] = TXN_END;
   
-  //g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -447,9 +451,7 @@ uint16_t ps_read_status_reg ()
   static uint32_t value;
 
   while ( PS_LOCK );
-
-  while ( gpio [13] & 1 )
-    ;
+  while ( gpio [13] & 1 );
 
   gpio [7] = 0x4C; //(REG_STATUS << PIN_A0) | (1 << PIN_RD);
 
