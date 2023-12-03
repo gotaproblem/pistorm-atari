@@ -217,7 +217,7 @@ void ps_write_16 ( uint32_t address, uint16_t data )
   static uint32_t l;
 
   while ( PS_LOCK );
-  while ( gpio [13] & 1 );
+  //while ( gpio [13] & 1 );
 
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
@@ -260,7 +260,7 @@ void ps_write_8 ( uint32_t address, uint16_t data )
   static uint32_t l;
 
   while ( PS_LOCK );
-  while ( gpio [13] & 1 );
+  //while ( gpio [13] & 1 );
 
   if ((address & 1) == 0)
     data <<= 8;
@@ -320,7 +320,7 @@ uint16_t ps_read_16 ( uint32_t address )
 #endif
 
   while ( PS_LOCK );
-  while ( gpio [13] & 1 );
+  //while ( gpio [13] & 1 );
 
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
@@ -371,7 +371,7 @@ uint8_t ps_read_8 ( uint32_t address )
 #endif
   
   while ( PS_LOCK );
-  while ( gpio [13] & 1 );
+  //while ( gpio [13] & 1 );
 
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
