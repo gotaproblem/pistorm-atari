@@ -46,6 +46,9 @@ An additional three virtual IDE interfaces are now included, allowing for a tota
 The following steps require basic knowledge of the linux operating system. Take your time!
 
 * Download Raspberry Pi OS from https://www.raspberrypi.org/software/operating-systems/, you need the 32 bit Lite version.
+**NOTE**
+* Atari PiStorm installation has been tested with Bullseye and Bookworm
+
 * Write the Image to an SD card. For development, a 32 GB SD card is recommended.
 * Connect an HDMI Display and a USB keyboard to the Raspberry Pi.
 * Insert the SD card into the Raspberry Pi4, and connect it to power. You should see a Rainbow colored screen on the HDMI Monitor followed by the booting sequence.
@@ -73,16 +76,21 @@ If using a Pi3, make must be given an option
 If using a Pi4, no option is needed
 * `make`
 
-**STRAM CACHE**
-The experimental full memory cache-enabled version may be built with
-* `make CACHE=ON`
-or
-* `make POMODEL=PI3 CACHE=ON`
+~~**STRAM CACHE**~~
+~~The experimental full memory cache-enabled version may be built with~~
+~~* `make CACHE=ON`~~
+~~or~~
+~~* `make POMODEL=PI3 CACHE=ON`~~
 
-This feature greatly improves STRAM read operations (and hence is mostly applicable to games), but is not yet compatible with operation of the Blitter, so please disable this at the Desktop.
+~~This feature greatly improves STRAM read operations (and hence is mostly applicable to games), but is not yet compatible with operation of the Blitter, so please disable this at the Desktop.~~
 
-Copy the boot configuration file:
+Copy the linux boot configuration file:
 * `sudo cp configs/config.txt /boot/`
+
+Append the following to your /boot/cmdline.txt file
+* `quiet vt.global_cursor_default=0 fsck.mode=force fsck.repair=yes`
+**NOTE**
+Do not add new-lines to this file. The entries must be one continuous line
 
 Congratulate yourself - You've gotten this far! Shutdown the linux operating system
 * `sudo halt`
@@ -96,8 +104,10 @@ This is okay for the final-cut, but for development, option 2 is suggested
 * 2 - power via USB
 If you are developing, which requires numerous power cycles, then this is the option for you. You will need to make sure USB power (5v) does not reach the PiStorm. The Pi GPIO header supplies 5v power on pins 2 and 4. These two pins need to be cut.
 As the Pi physically can not connect directly to the PiStorm, a header extension is needed - this is where you cut the pins - **do not cut the pins on the Raspberry Pi header.**
+**NOTE**
+DO NOT APPLY POWER FROM MULTIPLE SOURCES
 
-* Header extension needed such as
+If using a Pi4, a Header extension is needed, such as
 
 https://www.amazon.co.uk/gp/product/B08C581XHV/ref=ppx_yo_dt_b_asin_title_o03_s00?ie=UTF8&th=1
 
@@ -110,56 +120,62 @@ https://www.amazon.co.uk/gp/product/B07NQ5Z7Y9/ref=ppx_yo_dt_b_asin_title_o04_s0
 # FPGA bitstream update :
 Before we can use the PiStorm, it needs to have firmware installed. 
 
-Install OpenOCD:
-**NOTE - v0.11 needed**
-Check your openocd version
-* `openocd -v`
-If you have version 0.12 or later, follow these instructions:
-* `sudo apt-get remove openocd`
-* `sudo apt-get install openocd=0.11.0~rc2-1`
+~~Install OpenOCD:~~
+~~**NOTE - v0.11 needed**~~
+~~Check your openocd version~~
+~~* `openocd -v`~~
+~~If you have version 0.12 or later, follow these instructions:~~
+~~* `sudo apt-get remove openocd`~~
+~~* `sudo apt-get install openocd=0.11.0~rc2-1`~~
 
-Run the FPGA update with `./flash.sh`, this will automatically detect your CPLD variant and flash appropriately.
+~~Run the FPGA update with `./flash.sh`, this will automatically detect your CPLD variant and flash appropriately.~~
 
-If successful "Flashing successful!" will appear, if not it will fail with "Flashing failed" and `nprog_log.txt` will be created with more details.
+~~If successful "Flashing successful!" will appear, if not it will fail with "Flashing failed" and `nprog_log.txt` will be created with more details.~~
+
+Dec 2023 - openocd is no longer used
+
+* Flash the PiStorm firmware using the included tool - replace xxx with your CPLD type eg. EPM240 or EPM570
+`rtl/pistormflash -s rtl/EPMxxx_bitstream.svf`
+Expect a "Warning" to be shown. This can be ignored.
 
 # Running
 
 **Testing**
 
-As a confidence test, it is recommended you run ataritest to confirm basic functionality.
+As a confidence test, it is suggested you run ataritest to confirm basic functionality.
 * `sudo ./ataritest --memory tests=rw`
+If you see any errors, then discuss in the discord development channel. 
 
 ataritest can do a lot more, like reading and writing (peek and poke), to Atari memory space, filling Atari memory with patterns.
 
-**Starting the Emulator**
+**Setup file structure**
 
-You can start the emulator with the default Atari configuration by typing `sudo ./emulator --config configs/atari.cfg`.    
-**Important note:** Do not edit the default configuration file - `atari.cfg`. Instead, make a copy and save it in a directory outside 
-the pistorm-atari file structure - eg. ../configs/myatari.cfg.
-This way, you will never have any problems using `git pull` to update your PiStorm repo to the latest commit.
-Two sub-directories are present for Emulator run-time usage: They are, roms and configs.
-The roms/ directory contains a compressed file - roms.zip. Copy the compressed file to a directory of your choice, outside 
-the pistorm-atari file structure - eg ../roms/
+From the pistorm-atari directory, perform the following commands
 * `mkdir ../roms`
 * `mkdir ../dkimages`
 * `mkdir ../configs`
+* `mkdir ../screendumps`
 * `cp configs/atari.cfg ../configs`
 * `cp roms/roms.zip ../roms/`
 * `cd ../roms`
 * `unzip roms.zip`
 * `cd ../pistorm-atari`
 
+**Starting the Emulator**
+
+Start the emulator with the default Atari configuration by typing `sudo ./emulator --config ../configs/atari.cfg`
+
 A couple of disk images have been created to help you get started. These are optional. You could of course run programmes off your 
 floppy disk drive and/or an attached ACSI bus device.
 
 **The disk images are too large for GitHub. Please find the disk images at https://bbansolutions.co.uk**
-Download the disks.zip file, copy to the Pi dkimages/ directory. Uncompress the file to give two disk images.
+Download the disks.zip file, copy to ../dkimages/ directory. Uncompress the file to give two disk images.
 * `cd ../dkimages`
 * `wget http://bbansolutions.co.uk/wp-content/uploads/2023/10/disks.zip`
 * `unzip disks.zip`
 * `cd ../pistorm-atari`
 
-Run the emulator using `sudo ./emulator --config ../configs/myatari.cfg`.
+Run the emulator using `sudo ./emulator --config ../configs/atari.cfg`.
 
 To exit the emulator you can press `Ctrl+C`.
 
@@ -180,13 +196,3 @@ Enhanced video modes are available for GEM and Mint.
 ~~* `git checkout et4000-dev`~~
 ~~* `make clean`~~
 ~~* `make`~~
-
-If you see a flashing cursor behing the Atari desktop, you will need to edit /boot/cmdline.txt
-
-Replace vi with your editor of choice
-* `sudo vi /boot/cmdline.txt`
-Append the contents of configs/cmdlne.txt to your file and save it. The change will come in at the next reboot.
-
-
-
-
