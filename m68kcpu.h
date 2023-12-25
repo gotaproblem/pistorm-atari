@@ -1086,7 +1086,7 @@ typedef struct m68ki_cpu_core
 
 
 extern m68ki_cpu_core m68ki_cpu;
-extern sint           m68ki_remaining_cycles;
+extern volatile int   m68ki_remaining_cycles;
 extern uint           m68ki_tracing;
 extern const uint8    m68ki_shift_8_table[];
 extern const uint16   m68ki_shift_16_table[];
@@ -2680,11 +2680,11 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 		int_level = 7;
 	}
 
-	else if ( CPU_INT_LEVEL > FLAG_INT_MASK ) 
-		int_level = CPU_INT_LEVEL >> 8;
+	//else if ( CPU_INT_LEVEL > FLAG_INT_MASK ) 
+	//	int_level = CPU_INT_LEVEL >> 8;
 
-	else
-		return;
+	//else
+	//	return;
 	/* cryptodad end section */
 
 
@@ -2700,31 +2700,34 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 		/* Called if no devices respond to the interrupt acknowledge */
 		vector = EXCEPTION_SPURIOUS_INTERRUPT;
 
-	/* cryptodad can never get here as vector is masked byte */
-	else if ( vector > 255 )
-	{
+	/* cryptodad should never get here as vector is a masked byte */
+	//else if ( vector > 255 )
+	//{
 	//	//M68K_DO_LOG_EMU((M68K_LOG_FILEHANDLE "%s at %08x: Interrupt acknowledge returned invalid vector $%x\n",
-		printf ( "PC: 0x%X: Interrupt acknowledge returned invalid vector $%x\n",
-				 ADDRESS_68K(REG_PC), vector );
-		return;
-	}
+	//	printf ( "PC: 0x%X: Interrupt acknowledge returned invalid vector $%x\n",
+	//			 ADDRESS_68K(REG_PC), vector );
+	//	return;
+	//}
 
 	/* Start exception processing */
-	sr = m68ki_init_exception(state);
+	sr = m68ki_init_exception ( state );
 
 	/* Set the interrupt mask to the level of the one being serviced */
 	FLAG_INT_MASK = int_level << 8;
 
 	/* Get the new PC */
-	new_pc = m68ki_read_data_32(state, (vector << 2) + REG_VBR);
+	//new_pc = m68ki_read_data_32(state, (vector << 2) + REG_VBR);
+	m68ki_set_fc ( FLAG_S | FUNCTION_CODE_USER_DATA );
+	new_pc = m68k_read_memory_32 ( ADDRESS_68K ( (vector << 2) + REG_VBR ) );
 
 	/* If vector is uninitialized, call the uninitialized interrupt vector */
-	if(new_pc == 0)
-		new_pc = m68ki_read_data_32(state, (EXCEPTION_UNINITIALIZED_INTERRUPT << 2) + REG_VBR);
+	if ( new_pc == 0 )
+		new_pc = m68ki_read_data_32 ( state, (EXCEPTION_UNINITIALIZED_INTERRUPT << 2) + REG_VBR );
 
 	/* Generate a stack frame */
-	m68ki_stack_frame_0000(state, REG_PC, sr, vector);
-	if(FLAG_M && CPU_TYPE_IS_EC020_PLUS(CPU_TYPE))
+	m68ki_stack_frame_0000 ( state, REG_PC, sr, vector );
+
+	if ( FLAG_M && CPU_TYPE_IS_EC020_PLUS(CPU_TYPE) )
 	{
 		/* Create throwaway frame */
 		m68ki_set_sm_flag(state, FLAG_S);	/* clear M */
@@ -2732,10 +2735,11 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 		m68ki_stack_frame_0001(state, REG_PC, sr, vector);
 	}
 
-	m68ki_jump ( state, new_pc );
+	REG_PC = new_pc;
+	//m68ki_jump ( state, new_pc );
 
 	/* Defer cycle counting until later */
-	USE_CYCLES(CYC_EXCEPTION[vector]);
+	USE_CYCLES ( CYC_EXCEPTION [vector] );
 
 #if !M68K_EMULATE_INT_ACK
 	/* Automatically clear IRQ if we are not using an acknowledge scheme */

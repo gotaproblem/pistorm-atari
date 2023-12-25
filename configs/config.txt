@@ -16,14 +16,14 @@ gpu_mem=16
 [pi3]
 #overvoltage=6
 #arm_freq=1400
-core_freq=500
+#core_freq=500
 gpu_mem=16
 
 
 [pi4]
 #over_voltage=9 # if arm_freq > 2.1GHz
-arm_freq=1500
-gpu_freq=700
+#arm_freq=1500
+#gpu_freq=700
 gpu_mem=16
 
 

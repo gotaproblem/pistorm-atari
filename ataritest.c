@@ -60,6 +60,7 @@ void peek ( uint32_t start );
 void poke ( uint32_t address, uint8_t data );
 void dump ( uint32_t ROMsize, uint32_t ROMaddress );
 void memspeed ( uint32_t length );
+void hwTest ( void );
 
 int doReads;
 int doWrites;
@@ -78,6 +79,8 @@ int cmdDump = 0;
 int cmdClear = 0;
 int cmdInit = 0;
 int cmdMemSpeed = 0;
+int targetF = 200;
+int cmdHWTEST = 0;
 uint32_t ROMsize = 192;
 uint32_t ROMaddress = 0x00e00000;
 uint16_t clrPattern = 0x0000;
@@ -170,22 +173,23 @@ int main(int argc, char *argv[])
 
     cur_loop = 1;
 
-    if (check_emulator()) {
+    if ( check_emulator () ) 
+    {
         printf("PiStorm emulator running, please stop this before running ataritest\n");
         return 1;
     }
 
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &f2);
-    srand((unsigned int)f2.tv_nsec);
+    clock_gettime ( CLOCK_PROCESS_CPUTIME_ID, &f2 );
+    srand ( (unsigned int)f2.tv_nsec );
 
-    signal(SIGINT, sigint_handler);
+    signal ( SIGINT, sigint_handler );
 
-    ps_setup_protocol();
+    //ps_setup_protocol ( targetF );
     //exit(1);
-    ps_reset_state_machine();
-    ps_pulse_reset();
+   // ps_reset_state_machine ();
+   // ps_pulse_reset ();
 
-    usleep(1500);
+   // usleep (1500);
 
 	fc = 6; //0b101;
     //write8( 0xff8001, 0b00001010 ); // memory config 512k bank 0
@@ -203,7 +207,9 @@ int main(int argc, char *argv[])
    
     if ( parser ( argc, argv ) )
     {
-        
+        ps_setup_protocol ( targetF );
+        ps_reset_state_machine ();
+        ps_pulse_reset ();
 
         //printf ( "memory <%c%c%c> <%d> %s\n", 
         //    doReads ? 'r' : '-', doWrites ? 'w' : '-', doRandoms ? 'x' : '-', 
@@ -393,6 +399,12 @@ test_loop:
 
                 goto test_loop;
             }
+        }
+    
+        if ( cmdHWTEST )
+        {
+            hwTest ();
+
         }
     }
 
@@ -1743,7 +1755,7 @@ int parser ( int argc, char **argv )
                 cmdMem = 1;
         }
 
-        else if ( strcmp ( cmdptr, "clearmem" ) == 0 )
+        if ( strcmp ( cmdptr, "clearmem" ) == 0 )
         {
             valid = 1; 
 
@@ -1854,7 +1866,7 @@ int parser ( int argc, char **argv )
         }
 
         //  syntax --dumprom size=256 address=0xe00000 
-        else if ( strcmp ( cmdptr, "dumprom" ) == 0 )
+        if ( strcmp ( cmdptr, "dumprom" ) == 0 )
         {
             valid = 1; 
 
@@ -1952,7 +1964,164 @@ int parser ( int argc, char **argv )
             if ( valid )
                 cmdMemSpeed = 1;
         }
+    
+        if ( strcmp ( cmdptr, "clock" ) == 0 )
+        {
+            //valid = 1;
+            char *p;
+            //printf ( "argv = %s\n", argv[a+1] );
+            targetF = strtol ( argv [a+1], &p, 10 );
+            //printf ( "targetF = %d\n", targetF );
+        }
+
+        if ( strcmp ( cmdptr, "hardware" ) == 0 )
+        {
+            cmdHWTEST = 1;
+            valid = 1;
+        }
     }
 
     return valid | syntax;
+}
+
+
+
+#define SIZE_KILO 1024
+#define SIZE_MEGA (1024 * 1024)
+#define SIZE_GIGA (1024 * 1024 * 1024)
+
+//uint8_t garbege_datas[4 * SIZE_MEGA];
+
+void hwTest ( void )
+{
+    uint16_t tmp;
+    volatile uint32_t bit;
+    uint32_t test_size = 512 * SIZE_KILO, cur_loop = 0;
+    uint8_t loop_tests = 0, total_errors = 0;
+
+    test_size = 512 * SIZE_KILO;
+            
+    garbege_datas = malloc ( test_size );
+
+    if ( !garbege_datas )
+    {
+        printf ( "Failed to allocate memory for garbege datas\n" );
+
+        return;
+    }
+
+    printf ( "\nThe PiStorm must be installed, powered and flashed with the latest firmware\n" );
+    printf ( "The following tests are meant as a simple confidence check and require a fully functioning Atari\n\n" );
+    printf ( "Testing PiStorm Hardware\n\n" );
+
+test_loop:
+    /* Check Address lines by writing two data bit patterns and reading them back */
+    /* The upper address bits (A20, A21) can pnly be cjecked if the Atari system has memory expansion */
+    /* Address lines A22, A23 */
+    printf ( "Address line test\n" );
+    printf ( "NOTE A19, A20, A21 will only pass if RAM expansion is installed - A22, A23 can not be tested\n" );
+    for ( int n = 0; n < 24; n++ )
+    {
+        bit = 1 << n;
+        printf ( "A%02d $%.6X... ", n, bit );
+
+        write8 ( 0x10000 + bit, n );    
+        tmp = read8 ( 0x10000 + bit );
+
+        if ( tmp != n )
+        {
+            if ( tmp == 0xFF )
+            {
+                if ( n > 18 && n < 24 )
+                    printf ( "No memory detected\n" );
+
+                else
+                {
+                    printf ( "Faulty\n" );
+                    errors++;
+                }
+            }
+
+            else
+            {
+                printf ( "Wrote 0x%X, Read 0x%X\n", n, tmp );
+                errors++;
+            }
+        }
+
+        else 
+        {
+            printf ( "\n" );
+/*
+            write8 ( 0x10000 + bit, 0xAA );    
+            tmp = read8 ( 0x10000 + bit );
+
+            if ( tmp != 0xAA )
+            {
+                printf ( "Wrote 0x%X, Read 0x%X\n", 0xAA, tmp );
+                errors++;
+            }
+*/
+        }
+
+    }
+/*
+    if ( errors )
+    {
+        printf ( "Address line errors have been detected. Further testing can not continue\n" );
+
+        return;
+    }
+*/
+    printf ( "\nAddress line test completed\n" );
+
+    /* ---------------------------------------------------------------------- */
+
+    uint16_t c;
+
+    printf ( "\nData bus test (read/write)\n" );
+	//printf ( "NOTE works on non-A variant flip-flops (373 or 374's not 373A or 374A\n" );
+	
+
+    for ( int n = 0; n < 16; n++ )
+    {
+        tmp = 1 << n;
+
+        printf ( "D%.02d $%.4X... ", n, tmp );
+
+        write16 ( 0x10000 + (n * 2), tmp );
+        
+        c = read16 ( 0x10000 + (n * 2) );
+      
+        if ( c != tmp ) 
+        {
+            printf ( "Wrote 0x%X, Read 0x%X\n",  tmp, c );
+            errors++;
+        }
+
+        else 
+        {
+            printf ( "\n" );
+        }
+    }
+
+    printf ( "\nData bus test completed\n" );
+    
+    /* ---------------------------------------------------------------------- */
+
+    printf ( "\nHardware total errors: %d\n", errors );
+
+    total_errors += errors;
+    errors = 0;
+    sleep (1);
+
+    if ( loop_tests ) 
+    {
+        printf ( "Loop %d done. Begin loop %d\n", cur_loop + 1, cur_loop + 2 );
+        printf ( "Current total errors: %d\n", total_errors );
+
+        goto test_loop;
+    }
+
+    return;
 }

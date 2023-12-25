@@ -187,6 +187,7 @@ static void completed(struct ide_taskfile *tf)
 {
   ready(tf);
   tf->drive->intrq = 1;
+  //printf ( "%s interrupt ack = 1\n", __func__ );
 }
 
 static void drive_failed(struct ide_taskfile *tf)
@@ -206,6 +207,7 @@ static void data_in_state(struct ide_taskfile *tf)
   tf->status &= ~ST_BSY;
   tf->status |= ST_DRQ;
   d->intrq = 1;			/* Double check */
+  //printf ( "%s interrupt ack = 1\n", __func__ );
 }
 
 static void data_out_state(struct ide_taskfile *tf)
@@ -216,6 +218,7 @@ static void data_out_state(struct ide_taskfile *tf)
   tf->status &= ~ (ST_BSY|ST_DRDY);
   tf->status |= ST_DRQ;
   d->intrq = 1;			/* Double check */
+  //printf ( "%s interrupt ack = 1\n", __func__ );
 }
 
 static void edd_setup(struct ide_taskfile *tf)
@@ -536,6 +539,7 @@ static uint16_t ide_data_in(struct ide_drive *d, int len)
     if (d->dptr == d->data + 512) {
       d->length--;
       d->intrq = 1;		/* we don't yet emulate multimode */
+      //printf ( "%s interrupt ack = 1\n", __func__ );
       if (d->length == 0) {
         d->state = IDE_IDLE;
         completed(&d->taskfile);
@@ -573,6 +577,7 @@ static void ide_data_out(struct ide_drive *d, uint16_t v, int len)
       }
       d->length--;
       d->intrq = 1;
+      //printf ( "%s interrupt ack = 1\n", __func__ );
       if (d->length == 0) {
         d->state = IDE_IDLE;
         d->taskfile.status |= ST_DSC;
@@ -660,6 +665,7 @@ uint8_t IDE_read8 ( struct ide_controller *c, uint8_t r)
       return c->lba4 | ((c->selected) ? 0x10 : 0x00);
     case IDE_status_r:
       d->intrq = 0;		/* Acked */
+      //printf ( "%s interrupt ack = 0\n", __func__ );
       /* Fallthrough */
       /* no break */
     case IDE_altst_r:

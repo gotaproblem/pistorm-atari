@@ -81,7 +81,7 @@ inline int handle_mapped_read ( struct emulator_config *cfg, uint32_t addr, uint
 
   if ( read_addr == NULL )
     return -1;
-#if (1)
+#if (0)
   switch ( type ) 
   {
     case OP_TYPE_BYTE:
@@ -162,12 +162,7 @@ inline int handle_mapped_write ( struct emulator_config *cfg, uint32_t addr, uin
         case MAPTYPE_RAM:
         case MAPTYPE_RAM_NOALLOC:
         case MAPTYPE_FILE:
-#ifdef RAYLIB
-          if ( RTG_enabled && RTG_VRAM_BASE && ( addr >= RTG_VRAM_BASE && addr < RTG_VRAM_BASE | RTG_VRAM_SIZE ) )
-          {
-            vramLock = 1;
-          }
-#endif
+
           //if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMTOP )
           //{
            // write_addr = RTGbuffer + (addr - NOVA_ET4000_VRAMBASE);
@@ -204,35 +199,29 @@ write_value:
   switch ( type ) 
   {
     case OP_TYPE_BYTE:
+
       write_addr[0] = (unsigned char)value;
       
-#ifndef RAYLIB
-      //return res;
-#endif
       break;
+
     case OP_TYPE_WORD:
+
       ((uint16_t *)write_addr)[0] = htobe16 ( value );
-#ifndef RAYLIB
-      //return res;
-#endif
+
       break;
+
     case OP_TYPE_LONGWORD:
+
       ((uint32_t *)write_addr)[0] = htobe32 ( value );
-#ifndef RAYLIB
-      //return res;
-#endif
+
       break;
+
     case OP_TYPE_MEM:
-      //RTG_VSYNC = 0;
-      //return -1;
+    
       res = -1;
+
       break;
   }
 
-#ifdef RAYLIB
-  vramLock = 0;
-#endif
-
-  //RTG_VSYNC = 0;
   return res;
 }
