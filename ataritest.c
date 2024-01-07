@@ -89,6 +89,7 @@ uint16_t clrPattern = 0x0000;
 uint8_t *garbege_datas;
 extern volatile unsigned int *gpio;
 extern uint8_t fc;
+extern volatile uint32_t g_buserr;
 
 struct timespec f2;
 
@@ -563,6 +564,9 @@ void peek ( uint32_t start )
 void poke ( uint32_t address, uint8_t data )
 {
     write8 ( address, data );
+
+    if ( g_buserr )
+        printf ( "BERR\n" );
 }
 
 
@@ -1988,13 +1992,12 @@ int parser ( int argc, char **argv )
 
 #define SIZE_KILO 1024
 #define SIZE_MEGA (1024 * 1024)
-#define SIZE_GIGA (1024 * 1024 * 1024)
 
-//uint8_t garbege_datas[4 * SIZE_MEGA];
 
 void hwTest ( void )
 {
     uint16_t tmp;
+    uint16_t c;
     volatile uint32_t bit;
     uint32_t test_size = 512 * SIZE_KILO, cur_loop = 0;
     uint8_t loop_tests = 0, total_errors = 0;
@@ -2010,13 +2013,45 @@ void hwTest ( void )
         return;
     }
 
+    /* set Atari MMU for max memory - 24 bit 4MB */
+    setMemory ( 4096 );
+
     printf ( "\nThe PiStorm must be installed, powered and flashed with the latest firmware\n" );
     printf ( "The following tests are meant as a simple confidence check and require a fully functioning Atari\n\n" );
     printf ( "Testing PiStorm Hardware\n\n" );
 
 test_loop:
+    printf ( "Data bus test (read/write)\n" );
+	//printf ( "NOTE works on non-A variant flip-flops (373 or 374's not 373A or 374A\n" );
+	
+    for ( int n = 0; n < 16; n++ )
+    {
+        tmp = 1 << n;
+
+        printf ( "D%.02d $%.4X... ", n, tmp );
+
+        write16 ( 0x10000 + (n * 2), tmp );
+        
+        c = read16 ( 0x10000 + (n * 2) );
+      
+        if ( c != tmp ) 
+        {
+            printf ( "Wrote 0x%X, Read 0x%X\n",  tmp, c );
+            errors++;
+        }
+
+        else 
+        {
+            printf ( "\n" );
+        }
+    }
+
+    printf ( "\nData bus test completed\n\n" );
+
+    /* ---------------------------------------------------------------------- */
+
     /* Check Address lines by writing two data bit patterns and reading them back */
-    /* The upper address bits (A20, A21) can pnly be cjecked if the Atari system has memory expansion */
+    /* The upper address bits (A20, A21) can only be checked if the Atari system has memory expansion */
     /* Address lines A22, A23 */
     printf ( "Address line test\n" );
     printf ( "NOTE A19, A20, A21 will only pass if RAM expansion is installed - A22, A23 can not be tested\n" );
@@ -2073,43 +2108,11 @@ test_loop:
         return;
     }
 */
-    printf ( "\nAddress line test completed\n" );
-
-    /* ---------------------------------------------------------------------- */
-
-    uint16_t c;
-
-    printf ( "\nData bus test (read/write)\n" );
-	//printf ( "NOTE works on non-A variant flip-flops (373 or 374's not 373A or 374A\n" );
-	
-
-    for ( int n = 0; n < 16; n++ )
-    {
-        tmp = 1 << n;
-
-        printf ( "D%.02d $%.4X... ", n, tmp );
-
-        write16 ( 0x10000 + (n * 2), tmp );
-        
-        c = read16 ( 0x10000 + (n * 2) );
-      
-        if ( c != tmp ) 
-        {
-            printf ( "Wrote 0x%X, Read 0x%X\n",  tmp, c );
-            errors++;
-        }
-
-        else 
-        {
-            printf ( "\n" );
-        }
-    }
-
-    printf ( "\nData bus test completed\n" );
+    printf ( "\nAddress line test completed\n\n" );    
     
     /* ---------------------------------------------------------------------- */
 
-    printf ( "\nHardware total errors: %d\n", errors );
+    printf ( "Hardware total errors: %d\n", errors );
 
     total_errors += errors;
     errors = 0;

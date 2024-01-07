@@ -243,4 +243,35 @@ typedef struct stats {
 //#define CHIP_FASTPATH
 //#define FASTPATH_UPPER 0x400000 //0x200000
 
+
+
+
+
+#define GPFSEL_OUTPUT \
+  gpio [0] = GPFSEL0_OUTPUT; \
+  gpio [1] = GPFSEL1_OUTPUT; \
+  gpio [2] = GPFSEL2_OUTPUT;
+
+#define GPFSEL_INPUT \
+  gpio [0] = GPFSEL0_INPUT; \
+  gpio [1] = GPFSEL1_INPUT; \
+  gpio [2] = GPFSEL2_INPUT;
+
+#define GPIO_WRITEREG(reg, val) \
+  gpio [7] = (val << 8) | (reg << PIN_A0); \
+  gpio [7] = 0x80; \
+  gpio [10] = 0x80; \
+  gpio [10] = TXN_END;
+
+ #define GPIO_PIN_RD \
+  gpio [7] = (REG_DATA << PIN_A0); \
+  gpio [7] = 1 << PIN_RD;
+
+#define WAIT_TXN \
+  while ( gpio [13] & (1 << PIN_TXN_IN_PROGRESS)) {}
+
+#define END_TXN \
+  gpio [10] = TXN_END;
+
+
 #endif /* _PS_PROTOCOL_H */

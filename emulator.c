@@ -57,23 +57,25 @@ extern char *get_pistorm_cfg_filename ();
 extern void set_pistorm_cfg_filename (char *);
 extern uint m68ki_read_imm16_addr_slowpath ( m68ki_cpu_core *state, uint32_t pc );
 extern void blitInit ( void );
+extern uint8_t ps_read_8 ( uint32_t address );
+
 
 static inline void m68k_execute_bef ( m68ki_cpu_core *, int );
-void *ide_task ( void* );
-void *misc_task ( void* vptr );
+//void *ide_task ( void* );
+//void *misc_task ( void* vptr );
 
 bool FPU68020_SELECTED;
 uint8_t emulator_exiting = 0;
 volatile uint32_t last_irq = 8;
-volatile uint32_t last_last_irq = 8;
+//volatile uint32_t last_last_irq = 8;
 volatile int cpu_emulation_running = 0;
 volatile int passthrough = 0;
-volatile uint32_t do_reset=0;
+//volatile uint32_t do_reset=0;
 
 uint8_t load_new_config = 0;
 int mem_fd;
 unsigned int cpu_type = M68K_CPU_TYPE_68000;
-unsigned int loop_cycles = 20;
+unsigned int loop_cycles = 12;
 struct emulator_config *cfg = NULL;
 bool RTG_enabled;
 bool RTC_enabled;
@@ -83,18 +85,20 @@ uint32_t ATARI_MEMORY_SIZE;
 int RTG_fps;
 bool Blitter_enabled;
 bool RTG_EMUTOS_VGA;
+//volatile uint16_t g_status;
 
 extern bool IDE_enabled;
 extern volatile unsigned int *gpio;
 extern uint8_t fc;
-extern volatile int g_irq;
+extern volatile uint16_t g_irq;
 extern volatile uint32_t g_buserr;
 extern bool RTG_enabled;
 extern bool ET4000Initialised;
 extern volatile unsigned int *gpio;
 extern const char *cpu_types[];
 extern volatile bool PS_LOCK;
-
+//extern volatile bool ioDone;
+//extern volatile bool g_iack;
 
 
 void cpu2 ( void )
@@ -426,9 +430,7 @@ void *cacheflusher ( void *dummy )
 #endif
 
 
-
-extern uint8_t ps_read_8 ( uint32_t address );
-
+#if (1)
 static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 {
 	/* Set our pool of clock cycles available */
@@ -447,13 +449,16 @@ execute:
       
     m68ki_instruction_jump_table [REG_IR] (state);
 
+    USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
+
     if ( g_buserr )
     {
       m68ki_exception_bus_error ( state ); 
+      g_buserr = 0;
     }
 
-    else
-      USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
+    //else
+    //  USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
 
     // cryptodad make sure m68kcpu.h m68ki_set_sr() has relevent line commented out
     if ( GET_CYCLES () > 0 )
@@ -467,8 +472,75 @@ execute:
 
 	return;
 }
+#else
+/* Execute some instructions until we use up num_cycles clock cycles */
+/* ASG: removed per-instruction interrupt checks */
+static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
+{
+	/* eat up any reset cycles */
+	if (RESET_CYCLES) {
+	    int rc = RESET_CYCLES;
+	    RESET_CYCLES = 0;
+	    num_cycles -= rc;
+	    //if (num_cycles <= 0)
+		//return rc;
+	}
+
+	/* Set our pool of clock cycles available */
+	SET_CYCLES(num_cycles);
+	m68ki_initial_cycles = num_cycles;
+
+	/* See if interrupts came in */
+	//m68ki_check_interrupts(state);
+
+	/* Make sure we're not stopped */
+	if(!CPU_STOPPED)
+	{
+		/* Return point if we had an address error */
+		m68ki_set_address_error_trap(state); /* auto-disable (see m68kcpu.h) */
+
+		//m68ki_check_bus_error_trap();
 
 
+		/* Main loop.  Keep going until we run out of clock cycles */
+		do
+		{
+			/* Set tracing according to T1. (T0 is done inside instruction) */
+			m68ki_trace_t1(); /* auto-disable (see m68kcpu.h) */
+
+			/* Set the address space for reads */
+			m68ki_use_data_space(); /* auto-disable (see m68kcpu.h) */
+
+			/* Call external hook to peek at CPU */
+			m68ki_instr_hook(REG_PC); /* auto-disable (see m68kcpu.h) */
+
+			/* Record previous program counter */
+			REG_PPC = REG_PC;
+
+			/* Read an instruction and call its handler */
+			REG_IR = m68ki_read_imm_16(state);
+			m68ki_instruction_jump_table[REG_IR](state);
+			USE_CYCLES(CYC_INSTRUCTION[REG_IR]);
+
+      if ( g_buserr )
+      {
+        m68ki_exception_bus_error ( state ); 
+      }
+
+			/* Trace m68k_exception, if necessary */
+			m68ki_exception_if_trace(state); /* auto-disable (see m68kcpu.h) */
+		} while(GET_CYCLES() > 0);
+
+		/* set previous PC to current PC for the next entry into the loop */
+		REG_PPC = REG_PC;
+	}
+	else
+		SET_CYCLES(0);
+
+	/* return how many clocks we used */
+	//return m68ki_initial_cycles - GET_CYCLES();
+}
+#endif
 struct termios oldt, newt;
 int oldf;
 
@@ -508,7 +580,7 @@ void sigint_handler ( int sig_num )
 }
 
 
-void *cpu_task() 
+void *cpu_task () 
 {
   const struct sched_param priority = {99};
   uint16_t status;
@@ -542,7 +614,7 @@ run:
   {
     M68K_END_TIMESLICE;
 
-    DEBUG_PRINTF ( "[CPU] Emulation reset\n");
+    DEBUG_PRINTF ( "[CPU] Emulation reset - status 0x%X\n", status );
 
     usleep ( 1000000 ); 
 
@@ -561,11 +633,11 @@ run:
   }
 
 #else
+
+#if (0)
   if ( g_irq )
   {
     status = ps_read_status_reg ();
-
-    //printf ( "IPL %d\n", status >> 13 );
 
     if ( status == 0xFFFF )
     {
@@ -580,33 +652,75 @@ run:
 
         printf ( "[CPU] Emulation reset - status = 0x%X\n", status );
 
-        usleep ( 1000000 ); 
+        usleep ( 500000 ); 
 
         m68k_pulse_reset ( state );
       }
 
-      last_irq = status >> 13;
-
-      if ( last_irq != 0 && last_irq != last_last_irq ) 
+      else
       {
-        last_last_irq = last_irq;
-        m68k_set_irq ( last_irq );
-        
+        last_irq = status >> 13;
+
+        //printf ( "IPL %d\n", last_irq );
+
+        if ( last_irq != 0 )
+        {
+          m68k_set_irq ( last_irq );
+          m68ki_check_interrupts ( state );
+        }
       }
     }
   }
 
-  else //if ( last_last_irq != 0 ) 
+  else
   {
-    last_last_irq = 0;
     m68k_set_irq ( 0 );
-    
+    m68ki_check_interrupts ( state );
   }  
+#else
 
-  m68ki_check_interrupts ( state );
+  status = ps_read_status_reg ();
+
+  if ( status == 0xFFFF )
+  {
+    printf ( "bad status\n" );
+  }
+
+  else
+  {
+    if ( status & 0x2 ) 
+    {
+      M68K_END_TIMESLICE;
+
+      printf ( "[CPU] Emulation reset - status = 0x%X\n", status );
+
+      usleep ( 1000000 ); 
+
+      m68k_pulse_reset ( state );
+    }
+
+    else
+    {
+      last_irq = status >> 13;
+
+      //printf ( "IPL %d\n", last_irq );
+
+      if ( last_irq != 0 )
+      {
+        m68k_set_irq ( last_irq );
+        m68ki_check_interrupts ( state );
+      }
+    }
+  }
+
+  if ( last_irq == 0 )
+  {
+    m68k_set_irq ( 0 );
+    m68ki_check_interrupts ( state );
+  }  
   
 #endif  
-
+#endif
   if ( !cpu_emulation_running )
   {
     printf ("[CPU] End of CPU thread\n");
@@ -730,6 +844,10 @@ int main ( int argc, char *argv[] )
     cfg->platform->platform_initial_setup ( cfg );
   }
 
+  /* determine ROM */
+  bool ROM = 0;
+  
+
   signal ( SIGINT, sigint_handler );
 
   /* save stdio tty properties and ammend for emulator use */
@@ -749,7 +867,7 @@ int main ( int argc, char *argv[] )
   ps_pulse_reset ();
 
   usleep (1500);
-  
+ 
   m68k_init ();
 	m68k_set_cpu_type ( &m68ki_cpu, cpu_type );
   m68k_set_int_ack_callback ( &cpu_irq_ack );
@@ -773,7 +891,7 @@ int main ( int argc, char *argv[] )
 
     printf ( "[MAIN] Faux Blitter Initialised\n" );
   }
-  
+ 
   err = pthread_create ( &cpu_tid, NULL, &cpu_task, NULL );
 
   if ( err != 0 )
@@ -916,9 +1034,6 @@ int main ( int argc, char *argv[] )
 /* CPU RESET instruction has been called */
 void cpu_pulse_reset ( void ) 
 {
-  //ps_pulse_reset ();
-  //printf ( "reset instruction\n" );
-
   if ( WTC_initialised )
   {
     pthread_mutex_lock( &cachemutex );
@@ -944,16 +1059,6 @@ void cpu_pulse_reset ( void )
 static uint32_t target = 0;
 static uint32_t platform_res, rres;
 
-#if (0)
-/* return 24 bit address */
-static inline uint32_t check_ff_st ( uint32_t add ) 
-{
-	if ( ( add & 0xFF000000 ) == 0xFF000000 ) 
-    add &= 0x00FFFFFF;
-
-	return add;
-}
-#endif
 
 /* levels 2 and 4 are video syncs, so thousands are coming in */
 inline uint16_t cpu_irq_ack ( int level ) 

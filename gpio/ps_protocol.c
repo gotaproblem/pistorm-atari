@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -33,7 +34,7 @@
 #ifdef STATS
 t_stats RWstats;
 #endif
-volatile int g_irq;
+volatile uint16_t g_irq;
 volatile uint32_t g_buserr;
 volatile uint32_t *gpio;
 volatile uint32_t *gpclk;
@@ -48,6 +49,7 @@ void set_berr_callback ( void(*ptr) (uint16_t,uint32_t,int) )
 {
 	callback_berr = ptr;
 }
+
 
 static void setup_io() 
 {
@@ -151,6 +153,10 @@ static void setup_gpclk ( int targetF )
   sscanf ( (ptr + 1), "%d", &coref );
   coref /= 1000000;
 
+  printf ( "[INIT] CPU clock is %d MHz\n", cpuf );
+  printf ( "[INIT] CORE clock is %d MHz\n", coref );
+  
+#if (1)
   clk = PLL_TO_USE == PLLC ? cpuf : coref;
 
   if ( targetF > MAX_PI_CLK )
@@ -160,40 +166,40 @@ static void setup_gpclk ( int targetF )
   }
 
   div = clk / (float)targetF;
-  
-  //if ( div * MAX_PI_CLK != clk )
-  //  div += 1;
-
   div_i = (int)div;
   div_f = (int)( (div - div_i) * 4096 );
   //printf ( "div = %f -> divi %d, divf %d\n", div, div_i, div_f );
 
-  printf ( "[INIT] CPU clock is %d MHz\n", cpuf );
-  printf ( "[INIT] CORE clock is %d MHz\n", coref );
   printf ( "[INIT] Using clock divisor %.3f with PLL%c\n", div, PLL_TO_USE == PLLC ? 'C' : 'D' );
   printf ( "[INIT] GPIO clock is %.3f MHz\n", clk / div );//PLL_TO_USE == PLLC ? cpuf / div : coref / div );
 
-  *(gpclk + (CLK_GP0_CTL / 4)) = CLK_PASSWD | (1 << 5);
-  usleep (30);
+  *(gpclk + (CLK_GP0_CTL / 4)) = CLK_PASSWD | (1 << 5); /* kill the clock */
+  usleep (100);
 
-  while ( (*(gpclk + (CLK_GP0_CTL / 4))) & (1 << 7) );
+  while ( ( *(gpclk + (CLK_GP0_CTL / 4))) & (1 << 7) ); /* wait for clock to stop */
   usleep (100);
 
   /* bits 23:12 integer part of divisor */
   /* bite 11:0 fractional part of divisor */
   /* SOURCE / (DIV_I + DIV_F / 4096) */
 
-  *(gpclk + (CLK_GP0_DIV / 4)) = CLK_PASSWD | (div_i << 12) | (div_f & 0x7ff);  
-  usleep (30);
-
-  *(gpclk + (CLK_GP0_CTL / 4)) = CLK_PASSWD | PLL_TO_USE | (1 << 4); // 6=plld, 5=pllc
-  usleep (30);
-
-  while ( ((*(gpclk + (CLK_GP0_CTL / 4))) & (1 << 7)) == 0 );
+  *(gpclk + (CLK_GP0_DIV / 4)) = CLK_PASSWD | (div_i << 12) | (div_f & 0x7ff);  /* set clock divisors */
   usleep (100);
+
+  *(gpclk + (CLK_GP0_CTL / 4)) = CLK_PASSWD | PLL_TO_USE | (1 << 4); /* set PLL to use 6=plld, 5=pllc and start clock */
+  usleep (100);
+
+  //while ( ( ( *(gpclk + (CLK_GP0_CTL / 4))) & (1 << 7) ) == 0 ); /* wait for clock to start */
+  //usleep (100);
+
+#else
+int pll = *(gpclk + (CLK_GP0_CTL / 4)) & 0x0f;
+printf ( "[INIT] Using PLL%c\n", pll == 4 ? 'A' : pll == 5 ? 'C' : pll == 6 ? 'D' : 'x' );
+#endif
 
   SET_GPIO_ALT (PIN_CLK, 0);  // assign clock to gpio pin 4 (PI_CLK)
 }
+
 
 void ps_setup_protocol ( int targetF ) 
 {
@@ -212,25 +218,22 @@ inline
 void ps_write_16 ( uint32_t address, uint16_t data )
 {
   static uint32_t l;
-
-  //while ( PS_LOCK );
-  //while ( gpio [13] & 1 );
-
+#if (1)
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
   gpio [2] = GPFSEL2_OUTPUT;
 
-  gpio [7] = ( data << 8 ) | 0x80;//CMD_REG_DATA | (1 << PIN_WR);
+  gpio [7] = ( data << 8 );// | 0x80;//CMD_REG_DATA | (1 << PIN_WR);
   gpio [7] = 0x80;
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
-  gpio [7] = ( (address & 0xffff) << 8 ) | 0x84;//CMD_ADDR_LO | (1 << PIN_WR);
+  gpio [7] = ( (address & 0xffff) << 8 ) | 0x04;//CMD_ADDR_LO | (1 << PIN_WR);
   gpio [7] = 0x80;
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
-  gpio [7] = ( ( (fc << 13) | (address >> 16) ) << 8 ) | 0x88;//CMD_ADDR_HI | (1 << PIN_WR);
+  gpio [7] = ( ( (fc << 13) | (address >> 16) ) << 8 ) | 0x08;//CMD_ADDR_HI | (1 << PIN_WR);
   gpio [7] = 0x80;
   gpio [10] = 0x80;
   gpio [10] = TXN_END; 
@@ -239,14 +242,28 @@ void ps_write_16 ( uint32_t address, uint16_t data )
   gpio [1] = GPFSEL1_INPUT;
   gpio [2] = GPFSEL2_INPUT;
 
-	while ( ( l = gpio [13] ) & 1 ) // wait for firmware to signal transaction completed
-    ;
+	while ( ( l = gpio [13] ) & 1 ); // wait for firmware to signal transaction completed
 
-  g_irq = CHECK_IRQ (l);
+  //g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
   RWstats.w16++;  
+#endif
+
+#else
+  GPFSEL_OUTPUT;
+
+  GPIO_WRITEREG ( REG_DATA, data );//(data & 0xFFFF) );
+  GPIO_WRITEREG ( REG_ADDR_LO, (address & 0xFFFF) );
+  GPIO_WRITEREG ( REG_ADDR_HI, ( (fc << 13) | 0x0000 | (address >> 16)) );
+
+  GPFSEL_INPUT;
+
+  WAIT_TXN;
+
+  l = gpio [13];
+  g_buserr = CHECK_BERR (l);
 #endif
 }
 
@@ -256,30 +273,27 @@ void ps_write_8 ( uint32_t address, uint16_t data )
 {
   static uint32_t l;
 
-  //while ( PS_LOCK );
-  //while ( gpio [13] & 1 );
-
   if ((address & 1) == 0)
     data <<= 8;
 
   else
     data &= 0xff;
-
+#if (1)
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
   gpio [2] = GPFSEL2_OUTPUT;
 
-  gpio [7] = data << 8 | 0x80;//CMD_REG_DATA | (1 << PIN_WR);
+  gpio [7] = data << 8;// | 0x80;//CMD_REG_DATA | (1 << PIN_WR);
   gpio [7] = 0x80;
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
-  gpio [7] = ((address & 0xffff) << 8) | 0x84;//CMD_ADDR_LO | (1 << PIN_WR);
+  gpio [7] = ((address & 0xffff) << 8) | 0x04;//CMD_ADDR_LO | (1 << PIN_WR);
   gpio [7] = 0x80;
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
-  gpio [7] = (( (fc<<13) | 0x0100 | (address >> 16) ) << 8) | 0x88;//CMD_ADDR_HI | (1 << PIN_WR);
+  gpio [7] = (( (fc<<13) | 0x0100 | (address >> 16) ) << 8) | 0x08;//CMD_ADDR_HI | (1 << PIN_WR);
   gpio [7] = 0x80;
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
@@ -288,14 +302,28 @@ void ps_write_8 ( uint32_t address, uint16_t data )
   gpio [1] = GPFSEL1_INPUT;
   gpio [2] = GPFSEL2_INPUT;
   
-	while ( ( l = gpio [13] ) & 1 )
-    ;
+	while ( ( l = gpio [13] ) & 1 );
 
-  g_irq = CHECK_IRQ (l);
+  //g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
   
 #ifdef STATS
   RWstats.w8++;
+#endif
+
+#else
+  GPFSEL_OUTPUT;
+
+  GPIO_WRITEREG ( REG_DATA, data );//(data & 0xFFFF) );
+  GPIO_WRITEREG ( REG_ADDR_LO, (address & 0xFFFF) );
+  GPIO_WRITEREG ( REG_ADDR_HI, ( (fc << 13) | 0x0100 | (address >> 16)) );
+
+  GPFSEL_INPUT;
+
+  WAIT_TXN;
+
+  l = gpio [13];
+  g_buserr = CHECK_BERR (l);
 #endif
 }
 
@@ -303,8 +331,95 @@ void ps_write_8 ( uint32_t address, uint16_t data )
 inline
 void ps_write_32 ( uint32_t address, uint32_t value ) 
 {
-  ps_write_16 ( address, value >> 16 );
-  ps_write_16 ( address + 2, value );
+  static uint32_t l;
+
+#if (1)
+  //ps_write_16 ( address, value >> 16 );
+  //ps_write_16 ( address + 2, value );
+
+
+  gpio [0] = GPFSEL0_OUTPUT;
+  gpio [1] = GPFSEL1_OUTPUT;
+  gpio [2] = GPFSEL2_OUTPUT;
+
+  gpio [7] = ( (value >> 16) << 8 );// | 0x80;//CMD_REG_DATA | (1 << PIN_WR);
+  gpio [7] = 0x80;
+  gpio [10] = 0x80;
+  gpio [10] = TXN_END;
+
+  gpio [7] = ( (address & 0xffff) << 8 ) | 0x04;//CMD_ADDR_LO | (1 << PIN_WR);
+  gpio [7] = 0x80;
+  gpio [10] = 0x80;
+  gpio [10] = TXN_END;
+
+  gpio [7] = ( ( (fc << 13) | (address >> 16) ) << 8 ) | 0x08;//CMD_ADDR_HI | (1 << PIN_WR);
+  gpio [7] = 0x80;
+  gpio [10] = 0x80;
+  gpio [10] = TXN_END; 
+  
+  //gpio [0] = GPFSEL0_INPUT;
+  gpio [1] = GPFSEL1_INPUT;
+  //gpio [2] = GPFSEL2_INPUT;
+
+	while ( gpio [13] & 1 ); // wait for firmware to signal transaction completed
+
+
+  address += 2;
+
+  //gpio [0] = GPFSEL0_OUTPUT;
+  gpio [1] = GPFSEL1_OUTPUT;
+  //gpio [2] = GPFSEL2_OUTPUT;
+
+  gpio [7] = ( value << 8 );// | 0x80;//CMD_REG_DATA | (1 << PIN_WR);
+  gpio [7] = 0x80;
+  gpio [10] = 0x80;
+  gpio [10] = TXN_END;
+
+  gpio [7] = ( (address & 0xffff) << 8 ) | 0x04;//CMD_ADDR_LO | (1 << PIN_WR);
+  gpio [7] = 0x80;
+  gpio [10] = 0x80;
+  gpio [10] = TXN_END;
+
+  gpio [7] = ( ( (fc << 13) | (address >> 16) ) << 8 ) | 0x08;//CMD_ADDR_HI | (1 << PIN_WR);
+  gpio [7] = 0x80;
+  gpio [10] = 0x80;
+  gpio [10] = TXN_END; 
+  
+  gpio [0] = GPFSEL0_INPUT;
+  gpio [1] = GPFSEL1_INPUT;
+  gpio [2] = GPFSEL2_INPUT;
+
+	while ( ( l = gpio [13] ) & 1 ); // wait for firmware to signal transaction completed
+
+
+  //g_irq = CHECK_IRQ (l);
+  g_buserr = CHECK_BERR (l);
+#else
+  GPFSEL_OUTPUT;
+
+  GPIO_WRITEREG ( REG_DATA, ( (value >> 16) & 0xFFFF) );
+  GPIO_WRITEREG ( REG_ADDR_LO, (address & 0xFFFF) );
+  GPIO_WRITEREG ( REG_ADDR_HI, ( (fc << 13) | 0x0000 | (address >> 16)) );
+
+  //GPFSEL_INPUT;
+
+  WAIT_TXN;
+
+  address += 2;
+
+  //GPFSEL_OUTPUT;
+
+  GPIO_WRITEREG ( REG_DATA, ( value & 0xFFFF) );
+  GPIO_WRITEREG ( REG_ADDR_LO, (address & 0xFFFF) );
+  GPIO_WRITEREG ( REG_ADDR_HI, ( (fc << 13) | 0x0000 | (address >> 16)) );
+
+  GPFSEL_INPUT;
+
+  WAIT_TXN;
+
+  l = gpio [13];
+  g_buserr = CHECK_BERR (l);
+#endif
 }
 
 
@@ -313,19 +428,16 @@ uint16_t ps_read_16 ( uint32_t address )
 {
 	static uint32_t l;
 
-  //while ( PS_LOCK );
-  //while ( gpio [13] & 1 );
-
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
   gpio [2] = GPFSEL2_OUTPUT;
 
-  gpio [7] = ( (address & 0xffff) << 8 ) | 0x84;//CMD_ADDR_LO | (1 << PIN_WR);
+  gpio [7] = ( (address & 0xffff) << 8 ) | 0x04;//CMD_ADDR_LO | (1 << PIN_WR);
   gpio [7] = 0x80;
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
-  gpio [7] = ( ( (fc << 13) | 0x0200 | (address >> 16)  ) << 8 ) | 0x88;//CMD_ADDR_HI | (1 << PIN_WR);
+  gpio [7] = ( ( (fc << 13) | 0x0200 | (address >> 16)  ) << 8 ) | 0x08;//CMD_ADDR_HI | (1 << PIN_WR);
   gpio [7] = 0x80;
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
@@ -336,8 +448,6 @@ uint16_t ps_read_16 ( uint32_t address )
   gpio [1] = GPFSEL1_INPUT;
   gpio [2] = GPFSEL2_INPUT;
 
-  //gpio [7] = 0x40;//(REG_DATA << PIN_A0) | (1 << PIN_RD);
-
   while ( ( l = gpio [13] ) & 1 )
     ;
   
@@ -346,8 +456,8 @@ uint16_t ps_read_16 ( uint32_t address )
 #endif
 
  	gpio [10] = TXN_END;
-  
-  g_irq = CHECK_IRQ (l);
+
+  //g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -362,20 +472,17 @@ inline
 uint8_t ps_read_8 ( uint32_t address ) 
 {
   static uint32_t l;
-  
-  //while ( PS_LOCK );
-  //while ( gpio [13] & 1 );
 
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
   gpio [2] = GPFSEL2_OUTPUT;
 
-  gpio [7] = ((address & 0xffff) << 8) | 0x84;//CMD_ADDR_LO | (1 << PIN_WR);
+  gpio [7] = ((address & 0xffff) << 8) | 0x04;//CMD_ADDR_LO | (1 << PIN_WR);
   gpio [7] = 0x80;
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
 
-  gpio [7] = (( (fc << 13) | 0x0300 | (address >> 16) ) << 8) | 0x88;//CMD_ADDR_HI | (1 << PIN_WR);
+  gpio [7] = (( (fc << 13) | 0x0300 | (address >> 16) ) << 8) | 0x08;//CMD_ADDR_HI | (1 << PIN_WR);
   gpio [7] = 0x80;
   gpio [10] = 0x80;
   gpio [10] = TXN_END;
@@ -385,8 +492,6 @@ uint8_t ps_read_8 ( uint32_t address )
   gpio [0] = GPFSEL0_INPUT;
   gpio [1] = GPFSEL1_INPUT;
   gpio [2] = GPFSEL2_INPUT;
-
-  //gpio [7] = 0x40;//(REG_DATA << PIN_A0) | (1 << PIN_RD);
   
   while ( ( l = gpio [13] ) & 1 )
     ;
@@ -397,7 +502,7 @@ uint8_t ps_read_8 ( uint32_t address )
 
   gpio [10] = TXN_END;
   
-  g_irq = CHECK_IRQ (l);
+ // g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -412,16 +517,89 @@ else
 }
 
 
+inline
 uint32_t ps_read_32 ( uint32_t address ) 
 {
+#if (0)
   return ( ps_read_16 ( address ) << 16 ) | ps_read_16 ( address + 2 );
+
+#else
+  static uint32_t l;
+  static uint32_t d;
+
+  gpio [0] = GPFSEL0_OUTPUT;
+  gpio [1] = GPFSEL1_OUTPUT;
+  gpio [2] = GPFSEL2_OUTPUT;
+
+  gpio [7] = ( (address & 0xffff) << 8 ) | 0x04;//CMD_ADDR_LO | (1 << PIN_WR);
+  gpio [7] = 0x80;
+  gpio [10] = 0x80;
+  gpio [10] = TXN_END;
+
+  gpio [7] = ( ( (fc << 13) | 0x0200 | (address >> 16)  ) << 8 ) | 0x08;//CMD_ADDR_HI | (1 << PIN_WR);
+  gpio [7] = 0x80;
+  gpio [10] = 0x80;
+  gpio [10] = TXN_END;
+
+  gpio [7] = 0x40;//(REG_DATA << PIN_A0) | (1 << PIN_RD);
+
+  //gpio [0] = GPFSEL0_INPUT;
+  gpio [1] = GPFSEL1_INPUT;
+  //gpio [2] = GPFSEL2_INPUT;
+
+  while ( gpio [13] & 1 );
+  
+  l = gpio [13];
+
+ 	gpio [10] = TXN_END;
+
+  d = (l >> 8) << 16;
+
+
+  address += 2;
+
+  //gpio [0] = GPFSEL0_OUTPUT;
+  gpio [1] = GPFSEL1_OUTPUT;
+  //gpio [2] = GPFSEL2_OUTPUT;
+
+  gpio [7] = ( (address & 0xffff) << 8 ) | 0x04;//CMD_ADDR_LO | (1 << PIN_WR);
+  gpio [7] = 0x80;
+  gpio [10] = 0x80;
+  gpio [10] = TXN_END;
+
+  gpio [7] = ( ( (fc << 13) | 0x0200 | (address >> 16)  ) << 8 ) | 0x08;//CMD_ADDR_HI | (1 << PIN_WR);
+  gpio [7] = 0x80;
+  gpio [10] = 0x80;
+  gpio [10] = TXN_END;
+
+  gpio [7] = 0x40;//(REG_DATA << PIN_A0) | (1 << PIN_RD);
+
+  gpio [0] = GPFSEL0_INPUT;
+  gpio [1] = GPFSEL1_INPUT;
+  gpio [2] = GPFSEL2_INPUT;
+
+  while ( gpio [13] & 1 );
+  
+  l = gpio [13];
+
+ 	gpio [10] = TXN_END;
+
+
+
+  g_buserr = CHECK_BERR (l);
+
+#ifdef STATS
+  RWstats.r16++;
+#endif
+
+return d | ( (l >> 8) & 0xFFFF );
+#endif
 }
 
 
+inline
 void ps_write_status_reg ( unsigned int value ) 
 {
-  //while ( PS_LOCK );
-
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
   gpio [2] = GPFSEL2_OUTPUT;
@@ -440,53 +618,17 @@ void ps_write_status_reg ( unsigned int value )
 #endif
 }
 
-#if (0)
+
+inline
 uint16_t ps_read_status_reg () 
 {
   static uint32_t l;
 
-  //while ( PS_LOCK );
   while ( gpio [13] & 1 );
 
   gpio [7] = 0x4C; //(REG_STATUS << PIN_A0) | (1 << PIN_RD);
 
-  while ( ( l = gpio [13] ) & 1 )
-    ;
-
-  l = gpio [13];
-
-  gpio [10] = TXN_END;
-
-  g_irq = CHECK_IRQ (l);
-  //g_buserr = CHECK_BERR (l);
-
-#ifdef STATS
-  RWstats.rstatus++;
-#endif
-
-  return (l >> 8);
-}
-
-#else
-
-uint16_t ps_read_status_reg () 
-{
-  static uint32_t l;
-
-  //while ( PS_LOCK );
-  //while ( gpio [13] & 1 );
-
-  //gpio [0] = GPFSEL0_OUTPUT;
-  //gpio [1] = GPFSEL1_OUTPUT;
-  //gpio [2] = GPFSEL2_OUTPUT;
-
-  gpio [7] = 0x4C; //(REG_STATUS << PIN_A0) | (1 << PIN_RD);
-
-  //gpio [0] = GPFSEL0_INPUT;
-  //gpio [1] = GPFSEL1_INPUT;
-  //gpio [2] = GPFSEL2_INPUT;
-
-  while ( (l = gpio [13]) & 1 );
+  while ( gpio [13] & 1 );
 
   l = gpio [13];
 
@@ -498,25 +640,24 @@ uint16_t ps_read_status_reg ()
 
   return (l >> 8);
 }
-#endif
 
 
+inline
 void ps_reset_state_machine () 
 {
   ps_write_status_reg ( STATUS_BIT_INIT );
-  usleep(1500);
+  usleep(16);
   ps_write_status_reg ( 0 );
-  usleep(100);
+  usleep(16);
 }
 
 
 /* pulse the reset line - assert for 100ms */
+inline
 void ps_pulse_reset () 
 {
- // ps_write_status_reg(0);
   ps_write_status_reg ( STATUS_BIT_RESET );
-  usleep(10000);
- // ps_write_status_reg(STATUS_BIT_RESET);
+  usleep(16);
   ps_write_status_reg ( 0 );
-  usleep(100);
+  usleep(16);
 }
