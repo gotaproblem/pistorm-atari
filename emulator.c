@@ -165,7 +165,6 @@ int do_cache( uint32_t address, int size, unsigned int *value, int isread ) {
   }
 */
   //if( !(address >= 0x000800 && address < 0x400000 ) ) // STRAM only without low RAM (have to perform this check late as sniffing registers above)
-  //if( !(address >= 0x0005B0 && (address < (ATARI_MEMORY_SIZE - 0x8000)) ) ) 
   if( !(address >= 0x0005B0 && (address < ATARI_MEMORY_SIZE) ) ) 
     return 0;
 
@@ -267,18 +266,18 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
   static int      ret;
 
 
-  //if ( flushstate > 0 ) // cache is invalid
-  //  return 0;
+  if ( flushstate > 0 ) // cache is invalid
+    return 0;
 
-  if ( flushstatereq ) //&& !flushstate ) // there's been a request to flush and it's not yet set the flush thread's state variable
+  if ( flushstatereq && !flushstate ) // there's been a request to flush and it's not yet set the flush thread's state variable
   {
-      //if ( !pthread_mutex_trylock ( &cachemutex ) ) 
-      //{
-        //flushstate = 1;
+      if ( !pthread_mutex_trylock ( &cachemutex ) ) 
+      {
+        flushstate = 1;
         flushstatereq = 0;
 
-      //  pthread_mutex_unlock ( &cachemutex );
-      //}
+        pthread_mutex_unlock ( &cachemutex );
+      }
       memset ( cacheTable_p, 0, ATARI_MEMORY_SIZE >> 4 );
 
       return 0;
@@ -300,7 +299,7 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
   }    
 
   // STRAM only without low RAM (have to perform this check late as sniffing registers above)
-  if ( ! ( address >= 0x0005B0 && address < ATARI_MEMORY_SIZE  ) )
+  if ( ! ( address >= 0x0005B0 && (address < ATARI_MEMORY_SIZE) ) )
   //if ( address >= ATARI_MEMORY_SIZE )
     return 0;
 
@@ -318,7 +317,7 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
         
         if ( ( cacheTable_p [cacheTblAddress] & cacheHitBits ) != cacheHitBits)
         {
-         // printf ( "4 MISS address 0x%X, cacheTable 0x%X, cache bits 0x%X\n", address, cacheTblAddress, cacheHitBits );
+          //printf ( "4 MISS address 0x%X, cacheTable 0x%X, cache bits 0x%X\n", address, cacheTblAddress, cacheHitBits );
           ret = MISS;
         }
 
@@ -326,7 +325,7 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
           *value = (cache_p [address] << 24) | 
               (cache_p [address + 1] << 16) | 
               (cache_p [address + 2] << 8)  | 
-                cache_p [address + 3];
+               cache_p [address + 3];
 
         break;
 
@@ -336,7 +335,7 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
         
         if ( ( cacheTable_p [cacheTblAddress] & cacheHitBits ) != cacheHitBits )
         {
-         // printf ( "2 MISS address 0x%X, cacheTable 0x%X, cache bits 0x%X - data 0x%X\n", address, cacheTblAddress, cacheHitBits, cacheTable_p [cacheTblAddress] );
+          //printf ( "2 MISS address 0x%X, cacheTable 0x%X, cache bits 0x%X\n", address, cacheTblAddress, cacheHitBits );
           ret = MISS;
         }
 
@@ -351,7 +350,7 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
      
         if ( ( cacheTable_p [cacheTblAddress] & cacheHitBits ) != cacheHitBits )
         {
-        //  printf ( "1 MISS address 0x%X, cacheTable 0x%X, cache bits 0x%X\n", address, cacheTblAddress, cacheHitBits );
+          //printf ( "1 MISS address 0x%X, cacheTable 0x%X, cache bits 0x%X\n", address, cacheTblAddress, cacheHitBits );
           ret = MISS;
         }
 
@@ -361,7 +360,9 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
         break;
     }
 
-    //printf("HIT (%8.8x = %2.2x)\n", address, *value);
+    //if ( ret == HIT )
+    //  printf ( "HIT (%8.8x = %2.2x)\n", address, *value );
+
     return ret;
   }
 
@@ -369,7 +370,8 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
   {
     cacheTblAddress = address >> 4;
     offset = address & 0x0f;
-
+    //printf ( "cache write 0x%X 0x%X size = %d, offset = 0x%X - cacheTblAddress = 0x%X\n", address, *value, size, offset, cacheTblAddress );
+    
     switch ( size ) 
     {
       case 4:
@@ -414,7 +416,8 @@ void *cacheflusher ( void *dummy )
   {
     if ( flushstate ) 
     {
-      memset ( (void *)cacheTable_p, 0, ATARI_MEMORY_SIZE / 16 );
+      memset ( cacheTable_p, 0, ATARI_MEMORY_SIZE >> 4 );
+      memset ( cache_p, 0, ATARI_MEMORY_SIZE );
 
       pthread_mutex_lock ( &cachemutex );
       flushstate = 0;
@@ -423,7 +426,7 @@ void *cacheflusher ( void *dummy )
     }
 
     else
-      usleep (100); //(1e5);
+      usleep (1000); //(1e5);
   }
   //printf("End of Flushing thread\n");
 }
@@ -739,8 +742,11 @@ int main ( int argc, char *argv[] )
   int err;
   pthread_t rtg_tid, cpu_tid, flush_tid;
   time_t t;
+#ifndef PI3
+  int targetF = 125;
+#else
   int targetF = 200;
-
+#endif
   RTG_EMUTOS_VGA = false;
   RTG_enabled = false;
   FPU68020_SELECTED = false;
@@ -917,13 +923,17 @@ int main ( int argc, char *argv[] )
     }
   }
   
-  /* get Atari memory size */
+  /* 
+   * determine Atari memory size 
+   */
   printf ( "[MAIN] Checking physical ATARI memory... " );
 
   fc = 6;
   ATARI_MEMORY_SIZE = 0;
 
-  ps_write_8 ( ((uint32_t)0x00ff8001), ATARI_MMU_4M ); 
+  ps_write_8 ( ((uint32_t)0x00ff8001), ATARI_MMU_4M ); // configure MMU for max amount of memory
+
+  usleep ( 5 );
 
   for ( int m = 0, s = 0x00080000; m < 4; m++, s <<= 1 )
   {     
@@ -952,7 +962,6 @@ int main ( int argc, char *argv[] )
 
     sigint_handler (9);
   }
-
 
   fc = 6;
   g_buserr = 0;
@@ -1114,12 +1123,9 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
   if ( ET4000Initialised && ( (addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP) || (addr >= 0xFEC00000 && addr < 0xFEDC0400) ) )
   //if ( ET4000Initialised && (addr >= 0x00A00000 && addr < 0x00DFFFFF) )
   {
-    // RTG_LOCK = true;
     //printf ( "calling et4000Read () with addr 0x%X\n", addr );
    
     r = et4000Read ( addr, res, type );
-   
-    //RTG_LOCK = false;
 
     return r;
   }
@@ -1179,6 +1185,7 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
   if ( platform_read_check ( OP_TYPE_BYTE, address, &platform_res ) ) 
   {
     PS_LOCK = false;
+
     return platform_res;
   }
 
@@ -1199,6 +1206,7 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
     if ( do_cache ( address, 1, &value, 1 ) )
     {
       PS_LOCK = false;
+
       return value;
     }
   }
@@ -1216,12 +1224,10 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
   }
 */
 
-  //while ( RTG_LOCK );
-  //PS_LOCK = true;
-  r = ps_read_8 ( address );  
+  r = ps_read_8 ( address ); 
+
   PS_LOCK = false;
-  //if ( g_buserr )
-  //  printf ( "RD 0x%X berr - BYTE 0x%X\n", address, r );
+  
   return r;
 }
 
@@ -1236,6 +1242,7 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
   if ( platform_read_check ( OP_TYPE_WORD, address, &platform_res ) ) 
   {
     PS_LOCK = false;
+
     return platform_res;
   }
 
@@ -1255,17 +1262,15 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
     if ( do_cache ( address, 2, &value, 1 ) )
     {
       PS_LOCK = false;
+
       return value;
     }
   }
 
-  //while ( RTG_LOCK );
-  //PS_LOCK = true;
-  
   r = ps_read_16 ( address );
+
   PS_LOCK = false;
-  //if ( g_buserr )
-  //  printf ( "RD 0x%X berr - WORD 0x%X\n", address, r );
+  
   return r;
 }
 
@@ -1276,9 +1281,11 @@ unsigned int m68k_read_memory_32 ( uint32_t address )
   static uint32_t r;
 
   PS_LOCK = true;
+
   if (platform_read_check ( OP_TYPE_LONGWORD, address, &platform_res ) ) 
   {
     PS_LOCK = false;
+
     return platform_res;
   }
 
@@ -1298,17 +1305,15 @@ unsigned int m68k_read_memory_32 ( uint32_t address )
     if ( do_cache( address, 4, &value, 1 ) )
     {
       PS_LOCK = false;
+
       return value;
     }
   }
 
-  //while ( RTG_LOCK );
-  
-  //PS_LOCK = true;
   r = ps_read_32 ( address );
+
   PS_LOCK = false;
-  //if ( g_buserr )
-  //  printf ( "RD 0x%X berr - DWORD 0x%X\n", address, r );
+  
   return r;
 }
 
@@ -1391,12 +1396,7 @@ void m68k_write_memory_8 ( uint32_t address, unsigned int value )
     return;
   }
 
-  //while ( RTG_LOCK );
-  //PS_LOCK = true;
   ps_write_8 ( address, value );
-  
-  //if ( g_buserr )
-  //  printf ( "WR 0x%X berr - BYTE\n", address );
 
   if ( WTC_initialised )
     do_cache ( address, 1, &value, 0 );
@@ -1426,12 +1426,7 @@ void m68k_write_memory_16 ( uint32_t address, unsigned int value )
   }
   */
 
-  //while ( RTG_LOCK );
-  //PS_LOCK = true;
   ps_write_16 ( address, value );
-  //PS_LOCK = false;
-  //if ( g_buserr )
-  //  printf ( "WR 0x%X berr - WORD\n", address );
 
   if ( WTC_initialised )
     do_cache ( address, 2, &value, 0 );
@@ -1461,12 +1456,7 @@ void m68k_write_memory_32 ( uint32_t address, unsigned int value )
   }
   */
  
-  //while ( RTG_LOCK );
-  //PS_LOCK = true;
   ps_write_32 ( address, value );
-  //PS_LOCK = false;
-  //if ( g_buserr )
-  //  printf ( "WR 0x%X berr - DWORD\n", address );
 
   if ( WTC_initialised )
     do_cache ( address, 4, &value, 0 );

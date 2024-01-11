@@ -115,7 +115,7 @@ gpio + 34 = GPAFEN  GPIO Pin Asysnchronous Falling Edge Detect Enable 0
 #ifndef PI3 
   /* THIS IS FOR PI4 */
   #define MAX_PI_CLK 125
-  #define PLL_TO_USE PLLC
+  #define PLL_TO_USE PLLD
 
 #else 
   /* THIS IS FOR PI3 */
@@ -162,7 +162,7 @@ static void setup_gpclk ( int targetF )
   if ( targetF > MAX_PI_CLK )
   {
     targetF = MAX_PI_CLK;
-    printf ( "[INIT] core freq clock was set too high for the PI model - using default of %d\n", MAX_PI_CLK );
+    //printf ( "[INIT] core freq clock was set too high for the PI model - using default of %d\n", MAX_PI_CLK );
   }
 
   div = clk / (float)targetF;
@@ -189,8 +189,8 @@ static void setup_gpclk ( int targetF )
   *(gpclk + (CLK_GP0_CTL / 4)) = CLK_PASSWD | PLL_TO_USE | (1 << 4); /* set PLL to use 6=plld, 5=pllc and start clock */
   usleep (100);
 
-  //while ( ( ( *(gpclk + (CLK_GP0_CTL / 4))) & (1 << 7) ) == 0 ); /* wait for clock to start */
-  //usleep (100);
+  while ( ( ( *(gpclk + (CLK_GP0_CTL / 4))) & (1 << 7) ) == 0 ); /* wait for clock to start */
+  usleep (100);
 
 #else
 int pll = *(gpclk + (CLK_GP0_CTL / 4)) & 0x0f;
@@ -218,6 +218,7 @@ inline
 void ps_write_16 ( uint32_t address, uint16_t data )
 {
   static uint32_t l;
+
 #if (1)
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
@@ -244,7 +245,7 @@ void ps_write_16 ( uint32_t address, uint16_t data )
 
 	while ( ( l = gpio [13] ) & 1 ); // wait for firmware to signal transaction completed
 
-  //g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -278,6 +279,7 @@ void ps_write_8 ( uint32_t address, uint16_t data )
 
   else
     data &= 0xff;
+
 #if (1)
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
@@ -304,7 +306,7 @@ void ps_write_8 ( uint32_t address, uint16_t data )
   
 	while ( ( l = gpio [13] ) & 1 );
 
-  //g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
   
 #ifdef STATS
@@ -334,10 +336,6 @@ void ps_write_32 ( uint32_t address, uint32_t value )
   static uint32_t l;
 
 #if (1)
-  //ps_write_16 ( address, value >> 16 );
-  //ps_write_16 ( address + 2, value );
-
-
   gpio [0] = GPFSEL0_OUTPUT;
   gpio [1] = GPFSEL1_OUTPUT;
   gpio [2] = GPFSEL2_OUTPUT;
@@ -392,7 +390,7 @@ void ps_write_32 ( uint32_t address, uint32_t value )
 	while ( ( l = gpio [13] ) & 1 ); // wait for firmware to signal transaction completed
 
 
-  //g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 #else
   GPFSEL_OUTPUT;
@@ -457,7 +455,7 @@ uint16_t ps_read_16 ( uint32_t address )
 
  	gpio [10] = TXN_END;
 
-  //g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -502,7 +500,7 @@ uint8_t ps_read_8 ( uint32_t address )
 
   gpio [10] = TXN_END;
   
- // g_irq = CHECK_IRQ (l);
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS
@@ -585,7 +583,7 @@ uint32_t ps_read_32 ( uint32_t address )
  	gpio [10] = TXN_END;
 
 
-
+  g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
 #ifdef STATS

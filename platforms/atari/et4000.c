@@ -226,9 +226,7 @@ int et4000Init ( void )
     return 1;
 }
 
-
-static void     *dst;
-static void     *src;    
+   
 static uint8_t  plane0, plane1, plane2, plane3;
 static uint32_t address;
 static uint32_t pixel;
@@ -237,47 +235,28 @@ static struct   timeval stop, start;
 
 
 void et4000Draw ( int windowWidth, int windowHeight )
-//void et4000Draw ( uint32_t offset )
 {
-    src = (void *)NULL; 
-    dst = (void *)NULL;
     SCREEN_SIZE = windowWidth * windowHeight;
-
-
     RTG_VSYNC = 0;
-
-    //while ( PS_LOCK ) //RTG_LOCK )
-     //   ;
-
-    //memcpy ( RTGbuffer, VRAMbuffer, MAX_VRAM );
 
     /* Monochrome */
     if ( COLOURDEPTH == 1 )
     {
-     
-        //if ( !fbptr )
-        //    return;
         uint16_t *dptr = RTGbuffer;//fbptr;
         uint8_t  *sptr = VRAMbuffer;//RTGbuffer;
-        //int ppb;
 
         for ( uint32_t address = 0, pixel = 0; pixel < SCREEN_SIZE; address++ ) 
-        //uint32_t address = offset;
-        //uint32_t pixel = 0;
-        //int ppb = 0;
         {
             for ( int ppb = 0; ppb < 8; ppb++, pixel++ )
             {
-                //while ( PS_LOCK )
-                //    ;
+                while ( PS_LOCK )
+                    ;
 
                 dptr [pixel] = ( sptr [address] >> (7 - ppb) ) & 0x1 ? 0x0020 : 0xffff;
             }
         }
-
-       // memcpy ( fbp, VRAMbuffer, SCREEN_SIZE );
     }
-#if (1)
+
     /* Colour 8bit 256 colours */
     else if ( COLOURDEPTH == 2 )
     {
@@ -393,18 +372,19 @@ void et4000Draw ( int windowWidth, int windowHeight )
             dptr [pixel++] = (uint32_t)( sptr [address++] << 16 | sptr [address++] << 8 | sptr [address++] );
         }
     }
-#endif
-    //while ( PS_LOCK || RTG_LOCK);
+
     if ( fbp != (void *)NULL )
-        memcpy ( fbp, RTGbuffer, screensize );
-    //memset ( fbp, 0x8F, screensize );
-    //PS_LOCK = false;
+    {
+        /* cryptodad - can't use memcpy as have to check for active ps_read/write */
+        //memcpy ( fbp, RTGbuffer, screensize );
+        for ( int n = 0; n < screensize; n++ )
+        {
+            while ( PS_LOCK )
+                ;
 
-    //static int i = 0;
-    //if ( i % 10 == 0 )
-    //  printf ( "still running %d\n", i );
-
-    //i++;
+            *((char *)fbp + n) = *((char *)RTGbuffer + n);
+        }
+    }
 }
 
 
@@ -432,6 +412,8 @@ void *et4000Render ( void* vptr )
         /* 50 Hz 20000 (20ms), 60 Hz 16666 (16.6ms), 70 Hz 14285 (14.2ms) */
         gettimeofday ( &start, NULL );
         unknown = false;
+
+        while ( PS_LOCK );
 
         if ( ET4000enabled && RTGresChanged )
         {
