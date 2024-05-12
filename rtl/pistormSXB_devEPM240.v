@@ -1,22 +1,15 @@
 /*
- * 13th October 2023
+ * 2nd May 2024
  *
- * EPM240 / 570
- * Has ps_read_status_reg fix
- * Has long hold fix (S7) for 68000
+ * Pi4 1500-2100 / 500-750
+ * STe
  * 
- * Tested on:
- * 	my STe with Pi3A+/374
- *  Mikerochip microATX ST with Pi4/374
- *
- * Memspeed 3.7/3.7 MB/s
+ * FDD untested
+ * ACSI works
+ * IDE works
+ * Some PP games run
  *
  */
-
-/* Build Definitions */
-//`define L374
-//`define 
-//`define NEWARB
 
  
 module pistormsxb_devEPM240(
@@ -24,7 +17,7 @@ module pistormsxb_devEPM240(
     output reg     	PI_IPL_ZERO,        	// GPIO1
     input   [1:0]   PI_A,       			// GPIO[3..2]
     input           PI_CLK,     			// GPIO4
-    output      	PI_RESET,   			// GPIO5
+    output      	PI_RESET,   			// GPIO5 - ATARI repurposed to be BERR
     input           PI_RD,      			// GPIO6
     input           PI_WR,      			// GPIO7
     inout   [15:0]  PI_D,       			// GPIO[23..8]
@@ -75,14 +68,17 @@ module pistormsxb_devEPM240(
 	wire c8m 								= c8m_sync[2];
 	//wire c1c3_clk 							= !(M68K_C1 ^ M68K_C3);
 
+	/* IO Commands */
 	localparam REG_DATA 					= 2'd0;
 	localparam REG_ADDR_LO 					= 2'd1;
 	localparam REG_ADDR_HI 					= 2'd2;
 	localparam REG_STATUS 					= 2'd3;
 	
+	/* Logic levels */
 	localparam LO							= 1'b0;
 	localparam HI							= 1'b1;
 	
+	/* State machine states */
 	localparam S0							= 3'd0;
 	localparam S1							= 3'd1;
 	localparam S2							= 3'd2;
@@ -92,6 +88,7 @@ module pistormsxb_devEPM240(
 	localparam S6							= 3'd6;
 	localparam S7							= 3'd7;
 	
+	/* E clock states */
 	localparam E0							= 4'd0;
 	localparam E2							= 4'd2;
 	localparam E5							= 4'd5;
@@ -100,7 +97,9 @@ module pistormsxb_devEPM240(
 	localparam E9							= 4'd9;
 	localparam E10							= 4'd10;
 
+
 	initial begin
+	
 		FC_INT 								<= 3'b111;
 		RW_INT 								<= HI;
 		M68K_E 								<= LO;
@@ -125,22 +124,14 @@ module pistormsxb_devEPM240(
 
 	reg [15:0] data_out;
 
-	//wire trigger;
-	//assign trigger = (PI_A == REG_STATUS && rd_rising);
-	//assign PI_D = trigger ? {ipl, 11'b0, !( M68K_RESET_n || reset_out ), 1'b0} : 16'bz;
-	assign PI_D = PI_A == REG_STATUS && PI_RD ? data_out : 16'bz;
-	
-	always @(posedge c200m) begin
-	
-		if (rd_rising && PI_A == REG_STATUS) begin
-		
-			data_out <= {ipl, 11'b0, !( M68K_RESET_n || reset_out ), 1'b0};
-		end
-	end
+	wire trigger;
+	assign trigger = (PI_A == REG_STATUS && rd_rising);
+	assign PI_D = trigger ? {ipl, 11'b0, ~M68K_RESET_n, 1'b0} : 16'bz;
 
-	reg [15:0] status;
-	wire reset_out 							= !status[1]; /* ps_protocol.c -> ps_write_status_reg (STATUS_BIT_INIT) */
-
+	reg [15:0] status						= 16'd0;
+	wire reset_out 							= status[1]; /* reset hardware - ps_write_status_reg (STATUS_BIT_RESET) */
+	wire reset_sm							= status[0]; /* reset state machine - ps_write_status_reg (STATUS_INIT) */
+	
 	assign M68K_RESET_n 					= reset_out ? LO : 1'bz;
 	assign M68K_HALT_n 						= reset_out ? LO : 1'bz;
 
@@ -154,6 +145,7 @@ module pistormsxb_devEPM240(
 	reg LDS_INT;
 	reg RW_INT;
 	reg VMA_INT;
+
 	
 	assign LTCH_D_WR_U 						= PI_A == REG_DATA && CMDWR;//PI_WR;
 	assign LTCH_D_WR_L 						= PI_A == REG_DATA && CMDWR;//PI_WR;
@@ -162,6 +154,7 @@ module pistormsxb_devEPM240(
 	//assign LTCH_A_16 						= PI_A == REG_ADDR_HI && PI_WR;
 	//assign LTCH_A_24 						= PI_A == REG_ADDR_HI && PI_WR;
 	assign LTCH_D_RD_OE_n					= !(PI_A == REG_DATA && PI_RD);
+	
 	
 	reg a0;
 
@@ -207,91 +200,48 @@ module pistormsxb_devEPM240(
 	
 
 	/* Bus Arbitration */
-	reg [3:0] BG_DELAY 						= 4'b1111;
 	reg [3:0] BR_DELAY 						= 4'b1111;
-	reg [3:0] BR_DELAYr						= 4'b1111;
 	reg [5:0] BGK_DELAY 					= 6'b000000;
-	reg [4:0] BGK_DELAYr 					= 5'b00000;
-	reg [3:0] BGK_DELAYf 					= 4'b0000;
-	reg [3:0] AS_DELAY 						= 4'b1111;
 	reg BG_INT								= HI;
 	assign M68K_BG_n 						= BG_INT;
+	always @(c8m) begin
 	
-	reg [3:0] BRstart						= 4'd15;
-	
-	always @( c8m ) begin // half-cycles
-		
-		BG_DELAY 							<= { BG_DELAY[3:0],  M68K_BG_n };
 		BR_DELAY 							<= { BR_DELAY[3:0],  M68K_BR_n };
-		AS_DELAY							<= { AS_DELAY[3:0],  M68K_AS_n };
 		BGK_DELAY 							<= { BGK_DELAY[5:0], M68K_BGACK_n };
-		
-		if (c8m_rising) begin
-		
-			BGK_DELAYr 						<= { BGK_DELAYr[4:0], M68K_BGACK_n };
-			BR_DELAYr 						<= { BR_DELAYr[3:0], M68K_BR_n };
-		end
-		
-		if (c8m_falling) begin
-		
-			BGK_DELAYf 						<= { BGK_DELAYf[3:0], M68K_BGACK_n };
-		end
-		
-		if ( BR_DELAYr[1:0] == 2'b10 && BRstart == 4'd15 )
-			BRstart 						<= state;
+	end
+	
+	always @( c8m ) begin
 		
 		/* processor active */
 		/* need AS otherwise Blitter and FDD don't work */
-		/* if emulating complete bus-cycle then BRstart will be S2 */
-		//if ( M68K_BG_n && !BR_DELAYr[2] && !M68K_AS_n && BRstart == S4 && state >= S4 ) begin
-		//if ( M68K_BG_n && !BR_DELAY[1] && !M68K_AS_n && BRstart > S0 && state >= S4 ) begin
-		if ( M68K_BG_n && !BR_DELAY[1] && !M68K_AS_n && state >= S4 ) begin
+		if ( M68K_BG_n && !BR_DELAY[3] && !M68K_AS_n && state > S3 ) begin
 		
 			if (c8m_falling) begin
 			
 				BG_INT 						<= LO;
-				BRstart						<= 4'd15;
 			end
 		end
 		
-		/* bus inactive */
-		/*
-		else if ( M68K_BG_n && !BR_DELAY[2] && M68K_AS_n == 1'bz && state == S0 ) begin
+		/* bus inactive TODO */
 		
-			if (c8m_falling) begin
-			
-				BG_INT 						<= LO;
-				BRstart						<= 4'd15;
-			end	
-		end
-		*/
-		/* special case */
-		/*
-		else if ( M68K_BG_n && BR_DELAYr[3:0] == 4'b0000 && state >= S4 && M68K_BGACK_n  ) begin
+		/* special case TODO */
 		
-			if (c8m_falling) begin
-			
-				BG_INT 						<= LO;
-				BRstart						<= 4'd15;
-			end
-		end
-		*/
 		else begin
 			
-			//if ( !M68K_BG_n && !BGK_DELAYf[1] && state == S0 ) begin
-			if ( !M68K_BG_n && !BGK_DELAY[1] && state == S0 ) begin
+			if ( !M68K_BG_n && BR_DELAY[3:0] == 4'b1111 ) begin	
 			
 				if (c8m_rising)
 					BG_INT 					<= HI;
 			end
 		end
 	end	
+
 	
 	
 	/* Transaction flag */
 	wire TXNstart;
 	reg TXNreset 							= LO; 
-	assign TXNstart 						= (PI_A == REG_ADDR_HI && CMDWR);
+	assign TXNstart 						= (PI_A == REG_ADDR_HI && CMDWR); //PI_WR);
 	
 	always @(TXNstart or TXNreset or PI_TXN_IN_PROGRESS) begin
 	
@@ -307,7 +257,7 @@ module pistormsxb_devEPM240(
 	
 	/* WRITE commands */
 	reg [2:0] op_fc 						= 3'b111;
-
+	
 	assign CMDWR = PI_WR;
 	
 	always @(CMDWR) begin
@@ -370,13 +320,15 @@ module pistormsxb_devEPM240(
 						
 		case (state)
 		
-			/* this first state is needed to sync the bus */
+			/* sync the bus */
 			S0: begin
 					
 				/* don't run state machine if BGACK asserted */
-				if ( BGK_DELAY[0] ) begin
+				//if ( M68K_BGACK_n ) begin	
+				if ( BGK_DELAY[3] ) begin	
 				
 					RW_INT 					<= HI;
+					FC_INT					<= 3'b111;
 
 					/* 374 reset latch */
 					LTCH_D_RD_U 			<= LO;
@@ -384,90 +336,62 @@ module pistormsxb_devEPM240(
 
 					if (c8m_falling) begin
 					
-						state 				<= S1;
+						state 				<= S2;
 					end
 				end
 			end
 
-			/* EPM540 delay cycles needed it seems */ 
+
+			//S1: begin
 			
-			S1: begin
-			
-				state 						<= S2;
-			end
+			//	state 						<= S2;
+			//end
 			
 			
 			S2: begin
 			
+				if (c8m_rising)
+					state 					<= S3;
+			end
+			
+			
+			S3: begin
+			
+				state 						<= S4;
+			end
+			
+
+			S4: begin			
+		
 				if (PI_TXN_IN_PROGRESS) begin
 				
 					PI_BERR 				<= HI;
 						
-					//LTCH_D_WR_OE_n 			<= op_rw;
+					LTCH_D_WR_OE_n 			<= op_rw;
 					LTCH_A_OE_n 			<= LO;
 					
 					FC_INT 					<= op_fc;
 					RW_INT 					<= op_rw;
 					
 					AS_INT 					<= LO;
-					
-					if ( op_rw ) begin
-				
-						UDS_INT 			<= op_uds_n;
-						LDS_INT 			<= op_lds_n;
-					end
-				
-					if (c8m_falling) begin
-				
-						state 				<= S3;
-					end
-				end
-			end
-			
-			
-			S3: begin
-			
-				if (!op_rw)
-					LTCH_D_WR_OE_n 			<= op_rw;
-				
-				if (c8m_rising) begin
-				
-					state 					<= S4;
-				end
-			end
-			
-			
-			S4: begin							
-					
-				read						<= op_rw;
-				
-				if ( !op_rw ) begin
-			
 					UDS_INT 				<= op_uds_n;
 					LDS_INT 				<= op_lds_n;
-				end
-				
-				if (c8m_falling) begin
 					
-					if (!M68K_DTACK_n) begin
-						state 				<= S5;
-					end
+					read					<= op_rw;
 					
-					else if (!M68K_BERR_n) begin
-						state 				<= S5;
-					end
-					
-					/* IACK bus-cycle TODO */						
-					else if (!M68K_VMA_n && e_counter == E8) begin
-				
-						state 				<= S5;
-					end
-					
-					else begin
-			
-						if (!M68K_VPA_n && e_counter == E2) begin
+					if (c8m_falling) begin
 						
-							VMA_INT			<= LO;
+						if (!M68K_DTACK_n || !M68K_BERR_n || (!M68K_VMA_n && e_counter == E8) ) begin
+					
+							state 			<= S5;
+						end
+					
+						else begin
+			
+							if (!M68K_VPA_n && e_counter == E2) begin
+						
+								VMA_INT		<= LO;
+							end
 						end
 					end
 				end
@@ -486,26 +410,17 @@ module pistormsxb_devEPM240(
 				end
 			end   
 			
-			
+
 			S6: begin
-				
-				if ( !read ) begin
-				
-					PI_BERR 			<= M68K_BERR_n;
-					TXNreset 			<= HI;
-				end
-				
+			
 				state 						<= S7;
 			end
 			
-
+			
 			S7: begin				
-							
-				if ( read ) begin
-				
-					PI_BERR 				<= M68K_BERR_n;
-					TXNreset 				<= HI;
-				end
+						
+				PI_BERR 					<= M68K_BERR_n;
+				TXNreset 					<= HI;
 				
 				AS_INT 						<= HI;
 				UDS_INT 					<= HI;
@@ -513,19 +428,19 @@ module pistormsxb_devEPM240(
 				VMA_INT 					<= HI;
 					
 				if (c8m_falling) begin
-					
-					/* Oct 2023 - long hold as per Claude info for 68000 */
+				
 					LTCH_D_WR_OE_n 			<= HI; // data-bus hi-z
 					LTCH_A_OE_n 			<= HI; // address-bus hi-z
 					
 					state 					<= S0;
 				end
+
 			end
 			
 		endcase
 	
-		
-		if ( !M68K_RESET_n && !M68K_HALT_n && !reset_out )  begin
+	
+		if ( (!M68K_RESET_n && !M68K_HALT_n) || reset_sm ) begin
 		
 			state 							<= S0;
 			TXNreset 						<= HI;
