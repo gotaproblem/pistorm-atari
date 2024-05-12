@@ -9,9 +9,9 @@
 //#define CHKRANGE(a, b, c) a >= (unsigned int)b && a < (unsigned int)(b + c)
 #define CHKRANGE_ABS(a, b, c) a >= (uint32_t)b && a < (uint32_t) c
 
-static unsigned int target;
-//extern int ovl;
-extern volatile int g_irq;
+static uint32_t target;
+extern bool ET4000Initialised;
+//extern volatile int g_irq;
 //extern const char *map_type_names[MAPTYPE_NUM];
 //const char *op_type_names[OP_TYPE_NUM] = {
 //  "BYTE",
@@ -40,7 +40,6 @@ inline int handle_mapped_read ( struct emulator_config *cfg, uint32_t addr, uint
   for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS && cfg->map_type [i] != MAPTYPE_NONE; i++ ) 
   {
     if ( CHKRANGE_ABS ( addr, cfg->map_offset [i], cfg->map_high [i] ) )
-    //if ( addr >= cfg->map_offset [i] && addr < cfg->map_high [i] )
     {
       switch ( cfg->map_type [i] ) 
       {
@@ -50,25 +49,31 @@ inline int handle_mapped_read ( struct emulator_config *cfg, uint32_t addr, uint
         case MAPTYPE_RAM_NOALLOC:
         case MAPTYPE_FILE:
         
-          //if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMTOP )
-          //{        
-           // read_addr = RTGbuffer + (addr - NOVA_ET4000_VRAMBASE);
+          //if ( ET4000Initialised && (addr >= NOVA_ET4000_VRAMBASE && addr < 0x00DC0400) )
+          //{
+          //  et4000Read ( addr, &target, type );
+
+          //  *val = target;
+
+          //  return 1;
           //}
 
           //else
+          //{
             read_addr = cfg->map_data [i] + ( addr - cfg->map_offset [i] );
+          //}
          
           break;
+
         case MAPTYPE_REGISTER:
-          //if ( cfg->platform && cfg->platform->register_read ) 
-          //{
+
           if ( cfg->platform->register_read ( addr, type, &target ) != -1 ) 
           {
             *val = target;
-            //printf ( "*val = 0x%X\n", *val );
+      
             return 1;
           }
-          //}
+          
           return -1;
           break;
 
@@ -81,6 +86,7 @@ inline int handle_mapped_read ( struct emulator_config *cfg, uint32_t addr, uint
 
   if ( read_addr == NULL )
     return -1;
+    
 #if (0)
   switch ( type ) 
   {
@@ -136,10 +142,7 @@ inline int handle_mapped_write ( struct emulator_config *cfg, uint32_t addr, uin
   uint8_t *write_addr = NULL;
 
   for ( int i = 0; i < MAX_NUM_MAPPED_ITEMS && cfg->map_type[i] != MAPTYPE_NONE; i++ ) 
-  //for (int i = 0; i < MAX_NUM_MAPPED_ITEMS; i++) 
   {
-    //if (cfg->map_type[i] == MAPTYPE_NONE)
-    //  break;
 #if (0)    
     //else if (ovl && cfg->map_type[i] == MAPTYPE_RAM_WTC) {
     if ( cfg->map_type[i] == MAPTYPE_RAM_WTC) 
@@ -152,42 +155,38 @@ inline int handle_mapped_write ( struct emulator_config *cfg, uint32_t addr, uin
       }
     }
 #endif
+    /* need to determine what type of memory access this is
+       only way to do this is to look at address */
     if ( CHKRANGE_ABS ( addr, cfg->map_offset[i], cfg->map_high[i] ) ) 
     {
       switch ( cfg->map_type [i] ) 
       {
         case MAPTYPE_ROM:
+
           return 1;
           break;
+
         case MAPTYPE_RAM:
-        case MAPTYPE_RAM_NOALLOC:
-        case MAPTYPE_FILE:
+        //case MAPTYPE_RAM_NOALLOC:
+        //case MAPTYPE_FILE:
 
-          //if ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_VRAMTOP )
-          //{
-           // write_addr = RTGbuffer + (addr - NOVA_ET4000_VRAMBASE);
-          //}
-
-           // printf ( "mapped write 0x%X\n", addr );
-          //else
-            write_addr = cfg->map_data [i] + ( addr - cfg->map_offset [i] );
-
+          write_addr = cfg->map_data [i] + ( addr - cfg->map_offset [i] );
           res = 1;
-          
+
           goto write_value;
           break;
+
         case MAPTYPE_RAM_WTC:
-          //printf("Some write to WTC RAM.\n");
+          
           write_addr = cfg->map_data [i] + ( addr - cfg->map_offset [i] );
           res = -1;
+
           goto write_value;
           break;
+
         case MAPTYPE_REGISTER:
-          //printf ( "register write: addr 0x%X, value 0x%X/n", addr, value );
-          //if ( cfg->platform && cfg->platform->register_write ) 
-          //{
-            return cfg->platform->register_write ( addr, value, type );
-          //}
+  
+          return cfg->platform->register_write ( addr, value, type );
           break;
       }
     }
@@ -200,19 +199,19 @@ write_value:
   {
     case OP_TYPE_BYTE:
 
-      write_addr[0] = (unsigned char)value;
+      *write_addr = (uint8_t)value;
       
       break;
 
     case OP_TYPE_WORD:
 
-      ((uint16_t *)write_addr)[0] = htobe16 ( value );
+      *(uint16_t *)write_addr = htobe16 ( value );
 
       break;
 
     case OP_TYPE_LONGWORD:
 
-      ((uint32_t *)write_addr)[0] = htobe32 ( value );
+      *(uint32_t *)write_addr = htobe32 ( value );
 
       break;
 

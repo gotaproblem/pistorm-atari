@@ -19,6 +19,8 @@ extern volatile int RTGresChanged;
 extern int RTG_enabled;
 extern volatile uint16_t RTG_PAL_MODE;
 extern volatile uint16_t RTG_PALETTE_REG [16];
+extern bool ET4000Initialised;
+
 
 void configure_rtc_emulation_atari(uint8_t enabled) {
     if (enabled == atari_rtc_emulation_enabled)
@@ -36,64 +38,63 @@ bool first = true;
 int handle_register_read_atari ( uint32_t addr, unsigned char type, uint32_t *val ) 
 {
     static int res;
-    //printf ("%s IDE read\n", __func__ );
+    static int r;
         
-    if ( IDE_enabled ) 
+    if ( IDE_enabled && ( addr >= IDEBASE && addr < IDETOP ) )
     {
-        if ( addr >= IDEBASE && addr < IDETOP ) 
+        res = 1;
+        //printf ("IDE read 0x%X, type = %d\n", addr, type );
+        //IDEIF = (addr & 0xF0) + IDEBASE;
+
+        switch(type) 
         {
-            res = 1;
-            //printf ("IDE read 0x%X, type = %d\n", addr, type );
-            //IDEIF = (addr & 0xF0) + IDEBASE;
+            case OP_TYPE_BYTE:
+                *val = readIDEB ( addr );
+                
+                break;
 
-            switch(type) 
-            {
-                case OP_TYPE_BYTE:
-                    *val = readIDEB ( addr );
-                    
-                    break;
+            case OP_TYPE_WORD:
+                *val = readIDE ( addr );
+                
+                break;
 
-                case OP_TYPE_WORD:
-                    *val = readIDE ( addr );
-                    
-                    break;
+            case OP_TYPE_LONGWORD:
+                *val = readIDEL ( addr );
+                
+                break;
 
-                case OP_TYPE_LONGWORD:
-                    *val = readIDEL ( addr );
-                    
-                    break;
+            case OP_TYPE_MEM:
+                res = -1;
 
-                case OP_TYPE_MEM:
-                    res = -1;
-
-                    break;
-            }
-
-            /*
-            uint8_t mfp = ps_read_8 ( 0x00FFFA03 );
-            if ( !(mfp & 0x20) && first )
-            {
-                ps_write_8 ( 0x00FFFA03, mfp |= (1 << 5) ); // set
-                first = false;
-            }
-            printf ( "%s mfp = 0x%X\n", __func__, mfp );
-            printf ( "%s 0x00FFFA09 = 0x%X\n", __func__, ps_read_8 ( 0x00FFFA09 ) );
-            printf ( "%s 0x00FFFA0D = 0x%X\n", __func__, ps_read_8 ( 0x00FFFA0D ) );
-            printf ( "%s 0x11C = 0x%X\n", __func__, ps_read_8 ( 0x11C ) );
-            //ps_write_8 ( 0xFFFFFA03, mfp & ~(1 << 5) ); // clear
-            //ps_write_8 ( 0x00FFFA03, mfp |= (1 << 5) ); // set
-            printf ( "IDE read returns 0x%X\n", *val );
-            */
-            return res;
+                break;
         }
+
+        /*
+        uint8_t mfp = ps_read_8 ( 0x00FFFA03 );
+        if ( !(mfp & 0x20) && first )
+        {
+            ps_write_8 ( 0x00FFFA03, mfp |= (1 << 5) ); // set
+            first = false;
+        }
+        printf ( "%s mfp = 0x%X\n", __func__, mfp );
+        printf ( "%s 0x00FFFA09 = 0x%X\n", __func__, ps_read_8 ( 0x00FFFA09 ) );
+        printf ( "%s 0x00FFFA0D = 0x%X\n", __func__, ps_read_8 ( 0x00FFFA0D ) );
+        printf ( "%s 0x11C = 0x%X\n", __func__, ps_read_8 ( 0x11C ) );
+        //ps_write_8 ( 0xFFFFFA03, mfp & ~(1 << 5) ); // clear
+        //ps_write_8 ( 0x00FFFA03, mfp |= (1 << 5) ); // set
+        printf ( "IDE read returns 0x%X\n", *val );
+        */
+        return res;
     }
 
-   // if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGBASE + 0x8000 )
-   // {
-    //    return et4000read ( addr, val, type );
-        //printf ( "val = 0x%X\n", *val );
-        //return 1;
-    //}
+    if ( ET4000Initialised && ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP ) )
+    {
+        //printf ( "calling et4000Read () with addr 0x%X\n", addr );
+   
+        r = et4000Read ( addr, val, type );
+
+        return r;
+    }
 /*
     else if ( addr >= BLITTERBASE && addr < (BLITTERBASE + BLITTERSIZE) ) 
     {
@@ -116,51 +117,51 @@ int handle_register_write_atari ( uint32_t addr, unsigned int value, unsigned ch
     static int res;
     //printf ( "%s REGISTER write address 0x%X, value 0x%X\n", __func__, addr, value );
 
-    if ( IDE_enabled ) 
+    if ( IDE_enabled && ( addr >= IDEBASE && addr < IDETOP ) )
     {
-        if ( addr >= IDEBASE && addr < IDETOP ) 
+        res = 1;
+        //printf ("IDE write 0x%X, type = %d\n", addr, type );
+        //IDEIF = (addr & 0xF0) + IDEBASE;
+
+        switch ( type ) 
         {
-            res = 1;
-            //printf ("IDE write 0x%X, type = %d\n", addr, type );
-            //IDEIF = (addr & 0xF0) + IDEBASE;
+            case OP_TYPE_BYTE:
+                writeIDEB ( addr, value);
+                
+                break;
 
-            switch ( type ) 
-            {
-                case OP_TYPE_BYTE:
-                    writeIDEB ( addr, value);
-                    
-                    break;
+            case OP_TYPE_WORD:
+                writeIDE ( addr, value);
+                
+                break;
 
-                case OP_TYPE_WORD:
-                    writeIDE ( addr, value);
-                    
-                    break;
+            case OP_TYPE_LONGWORD:
+                writeIDEL ( addr, value);
+                
+                break;
+                
+            case OP_TYPE_MEM:
+                res = -1;
 
-                case OP_TYPE_LONGWORD:
-                    writeIDEL ( addr, value);
-                    
-                    break;
-                    
-                case OP_TYPE_MEM:
-                    res = -1;
-
-                    break;
-            }
-
-            //uint8_t mfp = ps_read_8 ( 0x00FFFA03 );
-            //if ( mfp & 0x20 )
-            //printf ( "%s mfp = 0x%X\n", __func__, mfp );
-            //ps_write_8 ( 0x00FFFA03, mfp & ~(1 << 5) ); // clear
-            //ps_write_8 ( 0x00FFFA03, mfp |= (1 << 5) ); // set
-
-            return res;
+                break;
         }
+
+        //uint8_t mfp = ps_read_8 ( 0x00FFFA03 );
+        //if ( mfp & 0x20 )
+        //printf ( "%s mfp = 0x%X\n", __func__, mfp );
+        //ps_write_8 ( 0x00FFFA03, mfp & ~(1 << 5) ); // clear
+        //ps_write_8 ( 0x00FFFA03, mfp |= (1 << 5) ); // set
+
+        return res;
     }
 
-    //if ( addr >= NOVA_ET4000_REGBASE && addr < NOVA_ET4000_REGBASE + 0x8000 )
-    //{
-    //    return et4000write ( addr, value, type );
-    //}
+    if ( ET4000Initialised && ( addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP ) )
+    {
+        //printf ( "calling et4000Write () with addr 0x%X\n", addr );
+        et4000Write ( addr, value, type );
+
+        return 1;
+    }
 
     return -1;
 }

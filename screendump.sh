@@ -1,4 +1,7 @@
 #!/bin/bash
+cwd=$(pwd)
+homedir="${cwd##*/}"
+
 if [ -d "../screendumps" ] ; then
     cd ../screendumps
     filename=screendump
@@ -9,6 +12,6 @@ if [ -d "../screendumps" ] ; then
     done
     filename=$filename$i
     
-    mv ../pistorm-atari/screendump.png "$filename".png
-    rm ../pistorm-atari/screendump.raw
+    mv ../$homedir/screendump.png "$filename".png
+    rm ../$homedir/screendump.raw
 fi

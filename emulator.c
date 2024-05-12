@@ -33,12 +33,14 @@
 #define MUSASHI_HAX
 #ifdef MUSASHI_HAX
 #include "m68kcpu.h"
+
 extern m68ki_cpu_core m68ki_cpu;
 extern int m68ki_initial_cycles;
 extern volatile int m68ki_remaining_cycles;
 
 #define M68K_END_TIMESLICE 	m68ki_initial_cycles = GET_CYCLES(); \
 	SET_CYCLES(0);
+
 #else
 #define M68K_SET_IRQ m68k_set_irq
 #define M68K_END_TIMESLICE m68k_end_timeslice()
@@ -92,6 +94,8 @@ extern volatile unsigned int *gpio;
 extern uint8_t fc;
 extern volatile uint16_t g_irq;
 extern volatile uint32_t g_buserr;
+extern volatile uint32_t g_ipl;
+//extern volatile uint32_t g_mask;
 extern bool RTG_enabled;
 extern bool ET4000Initialised;
 extern volatile unsigned int *gpio;
@@ -120,39 +124,49 @@ void cpu3 ( void )
 
 #if !MYWTC
 #define CACHESIZE 4096*1024
-#define CACHESIZEBYTES CACHESIZE * sizeof(uint16_t)
+//#define CACHESIZEBYTES CACHESIZE * sizeof(uint16_t)
 
-uint16_t cache[CACHESIZE]; // top byte used as valid flag
+volatile uint16_t cache[CACHESIZE]; // top byte used as valid flag
 static short flushstate = 0; // 0 active, 1 flush request
 pthread_mutex_t cachemutex;
 
-int do_cache( uint32_t address, int size, unsigned int *value, int isread ) {
+int do_cache( uint32_t address, int size, unsigned int *value, int isread ) 
+{
 	// size is 1,2,4
   static short flushstatereq = 0; // go around the houses a bit as don't want to lock for mutex
 
-  if( flushstate > 0) // cache is invalid
+
+  if ( flushstate > 0 ) // cache is invalid
     return 0;
 
-  if( flushstatereq && !flushstate ) { // there's been a request to flush and it's not yet set the flush thread's state variable
-      if( !pthread_mutex_trylock(&cachemutex) ) {
+  if ( flushstatereq && !flushstate ) // there's been a request to flush and it's not yet set the flush thread's state variable
+  { 
+      if ( !pthread_mutex_trylock (&cachemutex) ) 
+      {
         flushstate = 1;
         flushstatereq = 0;
-        pthread_mutex_unlock(&cachemutex);
+
+        pthread_mutex_unlock (&cachemutex);
       }
+
       return 0;
   }
 
   // DMA registers of interest are at 0x00FF8604 (trigger DMA) and 0x00FFFA01 (MFP GPIP bits to check for completion).
   // Sniff reads from 0x00FFFA01 with a mask against 0x20. If this results is 0, a DMA interrupt has triggered
   // Blitter not yet sniffed (disable it)
-  if( isread && address == 0x00FFFA01 ) {
+  if ( isread && address == 0x00FFFA01 ) 
+  {
     *value = ps_read_8 ( address );
-    if( ( *value & 0x20 ) == 0 ) {
-    //if( ( (*value & 0x20) || (*value & 0x08) ) == 0 ) {
+
+    if ( ( *value & 0x20 ) == 0 ) 
+    {
       flushstatereq=1;
     }
+
     return 1; // we return success here as we've done the read for you
   }
+
 /*
   if( isread && address == 0x00FFFA09 ) {
     //printf ( "do_cache () got blitter\n" );
@@ -164,74 +178,102 @@ int do_cache( uint32_t address, int size, unsigned int *value, int isread ) {
     return 1; // we return success here as we've done the read for you
   }
 */
+#if (1)
   //if( !(address >= 0x000800 && address < 0x400000 ) ) // STRAM only without low RAM (have to perform this check late as sniffing registers above)
-  if( !(address >= 0x0005B0 && (address < ATARI_MEMORY_SIZE) ) ) 
+  //if ( !(address >= 0x0005B4 && (address < ATARI_MEMORY_SIZE) ) ) 
+  if ( address < 0x000005B4 || address > ATARI_MEMORY_SIZE )
+  //if( ! (address < ATARI_MEMORY_SIZE) ) 
     return 0;
 
-	if( isread ) {
-    switch(size) {
-      case(4):
-        if( !(cache[address] & 0x1000) || !(cache[address+1] & 0x01000) || !(cache[address+2] & 0x1000) || !(cache[address+3] & 0x01000) ){
+  /* Cache Read */
+	if ( isread ) 
+  {
+    switch ( size ) 
+    {
+      /* DWORD 32bit */
+      case (4):
+        if ( !(cache [address] & 0x1000) || !(cache [address+1] & 0x01000) || !(cache [address+2] & 0x1000) || !(cache[address+3] & 0x01000) )
+        {
 //          printf("MISS\n");
           return 0;
         }
-        *value = ((0xff & cache[address]) << 24) | ((0xff & cache[address+1]) << 16) | ((0xff & cache[address+2]) << 8 ) | ((0xff & cache[address+3]));
+
+        *value = ((0xff & cache [address]) << 24) | ((0xff & cache [address+1]) << 16) | ((0xff & cache[address+2]) << 8 ) | ((0xff & cache[address+3]));
         return 1;
         break;
-      case(2):
-        if( !(cache[address] & 0x1000) || !(cache[address+1] & 0x01000) ) {
+
+        /* WORD 16bit */
+      case (2):
+        if ( !(cache [address] & 0x1000) || !(cache [address+1] & 0x01000) ) 
+        {
 //          printf("MISS\n");
           return 0;
         }
-        *value = ((0xff & cache[address]) << 8) | (0xff & cache[address+1]);
+
+        *value = ((0xff & cache [address]) << 8) | (0xff & cache [address+1]);
         return 1;
         break;
-      case(1):
+
+        /* BYTE 8bit */
+      case (1):
       default:
-        if( (cache[address] & 0x1000) == 0 ) {
+        if ( (cache [address] & 0x1000) == 0 ) 
+        {
 //          printf("MISS\n");
           return 0;
         }
-        *value = 0xff & cache[address];
+
+        *value = 0xff & cache [address];
 //        printf("HIT (%8.8x = %2.2x)\n", address, *value);
         return 1;
         break;
     }
   }
-  else {
-    switch( size ) {
-      case(4):
-        cache[address]    = 0x1000 | ( *value >> 24 ); // the 0x10 in top byte indicates valid cache entry
-        cache[address+1]  = 0x1000 | ( 0xff & ( *value >> 16 ) );
-        cache[address+2]  = 0x1000 | ( 0xff & ( *value >> 8 ) );
-        cache[address+3]  = 0x1000 | ( 0xff & *value );
+
+  /* Cache Write */
+  else 
+  {
+    switch ( size ) 
+    {
+      case (4):
+        cache [address]    = 0x1000 | ( *value >> 24 ); // the 0x10 in top byte indicates valid cache entry
+        cache [address+1]  = 0x1000 | ( 0xff & ( *value >> 16 ) );
+        cache [address+2]  = 0x1000 | ( 0xff & ( *value >> 8 ) );
+        cache [address+3]  = 0x1000 | ( 0xff & *value );
         break;
-      case(2):
-        cache[address]    = 0x1000 | ( *value >> 8 );
-        cache[address+1]  = 0x1000 | ( 0xff & *value );
+
+      case (2):
+        cache [address]    = 0x1000 | ( 0xff & ( *value >> 8 ) );
+        cache [address+1]  = 0x1000 | ( 0xff & *value );
         break;
-      case(1):
+
+      case (1):
       default:
-        cache[address]    = 0x1000 | *value;
+        cache [address]    = 0x1000 | *value;
         break;
     }
   }
+#endif
   return 1;
 }
 
 // separate thread to reduce impact of flushing 8MB memory each time!
-void *cacheflusher( void *dummy ) {
-  static uint8_t c = 0;
+void *cacheflusher ( void *dummy ) 
+{
+  //static uint8_t c = 0;
 
-  while( !cpu_emulation_running ) {
-    sleep(1);
-  }
+  while ( !cpu_emulation_running )
+    sleep (1);
 
-  while( cpu_emulation_running ) 
+  while ( cpu_emulation_running ) 
   {
-    if( flushstate ) 
+    if ( flushstate ) 
     {
-      memset( cache, 0, CACHESIZEBYTES );
+      uint32_t *ptr = (uint32_t *)cache;
+      //memset ( (void *)cache, 0, CACHESIZE ); //CACHESIZEBYTES );
+      for ( uint32_t n = 0; n < (CACHESIZE / 2); n++ )
+        *(ptr + n) = 0;
+
       pthread_mutex_lock( &cachemutex );
       flushstate = 0;
       pthread_mutex_unlock( &cachemutex );
@@ -240,7 +282,7 @@ void *cacheflusher( void *dummy ) {
     }
 
     else
-      usleep(1e5);
+      usleep ( 100 );
   }
   //printf("End of Flushing thread\n");
 }
@@ -278,7 +320,8 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
 
         pthread_mutex_unlock ( &cachemutex );
       }
-      memset ( cacheTable_p, 0, ATARI_MEMORY_SIZE >> 4 );
+
+      //memset ( cacheTable_p, 0, ATARI_MEMORY_SIZE >> 4 );
 
       return 0;
   }
@@ -299,8 +342,9 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
   }    
 
   // STRAM only without low RAM (have to perform this check late as sniffing registers above)
-  if ( ! ( address >= 0x0005B0 && (address < ATARI_MEMORY_SIZE) ) )
+  //if ( ! ( address >= 0x0005B0 && (address < ATARI_MEMORY_SIZE) ) )
   //if ( address >= ATARI_MEMORY_SIZE )
+  if ( address < 0x000005B4 || address > ATARI_MEMORY_SIZE )
     return 0;
 
 	if ( isread ) 
@@ -322,11 +366,13 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
         }
 
         else
+        {
           *value = (cache_p [address] << 24) | 
               (cache_p [address + 1] << 16) | 
               (cache_p [address + 2] << 8)  | 
                cache_p [address + 3];
-
+        }
+        
         break;
 
       /* addresses ending in 0, 2, 4, 6, 8, A, C, E */
@@ -408,15 +454,13 @@ int do_cache ( uint32_t address, int size, uint32_t *value, int isread )
 void *cacheflusher ( void *dummy ) 
 {
   while ( !cpu_emulation_running ) 
-  {
     sleep (1);
-  }
 
   while ( cpu_emulation_running ) 
   {
     if ( flushstate ) 
     {
-      memset ( cacheTable_p, 0, ATARI_MEMORY_SIZE >> 4 );
+      memset ( cacheTable_p, 0, ATARI_MEMORY_SIZE );//>> 4 );
       memset ( cache_p, 0, ATARI_MEMORY_SIZE );
 
       pthread_mutex_lock ( &cachemutex );
@@ -426,7 +470,7 @@ void *cacheflusher ( void *dummy )
     }
 
     else
-      usleep (1000); //(1e5);
+      usleep (100); //(1e5);
   }
   //printf("End of Flushing thread\n");
 }
@@ -434,6 +478,7 @@ void *cacheflusher ( void *dummy )
 
 
 #if (1)
+
 static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 {
 	/* Set our pool of clock cycles available */
@@ -444,6 +489,8 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 	if ( !CPU_STOPPED )
 	{
 		/* Main loop.  Keep going until we run out of clock cycles */
+    //for ( int n = num_cycles; n; n-- )
+    //{
 execute:      
     m68ki_use_data_space ();
 
@@ -457,6 +504,7 @@ execute:
     if ( g_buserr )
     {
       m68ki_exception_bus_error ( state ); 
+      
       g_buserr = 0;
     }
 
@@ -466,15 +514,18 @@ execute:
     // cryptodad make sure m68kcpu.h m68ki_set_sr() has relevent line commented out
     if ( GET_CYCLES () > 0 )
       goto execute;
+    //}
 
     REG_PPC = REG_PC;
 	}
 
   else
+    //m68ki_remaining_cycles = 0;
     SET_CYCLES ( 0 );
 
 	return;
 }
+
 #else
 /* Execute some instructions until we use up num_cycles clock cycles */
 /* ASG: removed per-instruction interrupt checks */
@@ -544,6 +595,8 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 	//return m68ki_initial_cycles - GET_CYCLES();
 }
 #endif
+
+
 struct termios oldt, newt;
 int oldf;
 
@@ -587,6 +640,7 @@ void *cpu_task ()
 {
   const struct sched_param priority = {99};
   uint16_t status;
+  uint8_t IPL;
 	m68ki_cpu_core *state = &m68ki_cpu;
 
   state->gpio = gpio;
@@ -605,6 +659,7 @@ run:
   m68k_execute_bef ( state, loop_cycles );
 
 #if (0)
+  
   status = ps_read_status_reg ();
   
   //if ( status != 0xFFFF )
@@ -624,17 +679,15 @@ run:
     m68k_pulse_reset ( state );
   }
 
-  //else
+  last_irq = status >> 13;
+
+  m68k_set_irq ( last_irq );
+
+  if ( last_irq )
   {
-    last_irq = status >> 13;
-
-    if ( last_irq )
-    {
-      m68k_set_irq ( last_irq );
-      m68ki_check_interrupts ( state );
-    }
+    m68ki_check_interrupts ( state );
   }
-
+  
 #else
 
 #if (0)
@@ -655,7 +708,7 @@ run:
 
         printf ( "[CPU] Emulation reset - status = 0x%X\n", status );
 
-        usleep ( 500000 ); 
+        usleep ( 1000000 ); 
 
         m68k_pulse_reset ( state );
       }
@@ -666,11 +719,13 @@ run:
 
         //printf ( "IPL %d\n", last_irq );
 
-        if ( last_irq != 0 )
-        {
+        //if ( last_irq != 0 )
+        //{
           m68k_set_irq ( last_irq );
           m68ki_check_interrupts ( state );
-        }
+        //}
+
+        //g_mask = CPU_INT_LEVEL >> 8;
       }
     }
   }
@@ -678,8 +733,8 @@ run:
   else
   {
     m68k_set_irq ( 0 );
-    m68ki_check_interrupts ( state );
   }  
+
 #else
 
   status = ps_read_status_reg ();
@@ -689,41 +744,33 @@ run:
     printf ( "bad status\n" );
   }
 
+  else if ( status == 0x0002 )
+  {
+    M68K_END_TIMESLICE;
+
+    //printf ( "[CPU] Emulation reset - status = 0x%X\n", status );
+    printf ( "[CPU] Emulation reset\n" );
+
+    usleep ( 1000000 ); 
+
+    m68k_pulse_reset ( state );
+  }
+
   else
   {
-    if ( status & 0x2 ) 
+    IPL = status >> 13;
+
+    CPU_INT_LEVEL = IPL << 8;
+    
+    if ( CPU_INT_LEVEL > FLAG_INT_MASK ) 
     {
-      M68K_END_TIMESLICE;
-
-      printf ( "[CPU] Emulation reset - status = 0x%X\n", status );
-
-      usleep ( 1000000 ); 
-
-      m68k_pulse_reset ( state );
-    }
-
-    else
-    {
-      last_irq = status >> 13;
-
-      //printf ( "IPL %d\n", last_irq );
-
-      if ( last_irq != 0 )
-      {
-        m68k_set_irq ( last_irq );
-        m68ki_check_interrupts ( state );
-      }
+      m68ki_exception_interrupt ( state, IPL );
     }
   }
 
-  if ( last_irq == 0 )
-  {
-    m68k_set_irq ( 0 );
-    m68ki_check_interrupts ( state );
-  }  
-  
 #endif  
 #endif
+
   if ( !cpu_emulation_running )
   {
     printf ("[CPU] End of CPU thread\n");
@@ -742,11 +789,11 @@ int main ( int argc, char *argv[] )
   int err;
   pthread_t rtg_tid, cpu_tid, flush_tid;
   time_t t;
-#ifndef PI3
-  int targetF = 125;
-#else
-  int targetF = 200;
-#endif
+//#ifndef PI3
+//  int targetF = 125;
+//#else
+  int targetF = 250; //200;
+//#endif
   RTG_EMUTOS_VGA = false;
   RTG_enabled = false;
   FPU68020_SELECTED = false;
@@ -944,7 +991,7 @@ int main ( int argc, char *argv[] )
 
     usleep ( 5 );
 
-    if ( ps_read_8 ( s ) != 0x12 || ps_read_8 ( s + 1 ) != 0x56 )
+    if ( ps_read_8 ( s ) != 0x12 && ps_read_8 ( s + 1 ) != 0x56 )
     {
       ATARI_MEMORY_SIZE = s;
 
@@ -970,7 +1017,7 @@ int main ( int argc, char *argv[] )
   {
 #if MYWTC
     cache_p = malloc ( ATARI_MEMORY_SIZE );
-    cacheTable_p = malloc ( ATARI_MEMORY_SIZE / 16 );
+    cacheTable_p = malloc ( ATARI_MEMORY_SIZE );/// 16 );
 
     if ( cache_p && cacheTable_p )
     {
@@ -1097,6 +1144,7 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
   static int r;
 
 /* Faux Blitter */
+#ifdef BLITTER
 #if (1)
   if ( Blitter_enabled && (addr >= 0x00FF8A00 && addr < 0x00FF8A3E) )//|| (addr >= 0xFFFF8A00 && addr < 0xFFFF8A3E) )
   {
@@ -1119,16 +1167,16 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
     return 1;
   }
 #endif
+#endif
 
-  if ( ET4000Initialised && ( (addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP) || (addr >= 0xFEC00000 && addr < 0xFEDC0400) ) )
-  //if ( ET4000Initialised && (addr >= 0x00A00000 && addr < 0x00DFFFFF) )
-  {
+  //if ( ET4000Initialised && ( (addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP) ) )// || (addr >= 0xFEC00000 && addr < 0xFEDC0400) ) )
+  //{
     //printf ( "calling et4000Read () with addr 0x%X\n", addr );
    
-    r = et4000Read ( addr, res, type );
+  //  r = et4000Read ( addr, res, type );
 
-    return r;
-  }
+  //  return r;
+  //}
 
   /* Set Atari's date/time - picked up by TOS program -> pistorm.prg */
   /* FFFC40 is undefined in the Atari-Compendium, coming after MSTe RTC defines */
@@ -1162,7 +1210,8 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
     addr &= 0x00ffffff;
   }
 
-  if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) )
+  //if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) )
+  if ( addr >= cfg->mapped_low )
   {
     if ( handle_mapped_read ( cfg, addr, &target, type ) != -1 ) 
     {
@@ -1180,7 +1229,7 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
   static uint32_t value;
   static uint32_t r;
 
-  PS_LOCK = true;
+  //PS_LOCK = true;
 
   if ( platform_read_check ( OP_TYPE_BYTE, address, &platform_res ) ) 
   {
@@ -1189,7 +1238,8 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
     return platform_res;
   }
 
-  if ( ( address & 0xFF000000 ) == 0xFF000000 )
+  //if ( ( address & 0xFF000000 ) == 0xFF000000 )
+  if ( address > 0xFEFFFFFF ) 
     address &= 0x00FFFFFF;
 
   /* this check is only needed for EMUtos determining amount of ALT-RAM - looks like only the write is needed */
@@ -1211,18 +1261,6 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
     }
   }
 
-/*
-  if ( address == 0xFFFA03 )
-  {
-    uint8_t x = ps_read_8 ( 0xFFFA03 );
-    if ( !(x & 0x20) )
-    {
-      //printf ( "IDE interrupt 0x%X\n", x );
-      //ps_write_8 ( 0xFFFA03, x & 0xDF );
-      ps_write_8 ( 0xFFFA03, x | 0x20 );
-    }
-  }
-*/
 
   r = ps_read_8 ( address ); 
 
@@ -1246,7 +1284,8 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
     return platform_res;
   }
 
-  if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  //if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  if ( address > 0xFEFFFFFF ) 
     address &= 0x00FFFFFF;
 
   /*
@@ -1289,7 +1328,8 @@ unsigned int m68k_read_memory_32 ( uint32_t address )
     return platform_res;
   }
 
-  if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  //if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  if ( address > 0xFEFFFFFF ) 
     address &= 0x00FFFFFF;
 
   /*
@@ -1302,7 +1342,7 @@ unsigned int m68k_read_memory_32 ( uint32_t address )
 
   if ( WTC_initialised )
   {
-    if ( do_cache( address, 4, &value, 1 ) )
+    if ( do_cache ( address, 4, &value, 1 ) )
     {
       PS_LOCK = false;
 
@@ -1320,9 +1360,10 @@ unsigned int m68k_read_memory_32 ( uint32_t address )
 
 static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32_t val ) 
 {
-  static int r;
+  //static int r;
 
 /* Faux Blitter */
+#ifdef BLITTER
 #if (1)
   if ( Blitter_enabled && (addr >= 0x00FF8A00 && addr < 0x00FF8A3E) )//|| (addr >= 0xFFFF8A00 && addr < 0xFFFF8A3E) )
   {
@@ -1345,25 +1386,26 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
     return 1;
   }
 #endif
+#endif
 
-  if ( ET4000Initialised && ( (addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP) || (addr >= 0xFEC00000 && addr < 0xFEDC0400) ) )
-  //if ( ET4000Initialised && (addr >= 0x00A00000 && addr < 0x00DFFFFF) )
-  {
+  //if ( ET4000Initialised && ( (addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP) ) )
+  //{
     //RTG_LOCK = true;
     //printf ( "calling et4000Write () with addr 0x%X\n", addr );
-    et4000Write ( addr, val, type );
+  //  et4000Write ( addr, val, type );
 
     //RTG_LOCK = false;
 
-    return 1;
-  }
+  //  return 1;
+  //}
 
   if ( IDE_enabled && (addr >= IDEBASEADDR && addr < IDETOPADDR) )
   {
     addr &= 0x00ffffff;
   }
 
-  if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) ) 
+  //if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) ) 
+  if ( addr >= cfg->mapped_low ) 
   {
     if ( handle_mapped_write ( cfg, addr, val, type ) != -1 )
     {
@@ -1382,10 +1424,12 @@ void m68k_write_memory_8 ( uint32_t address, unsigned int value )
   if ( platform_write_check ( OP_TYPE_BYTE, address, value ) )
   {
     PS_LOCK = false;
+
     return;
   }
    
-  if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  //if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  if ( address > 0xFEFFFFFF ) 
     address &= 0x00FFFFFF;
 
   /* this check is only needed for EMUtos determining amount of ALT-RAM */
@@ -1393,15 +1437,18 @@ void m68k_write_memory_8 ( uint32_t address, unsigned int value )
   {
     //printf ( "8wr why here? address = 0x%X\n", address );
     PS_LOCK = false;
+
     return;
   }
 
   ps_write_8 ( address, value );
 
+  PS_LOCK = false;
+
   if ( WTC_initialised )
     do_cache ( address, 1, &value, 0 );
 
-  PS_LOCK = false;
+  //PS_LOCK = false;
 }
 
 
@@ -1412,10 +1459,12 @@ void m68k_write_memory_16 ( uint32_t address, unsigned int value )
   if ( platform_write_check ( OP_TYPE_WORD, address, value ) )
   {
     PS_LOCK = false;
+
     return;
   }
 
-  if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  //if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  if ( address > 0xFEFFFFFF ) 
     address &= 0x00FFFFFF;
 
   /*
@@ -1428,10 +1477,12 @@ void m68k_write_memory_16 ( uint32_t address, unsigned int value )
 
   ps_write_16 ( address, value );
 
+  PS_LOCK = false;
+
   if ( WTC_initialised )
     do_cache ( address, 2, &value, 0 );
 
-  PS_LOCK = false;
+  //PS_LOCK = false;
 }
 
 
@@ -1442,10 +1493,12 @@ void m68k_write_memory_32 ( uint32_t address, unsigned int value )
   if ( platform_write_check ( OP_TYPE_LONGWORD, address, value ) )
   {
     PS_LOCK = false;
+
     return;
   }
 
-  if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  //if ( ( address & 0xFF000000 ) == 0xFF000000 ) 
+  if ( address > 0xFEFFFFFF ) 
     address &= 0x00FFFFFF;
 
   /*
@@ -1458,10 +1511,12 @@ void m68k_write_memory_32 ( uint32_t address, unsigned int value )
  
   ps_write_32 ( address, value );
 
+  PS_LOCK = false;
+
   if ( WTC_initialised )
     do_cache ( address, 4, &value, 0 );
 
-  PS_LOCK = false;
+  //PS_LOCK = false;
 }
 
 

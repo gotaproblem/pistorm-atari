@@ -165,6 +165,9 @@ int check_emulator()
     return 0;
 }
 
+#define MB1 0x1000000
+#define MB2 0x2000000
+#define MB4 0x4000000
 
 int main(int argc, char *argv[]) 
 {
@@ -206,6 +209,70 @@ int main(int argc, char *argv[])
     clrPattern = 0x0000;
 
    
+/*
+    ps_setup_protocol ( targetF );
+    ps_reset_state_machine ();
+    ps_pulse_reset ();
+    setMemory ( 512 );
+
+    uint16_t rd16;
+    uint32_t n;
+    uint16_t pattern = 0x1234;
+    uint8_t fail = 0;
+    uint8_t complete = 0;
+    int fq = targetF;
+
+
+    while ( !complete && fq > 90 )
+    {
+        fail = 0;
+        //add = 0x600;
+
+        //ps_setup_protocol ( fq );
+        //ps_reset_state_machine ();
+        //ps_pulse_reset ();
+
+        setMemory ( 2048 );
+
+        printf ( "\nTrying fq %d\n", fq );
+
+        printf ( "   Writing...\n" );
+        for ( add = 0x600; add < MB2; add += 2 )
+        {
+            write16 ( add, pattern );
+            //add += 2;
+        }
+
+        //add = 0x600;
+
+        printf ( "   Reading...\n" );
+
+        for ( add = 0x600; add < MB2; add += 2 )
+        {
+            rd16 = read16 ( add );
+
+            if ( rd16 != pattern )
+            {
+                printf ( "fq %d failed - address = 0x%X wrote 0x%X, read 0x%X\n", fq, add, pattern, rd16 );
+
+                fail = 1;
+                fq -= 10;
+
+                ps_setup_protocol ( fq );
+
+                break;
+            }
+
+            //add += 2;
+        }
+
+        if ( !fail )
+            complete = 1;
+    }
+
+    printf ( "tests completed - fq = %d\n", fq );
+    return 1;
+*/
     if ( parser ( argc, argv ) )
     {
         ps_setup_protocol ( targetF );
@@ -1971,11 +2038,9 @@ int parser ( int argc, char **argv )
     
         if ( strcmp ( cmdptr, "clock" ) == 0 )
         {
-            //valid = 1;
             char *p;
-            //printf ( "argv = %s\n", argv[a+1] );
+            
             targetF = strtol ( argv [a+1], &p, 10 );
-            //printf ( "targetF = %d\n", targetF );
         }
 
         if ( strcmp ( cmdptr, "hardware" ) == 0 )
@@ -1998,6 +2063,7 @@ void hwTest ( void )
 {
     uint16_t tmp;
     uint16_t c;
+    uint16_t d;
     volatile uint32_t bit;
     uint32_t test_size = 512 * SIZE_KILO, cur_loop = 0;
     uint8_t loop_tests = 0, total_errors = 0;
@@ -2030,9 +2096,11 @@ test_loop:
 
         printf ( "D%.02d $%.4X... ", n, tmp );
 
-        write16 ( 0x10000 + (n * 2), tmp );
+        //write16 ( 0x10000 + (n * 2), tmp );
+        write16 ( 0x10000, tmp );
         
-        c = read16 ( 0x10000 + (n * 2) );
+        //c = read16 ( 0x10000 + (n * 2) );
+        c = read16 ( 0x10000 );
       
         if ( c != tmp ) 
         {
@@ -2042,7 +2110,21 @@ test_loop:
 
         else 
         {
-            printf ( "\n" );
+            int good = 0;
+
+            for ( int a = 1; a < 22; a++ )
+            {
+                d = read16 ( 0x10000 + ( 1 << a ) );
+
+                if ( c == d )
+                {
+                    good++;
+                    printf ( "address line short on A%d - read 0x%X\n", a, d );
+                }
+            }
+
+            if ( good == 0 )
+                printf ( "OK\n" );
         }
     }
 
@@ -2065,28 +2147,40 @@ test_loop:
 
         if ( tmp != n )
         {
-            if ( tmp == 0xFF )
-            {
-                if ( n > 18 && n < 24 )
-                    printf ( "No memory detected\n" );
+            //if ( tmp == 0xFF )
+            //{
+                if ( n > 18 && n < 22 )
+                {
+                    if ( tmp == 0xFF )
+                        printf ( "No memory detected\n" );
+
+                    else
+                    {
+                        printf ( "Fault - Read 0x%X\n", tmp );
+                        errors++;
+                    }
+                }
+
+                else if ( n > 21 )
+                    printf ( "Can not test\n" );
 
                 else
                 {
-                    printf ( "Faulty\n" );
+                    printf ( "Fault - Read 0x%X\n", tmp );
                     errors++;
                 }
-            }
+            //}
 
-            else
-            {
-                printf ( "Wrote 0x%X, Read 0x%X\n", n, tmp );
-                errors++;
-            }
+            //else
+            //{
+            //    printf ( "Wrote 0x%X, Read 0x%X\n", n, tmp );
+            //    errors++;
+            //}
         }
 
         else 
         {
-            printf ( "\n" );
+            printf ( "OK\n" );
 /*
             write8 ( 0x10000 + bit, 0xAA );    
             tmp = read8 ( 0x10000 + bit );

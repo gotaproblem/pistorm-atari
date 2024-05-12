@@ -22,6 +22,7 @@
 #include "atari-registers.h"
 #include "platforms/atari/idedriver.h"
 
+
 #define DEBUGPRINT 0
 #if DEBUGPRINT
 #define DEBUG_PRINTF(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
@@ -35,8 +36,6 @@
 #else
 #define DEBUG(...)
 #endif
-
-
 
 
 static struct ide_controller *atariIDE [4] = {NULL, NULL, NULL, NULL};
@@ -61,7 +60,7 @@ void set_hard_drive_image_file_atari ( uint8_t index, char *filename )
   strcpy(atari_image_file[index], filename);
 }
 
-void InitIDE (void) 
+void InitIDE ( void ) 
 {
   uint8_t num_IDE_drives = 0;
   int port = 0;
@@ -119,6 +118,7 @@ void InitIDE (void)
 
   else
     IDE_enabled = true;
+
 }
 
 
@@ -181,13 +181,14 @@ void writeIDEB ( uint32_t address, unsigned int value )
       //  IDE_irq = (IDE_irq & value) | (value & (IDE_IRQ_RESET | IDE_IRQ_BERR));
       //  return;
       default:
-      //  printf ( "%s: unserviced request 0x%x\n", __func__, ((address - IDEBASE)) );//IDE_IDE_base) - IDE_IDE_adj) );
+       // printf ( "%s: unserviced request 0x%x\n", __func__, address - IDEBASE ); //IDE_IDE_base) - IDE_IDE_adj) );
         return;
     }
 
     //goto skip_idewrite8;
 
 //IDEwrite8:
+//printf ( "%s IDE_action = 0x%X\n", __func__, IDE_action );
     IDE_write8 ( atariIDE [port], IDE_action, value );
 
     return;
@@ -322,9 +323,10 @@ uint8_t readIDEB ( uint32_t address )
         //default:
         //  printf ( "%s: unserviced command = 0x%x\n", __func__, ((address - IDEBASE) ));//- IDE_IDE_adj) );
       default:
+        //printf ( "%s: unserviced command = 0x%x\n", __func__, base );//- IDE_IDE_adj) );
         return 0xFF;
     }
-
+//printf ( "%s IDE_action = 0x%X\n", __func__, IDE_action );
     return IDE_read8 ( atariIDE [port], IDE_action );
   }
 
@@ -367,6 +369,7 @@ uint32_t readIDEL ( uint32_t address )
   
   port = (address & 0xf0) >> 6; /* get IDE interface number 0 - 3 */
   base = address - IDEBASE - ( 0x40 * port );
+  //printf ( "%s base = 0x%X\n", __func__, base );
 
   if ( atariIDE [port] ) 
   {

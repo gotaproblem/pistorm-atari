@@ -18,10 +18,15 @@
 #define PIN_WR 7
 //#define PIN_D(x) (8 + x)
 
-#define REG_DATA 0
+#define REG_DATA    0
 #define REG_ADDR_LO 1
 #define REG_ADDR_HI 2
-#define REG_STATUS 3
+#define REG_STATUS  3
+
+#define CMD_REG_DATA ((REG_DATA << PIN_A0) | (1 << PIN_WR))
+#define CMD_ADDR_LO ((REG_ADDR_LO << PIN_A0) | (1 << PIN_WR))
+#define CMD_ADDR_HI ((REG_ADDR_HI << PIN_A0) | (1 << PIN_WR))
+#define CMD_REG_STATUS ((REG_STATUS << PIN_A0) | (1 << PIN_WR))
 
 #define STATUS_BIT_INIT 1
 #define STATUS_BIT_BERR 1

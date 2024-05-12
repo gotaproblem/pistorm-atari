@@ -2674,11 +2674,11 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 
 
 	/* cryptodad moved this section here - ignores passed-in int_level */
-	if ( state->nmi_pending )
-	{
-		state->nmi_pending = FALSE;
-		int_level = 7;
-	}
+	//if ( state->nmi_pending )
+	//{
+	//	state->nmi_pending = FALSE;
+	//	int_level = 7;
+	//}
 
 	//else if ( CPU_INT_LEVEL > FLAG_INT_MASK ) 
 	//	int_level = CPU_INT_LEVEL >> 8;
@@ -2772,7 +2772,7 @@ static inline void m68ki_check_interrupts ( m68ki_cpu_core *state )
 	}
 
 	//else
-	//	printf ( "why here? CPU_INT_LEVE: = 0x%X\n", CPU_INT_LEVEL );
+	//	printf ( "why here? CPU_INT_LEVEL: = 0x%X\n", CPU_INT_LEVEL );
 
 	//m68ki_exception_interrupt ( state, CPU_INT_LEVEL >> 8 );
 }

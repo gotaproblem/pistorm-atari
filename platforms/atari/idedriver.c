@@ -81,6 +81,14 @@
 const uint8_t ide_magic[9] = {
   '1','D','E','D','1','5','C','0',0x00
 };
+
+
+
+extern volatile int IDEack;
+extern uint8_t ps_read_8(uint32_t address);
+extern void ps_write_8(uint32_t address, uint16_t data);
+
+
 /*
 static char *charmap(uint8_t v)
 {
@@ -634,7 +642,18 @@ static void ide_issue_command(struct ide_taskfile *t)
         completed(t);
       }
   }
+
+  //uint8_t mfp = ps_read_8 ( 0x00FFFA01 );
+
+  //if ( (mfp & 0x20) == 0x00 )
+  //{
+  //  usleep (10);
+   // ps_write_8 ( 0x00FFFA01, mfp | 0x20 );
+  //}
 }
+
+
+
 
 
 /*
@@ -645,6 +664,8 @@ uint8_t IDE_read8 ( struct ide_controller *c, uint8_t r)
 {
   struct ide_drive *d = &c->drive[c->selected];
   struct ide_taskfile *t = &d->taskfile;
+  uint8_t mfp;
+//printf ( "IDEread8 0x%X\n", r );
 
   switch ( r ) 
   {
@@ -664,11 +685,22 @@ uint8_t IDE_read8 ( struct ide_controller *c, uint8_t r)
     case IDE_lba_top:
       return c->lba4 | ((c->selected) ? 0x10 : 0x00);
     case IDE_status_r:
+    case IDE_altst_r:
       d->intrq = 0;		/* Acked */
+      
+      //IDEack = 0;
+      //mfp = ps_read_8 ( 0x00FFFA01 );
+   
+      //if ( (mfp & 0x20) == 0x00 )
+      //{
+      //  usleep (10);
+      //  ps_write_8 ( 0x00FFFA01, mfp | 0x20 );
+      //}
+
       //printf ( "%s interrupt ack = 0\n", __func__ );
       /* Fallthrough */
       /* no break */
-    case IDE_altst_r:
+    //case IDE_altst_r:
       return t->status;
     default:
       ide_fault(d, "bogus register");
@@ -681,6 +713,8 @@ void IDE_write8(struct ide_controller *c, uint8_t r, uint8_t v)
 {
   struct ide_drive *d = &c->drive[c->selected];
   struct ide_taskfile *t = &d->taskfile;
+
+//printf ( "IDEwrite8 0x%X\n", r );
 
   if (r != IDE_devctrl_w) {
     if (t->status & ST_BSY) {
@@ -739,6 +773,15 @@ void IDE_write8(struct ide_controller *c, uint8_t r, uint8_t v)
       c->drive[1].taskfile.devctrl = v;
       break;
   }
+/*
+  uint8_t mfp = ps_read_8 ( 0x00FFFA01 );
+
+  if ( (mfp & 0x20) == 0x00 )
+  {
+    usleep (10);
+    ps_write_8 ( 0x00FFFA01, mfp | 0x20 );
+  }
+  */
 }
 
 
@@ -750,6 +793,7 @@ uint16_t IDE_read16 ( struct ide_controller *c, uint8_t r )
 {
   struct ide_drive *d = &c->drive [c->selected];
 
+  //printf ( "IDEread16 0x%X\n", r );
   if ( r == IDE_data )
   {
     return htons ( ide_data_in ( d, 2 ) );
@@ -764,6 +808,7 @@ void IDE_write16(struct ide_controller *c, uint8_t r, uint16_t v)
   struct ide_drive *d = &c->drive[c->selected];
   struct ide_taskfile *t = &d->taskfile;
 
+  //printf ( "IDEwrite16 0x%X\n", r );
   if (r != IDE_devctrl_w && (t->status & ST_BSY)) {
     ide_fault(d, "command written while busy");
     return;

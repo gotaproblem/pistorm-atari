@@ -248,7 +248,7 @@ void add_mapping(struct emulator_config *cfg, unsigned int type, unsigned int ad
       cfg->map_data[index] = (unsigned char *)filename;
       break;
     case MAPTYPE_RAM_WTC:
-      DEBUG_PRINTF ("[CFG] Allocating %d bytes for Write-Through Cached RAM mapping (%.1f MB)...\n", size, (float)size / 1024.0f / 1024.0f);
+      //DEBUG_PRINTF ("[CFG] Allocating %d bytes for Write-Through Cached RAM mapping (%.1f MB)...\n", size, (float)size / 1024.0f / 1024.0f);
       goto alloc_mapram;
       break;
     case MAPTYPE_RAM:

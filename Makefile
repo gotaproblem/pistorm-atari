@@ -25,7 +25,10 @@ MUSASHIGENERATOR = m68kmake
 .CFILES   = $(MAINFILES) $(MUSASHIFILES) $(MUSASHIGENCFILES)
 .OFILES   = $(.CFILES:%.c=%.o)
 
-CC        = gcc -g
+# gprof profiling
+#CC        = gcc -pg
+#CC        = gcc -DCACHE_ON
+CC        = gcc
 
 PIOPTS	  = -march=armv8-a -mfloat-abi=hard -mfpu=neon-fp-armv8
 

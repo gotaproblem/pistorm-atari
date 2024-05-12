@@ -344,11 +344,13 @@ void et4000Draw ( int windowWidth, int windowHeight )
     /* Colour 16bit 32K/64K colours */
     else if ( COLOURDEPTH == 4 )
     {
-        uint16_t *dptr = RTGbuffer;//fbptr;
-        uint16_t *sptr = VRAMbuffer;//RTGbuffer;
-        
+        //uint16_t *dptr = RTGbuffer;//fbptr;
+        //uint16_t *sptr = VRAMbuffer;//RTGbuffer;
+        /* addresses are 16 bit, but we can make them 32 bit to speed up transfer */
+        uint32_t *dptr = RTGbuffer;//fbptr;
+        uint32_t *sptr = VRAMbuffer;//RTGbuffer;
 
-        for ( pixel = 0; pixel < SCREEN_SIZE; pixel++ )
+        for ( pixel = 0; pixel < (SCREEN_SIZE / 2); pixel++ )
         {
             while ( PS_LOCK )
                 ;
@@ -377,12 +379,13 @@ void et4000Draw ( int windowWidth, int windowHeight )
     {
         /* cryptodad - can't use memcpy as have to check for active ps_read/write */
         //memcpy ( fbp, RTGbuffer, screensize );
-        for ( int n = 0; n < screensize; n++ )
+        for ( int n = 0; n < (screensize / 4); n++ )
         {
             while ( PS_LOCK )
                 ;
 
-            *((char *)fbp + n) = *((char *)RTGbuffer + n);
+            //*((char *)fbp + n) = *((char *)RTGbuffer + n);
+            *((uint32_t *)fbp + n) = *((uint32_t *)RTGbuffer + n);
         }
     }
 }
@@ -589,6 +592,12 @@ void *et4000Render ( void* vptr )
                     else if ( xcb->ts_index [TS_AUX_MODE] == 0xB4 
                                 && xcb->ts_index [WRITE_PLANE_MASK] == 0x0F
                                 && xcb->ts_index [MEMORY_MODE] == 0x00
+                                && xcb->MISC_Wr == 0xE3  )
+                        COLOURDEPTH = 2;
+
+                    else if ( xcb->ts_index [TS_AUX_MODE] == 0xB4 
+                                && xcb->ts_index [WRITE_PLANE_MASK] == 0x0F
+                                && xcb->ts_index [MEMORY_MODE] == 0x08
                                 && xcb->MISC_Wr == 0xE3  )
                         COLOURDEPTH = 2;
 
@@ -898,19 +907,19 @@ uint32_t et4000Read ( uint32_t addr, uint32_t *value, int type )
     else
     {
         offset = addr - NOVA_ET4000_VRAMBASE;
-
+        void *ptr = VRAMbuffer + offset;
         
        // RTG_LOCK = true;
         //if ( fbptr )
         //{
         if ( type == OP_TYPE_BYTE )
-            *value = *( uint8_t *)( VRAMbuffer + offset );
+            *value = *( uint8_t *)ptr;
 
         else if ( type == OP_TYPE_WORD )
-            *value = be16toh ( *( uint16_t *)( VRAMbuffer + offset ) );
+            *value = be16toh ( *( uint16_t *)ptr );
 
         else if ( type == OP_TYPE_LONGWORD )
-            *value = be32toh ( *(uint32_t *)( VRAMbuffer + offset ) );
+            *value = be32toh ( *(uint32_t *)ptr );
 
        // RTG_LOCK = false;
         //printf ( "addr 0x%X, value = 0x%X\n", addr, *value );
@@ -937,7 +946,7 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
    // if ( ((addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP) || (addr >= 0xFEC00000 && addr < 0xFED20000)) )
     if ( addr >= 0x00D00000 )
     {
-        //printf ( "ET4000 reg write 0x%X\n", addr );
+       // printf ( "ET4000 reg write 0x%X\n", addr );
 
         if ( (addr - NOVA_ET4000_REGBASE) < 0x50 )
             a = 0x3B0 + (addr - NOVA_ET4000_REGBASE);
@@ -945,9 +954,10 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
         else
             a = (addr - NOVA_ET4000_REGBASE);
 
+        //printf ( "ET4000 reg write 0x%X, data 0x%X\n", a, value );
+
         switch ( a )
         {
-
             case 0x3b4:
                 break;
             case 0x3b5:
@@ -1038,6 +1048,7 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
             case 0x3c4: /* TS Index */
                 xcb->ts_ix = value & 0x07;
                 break;
+
             case 0x3c5: /* TS Indexed Register 2: Write Plane Mask */
 
                 //if ( xcb->ts_ix == 2 )
@@ -1105,27 +1116,28 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
                 xcb->gdc_ix = value & 0x0f;
                 //printf ( "TODO GDC Index 0x%X\n", value );
                 break;
+
             case 0x3cf:
 
-                xcb->gdc_index [xcb->gdc_ix] = value;
+                //xcb->gdc_index [xcb->gdc_ix] = value;
                 //printf ( "TODO GDC Register 0x%X = 0x%X\n", xcb->gdc_ix, value );
 
                 switch ( xcb->gdc_ix )
                 {
                     /* Set/Reset */
                     case 0:
-                        xcb->gdc_index [xcb->gdc_ix] = value & 0x0F;
-                        break;
+                        //xcb->gdc_index [xcb->gdc_ix] = value & 0x0F;
+                       // break;
 
                     /* Enable Set/Reset */
                     case 1:
-                        xcb->gdc_index [xcb->gdc_ix] = value & 0x0F;
-                        break;
+                        //xcb->gdc_index [xcb->gdc_ix] = value & 0x0F;
+                        //break;
                     
                     /* Colour Compare */
                     case 2:
-                        xcb->gdc_index [xcb->gdc_ix] = value & 0x0F;
-                        break;
+                        //xcb->gdc_index [xcb->gdc_ix] = value & 0x0F;
+                        //break;
                     
                     /* Data Rotate */
                     case 3:
@@ -1148,8 +1160,8 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
 
                     /* Miscellaneous */
                     case 6:
-                        xcb->gdc_index [xcb->gdc_ix] = value & 0x0F;
-                        break;
+                        //xcb->gdc_index [xcb->gdc_ix] = value & 0x0F;
+                       // break;
 
                     /* Colour Care */
                     case 7:
@@ -1173,6 +1185,7 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
                 //printf ( "3d4 0x%X\n", value );
                 
                 break;
+
             case 0x3d5: /* 6845 CRT Data Register */
                 if ( (xcb->crtc_ix < 0x32) || (xcb->crtc_ix == 0x33) || (xcb->crtc_ix == 0x35) || (xcb->crtc_ix > 0x18 && xcb->KEY) )
                     xcb->crtc_index [xcb->crtc_ix] = value;
@@ -1195,6 +1208,7 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
                 }
 
                 break;
+
             case 0x3d8: /* (RW) 6845 Display Mode Control Register colour */
                 if ( value == 0xA0 && xcb->KEYenable )
                     xcb->KEY = true;
@@ -1209,9 +1223,11 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
                     printf ( "Display Mode Control Register 3D8 = 0x%X\n", value );
                 }
                 break;
+
             case 0x3d9: /* (WO) 6845 Display Colour Control Register */
                 printf ( "Colour Select Register - 0x%X\n", value );
                 break;
+
             case 0x3da: /* 6845 Display Status Control Register */
                 break;
 
@@ -1228,9 +1244,10 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
     
     else
     {
-       // printf ( "et4000Write () -> type = %d, addr = 0x%X\n", type, addr );
+        //printf ( "et4000Write () -> type = %d, addr = 0x%X, data = 0x%X\n", type, addr, value );
      
         offset = addr - NOVA_ET4000_VRAMBASE;
+        void *ptr = VRAMbuffer + offset;
 
        // RTG_LOCK = true;
 
@@ -1244,19 +1261,19 @@ uint32_t et4000Write ( uint32_t addr, uint32_t value, int type )
        // {
             if ( type == OP_TYPE_BYTE )
             {
-                *( (uint8_t *)( VRAMbuffer + offset ) ) = value;// & xcb->gdc_index [8];
+                *(uint8_t *)ptr = value;// & xcb->gdc_index [8];
              
             }
 
             else if ( type == OP_TYPE_WORD )
             {
-                *( (uint16_t *)( VRAMbuffer + offset) ) = htobe16 (value);
+                *(uint16_t *)ptr = htobe16 (value);
               
             }
 
             else if ( type == OP_TYPE_LONGWORD )
             {
-                *( (uint32_t *)( VRAMbuffer + offset ) ) = htobe32 (value);
+                *(uint32_t *)ptr = htobe32 (value);
                 
             }
         //}

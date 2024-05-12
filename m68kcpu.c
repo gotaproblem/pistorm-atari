@@ -1325,7 +1325,7 @@ inline uint m68ki_read_imm16_addr_slowpath ( m68ki_cpu_core *state, uint32_t pc 
 
 		// ignore bus error on prefetch
 		//state->mmu_tmp_buserror_occurred = 0;
-		//g_buserr = 0;
+		g_buserr = 0;
 	}
 
 	return result;
