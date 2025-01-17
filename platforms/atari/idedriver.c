@@ -166,10 +166,10 @@ static off_t xlate_block(struct ide_taskfile *t)
   /* Sector 1 is first */
   /* Images generally go cylinder/head/sector. This also matters if we ever
      implement more advanced geometry setting */
-  //off_t ret = ((d->header_present) ? 1 : -1) + ((cyl * d->heads) + (t->drive->controller->lba4 & DEVH_HEAD)) * d->sectors + t->drive->controller->lba1;
-  //printf("Non-LBA xlate block %lX.\n", ret);
-  //printf("Cyl: %d Heads: %d Sectors: %d\n", cyl, d->heads, d->sectors);
-  //printf("LBA1: %.2X LBA2: %.2X LBA3: %.2X LBA4: %.2X\n", t->drive->controller->lba1, t->drive->controller->lba2, t->drive->controller->lba3, t->drive->controller->lba4);
+  off_t ret = ((d->header_present) ? 1 : -1) + ((cyl * d->heads) + (t->drive->controller->lba4 & DEVH_HEAD)) * d->sectors + t->drive->controller->lba1;
+  printf("Non-LBA xlate block %lX.\n", ret);
+  printf("Cyl: %d Heads: %d Sectors: %d\n", cyl, d->heads, d->sectors);
+  printf("LBA1: %.2X LBA2: %.2X LBA3: %.2X LBA4: %.2X\n", t->drive->controller->lba1, t->drive->controller->lba2, t->drive->controller->lba3, t->drive->controller->lba4);
 
   return ((d->header_present) ? 1 : -1) + ((cyl * d->heads) + (t->drive->controller->lba4 & DEVH_HEAD)) * d->sectors + t->drive->controller->lba1;
 }
@@ -299,16 +299,23 @@ static void cmd_identify_complete(struct ide_taskfile *tf)
 static void cmd_initparam_complete(struct ide_taskfile *tf)
 {
   struct ide_drive *d = tf->drive;
+
   /* We only support the current mapping */
-  if (tf->count != d->sectors || (tf->drive->controller->lba4 & DEVH_HEAD) + 1 != d->heads) {
+  if (tf->count != d->sectors || (tf->drive->controller->lba4 & DEVH_HEAD) + 1 != d->heads) 
+  {
     tf->status |= ST_ERR;
     tf->error |= ERR_ABRT;
     tf->drive->failed = 1;		/* Report ID NF until fixed */
-/*    fprintf(stderr, "geo is %d %d, asked for %d %d\n",
-      d->sectors, d->heads, tf->count, (tf->lba4 & DEVH_HEAD) + 1); */
-    ide_fault(d, "invalid geometry");
-  } else if (tf->drive->failed == 1)
+
+    printf( "geo is %d %d, asked for %d %d\n",
+      d->sectors, d->heads, tf->count, (d->controller->lba4 & DEVH_HEAD) + 1); 
+    ide_fault ( d, "invalid geometry" );
+    printf ( "invalid geometry - tf->count = %d, sectors = %d, lba4 = %d, heads = %d\n", tf->count, d->sectors, tf->drive->controller->lba4 & DEVH_HEAD, d->heads );
+  } 
+  
+  else if (tf->drive->failed == 1)
     tf->drive->failed = 0;		/* Valid translation */
+
   completed(tf);
 }
 

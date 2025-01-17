@@ -1086,7 +1086,7 @@ typedef struct m68ki_cpu_core
 
 
 extern m68ki_cpu_core m68ki_cpu;
-extern sint           m68ki_remaining_cycles;
+extern volatile int   m68ki_remaining_cycles;
 extern uint           m68ki_tracing;
 extern const uint8    m68ki_shift_8_table[];
 extern const uint16   m68ki_shift_16_table[];
@@ -1323,7 +1323,7 @@ static inline uint m68ki_read_8_fc(m68ki_cpu_core *state, uint address, uint fc)
 
 #ifdef CHIP_FASTPATH
 	if ( address < cfg->mapped_low )
-		return ps_read_8 ( (t_a32)address );
+		return ps_read_8 ( address );
 #endif
 
 	return m68k_read_memory_8 ( ADDRESS_68K (address) );
@@ -1371,7 +1371,7 @@ static inline uint m68ki_read_16_fc ( m68ki_cpu_core *state, uint address, uint 
 	//	return ps_read_16 ( (t_a32)address );
 	//}
 	if ( address < cfg->mapped_low )
-		return ps_read_16 ( (t_a32)address );
+		return ps_read_16 ( address );
 #endif
 
 	return m68k_read_memory_16 ( ADDRESS_68K (address) );
@@ -1422,7 +1422,7 @@ static inline uint m68ki_read_32_fc(m68ki_cpu_core *state, uint address, uint fc
 	//	return ps_read_32 ( (t_a32)address );
 	//}
 	if ( address < cfg->mapped_low )
-		return ps_read_32 ( (t_a32)address );
+		return ps_read_32 ( address );
 #endif
 
 	return m68k_read_memory_32 ( ADDRESS_68K (address));
@@ -1470,7 +1470,7 @@ static inline void m68ki_write_8_fc(m68ki_cpu_core *state, uint address, uint fc
 	//}
 	if ( address < cfg->mapped_low )
 	{
-		ps_write_8 ( (t_a32)address, value );
+		ps_write_8 ( address, value );
 		return;
 	}
 #endif
@@ -1528,7 +1528,7 @@ static inline void m68ki_write_16_fc(m68ki_cpu_core *state, uint address, uint f
 	//}
 	if ( address < cfg->mapped_low )
 	{
-		ps_write_16 ( (t_a32)address, value );
+		ps_write_16 ( address, value );
 		return;
 	}
 #endif
@@ -1589,7 +1589,7 @@ static inline void m68ki_write_32_fc(m68ki_cpu_core *state, uint address, uint f
 	//}
 	if ( address < cfg->mapped_low )
 	{
-		ps_write_32 ( (t_a32)address, value );
+		ps_write_32 ( address, value );
 		return;
 	}
 #endif
@@ -1876,7 +1876,7 @@ static inline void m68ki_jump ( m68ki_cpu_core *state, uint new_pc)
 static inline void m68ki_jump_vector(m68ki_cpu_core *state, uint vector)
 {
 	REG_PC = ( vector << 2 ) + REG_VBR;
-	REG_PC = ps_read_32 ( REG_PC );//m68ki_read_data_32 ( state, REG_PC );
+	REG_PC = m68ki_read_data_32 ( state, REG_PC );
 
 	m68ki_pc_changed ( REG_PC );
 }
@@ -1988,12 +1988,7 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 static inline void m68ki_set_sr(m68ki_cpu_core *state, uint value)
 {
 	m68ki_set_sr_noint ( state, value );
-	
-	//m68ki_check_interrupts (state); // cryptodad commented out for performance 
-
-	//if ( RTG_enabled )
-	//	m68ki_exception_interrupt ( state, 0 ); // cryptodad use this instead AND ONLY with 
-											// emulator.c m68k_execute_bef () - if ( GET_CYCLES () < 1 || g_irq )
+	m68ki_check_interrupts (state); // cryptodad commented out for performance 
 }
 
 
@@ -2062,7 +2057,7 @@ static inline void m68ki_stack_frame_0010(m68ki_cpu_core *state, uint sr, uint v
 /* Bus error stack frame (68000 only).
  */
 #define IDLE_DEBUG //printf
-#if (1)
+#if (0)
 //static inline void m68ki_stack_frame_buserr_orig(m68ki_cpu_core *state, uint sr)
 static inline void m68ki_stack_frame_buserr ( m68ki_cpu_core *state, uint sr )
 {
@@ -2650,6 +2645,8 @@ static inline void m68ki_exception_address_error(m68ki_cpu_core *state)
 }
 
 
+extern volatile int g_irq;
+
 /* Service an interrupt request and start exception processing */
 static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_level)
 {
@@ -2672,22 +2669,6 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 	if(CPU_STOPPED)
 		return;
 
-
-	/* cryptodad moved this section here - ignores passed-in int_level */
-	if ( state->nmi_pending )
-	{
-		state->nmi_pending = FALSE;
-		int_level = 7;
-	}
-
-	else if ( CPU_INT_LEVEL > FLAG_INT_MASK ) 
-		int_level = CPU_INT_LEVEL >> 8;
-
-	else
-		return;
-	/* cryptodad end section */
-
-
 	/* Acknowledge the interrupt */
 	vector = m68ki_int_ack ( int_level );
 //printf ("%s: vector = %x, int_level = %d\n", __func__, vector, int_level );
@@ -2696,11 +2677,11 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 	if ( vector == M68K_INT_ACK_AUTOVECTOR )
 		/* Use the autovectors.  This is the most commonly used implementation */
 		vector = EXCEPTION_INTERRUPT_AUTOVECTOR+int_level;
+
 	else if(vector == M68K_INT_ACK_SPURIOUS)
 		/* Called if no devices respond to the interrupt acknowledge */
 		vector = EXCEPTION_SPURIOUS_INTERRUPT;
-
-	/* cryptodad can never get here as vector is masked byte */
+	
 	else if ( vector > 255 )
 	{
 	//	//M68K_DO_LOG_EMU((M68K_LOG_FILEHANDLE "%s at %08x: Interrupt acknowledge returned invalid vector $%x\n",
@@ -2708,6 +2689,7 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 				 ADDRESS_68K(REG_PC), vector );
 		return;
 	}
+	
 
 	/* Start exception processing */
 	sr = m68ki_init_exception(state);
@@ -2716,11 +2698,15 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 	FLAG_INT_MASK = int_level << 8;
 
 	/* Get the new PC */
-	new_pc = m68ki_read_data_32(state, (vector << 2) + REG_VBR);
+	new_pc = m68ki_read_data_32 (state, (vector << 2) + REG_VBR);
 
 	/* If vector is uninitialized, call the uninitialized interrupt vector */
 	if(new_pc == 0)
-		new_pc = m68ki_read_data_32(state, (EXCEPTION_UNINITIALIZED_INTERRUPT << 2) + REG_VBR);
+		new_pc = m68ki_read_data_32 (state, (EXCEPTION_UNINITIALIZED_INTERRUPT << 2) + REG_VBR);
+
+	/* interrupt has been acknowledged so can clear global flag */
+	//g_irq = 0;
+	//CPU_INT_LEVEL = 0;
 
 	/* Generate a stack frame */
 	m68ki_stack_frame_0000(state, REG_PC, sr, vector);
@@ -2737,12 +2723,15 @@ static inline void m68ki_exception_interrupt(m68ki_cpu_core *state, uint int_lev
 	/* Defer cycle counting until later */
 	USE_CYCLES(CYC_EXCEPTION[vector]);
 
+	/* interrupt has been acknowledged so can clear global flag */
+	g_irq = 0;
+	CPU_INT_LEVEL = 0;
+
 #if !M68K_EMULATE_INT_ACK
 	/* Automatically clear IRQ if we are not using an acknowledge scheme */
 	CPU_INT_LEVEL = 0;
 #endif /* M68K_EMULATE_INT_ACK */
 }
-
 
 
 /* ASG: Check for interrupts */

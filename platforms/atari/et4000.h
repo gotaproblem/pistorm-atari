@@ -2,8 +2,7 @@
 #define ET4000_H
 
 #define NOVA_ET4000_REGBASE  0x00D00000
-#define NOVA_ET4000_REGTOP   0x00D00400
-#define NOVA_ET4000_VRAMBASE 0x00C00000
+#define NOVA_ET4000_REGTOP   0x00DC0400
 #define NOVA_ET4000_VRAMBASE 0x00C00000
 #define NOVA_ET4000_VRAMSIZE 0x00100000
 #define NOVA_ET4000_VRAMTOP  NOVA_ET4000_REGBASE
@@ -225,6 +224,23 @@ const uint32_t vga_palette[VGA_PALETTE_LENGTH] = {
 , 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
 };
 */
+
+
+
+/* ET4000AX Max resolution */
+#define MAX_WIDTH 1024
+#define MAX_HEIGHT 768
+
+#define MAX_VRAM   (MAX_WIDTH * MAX_HEIGHT * 2)
+#define ATARI_VRAM_BASE   0x003f8000 /* 4MB machine - will get changed at detection */
+
+#define HZ50       20000
+#define HZ60       16666
+
+#ifndef GETRES
+extern volatile nova_xcb_t *xcb;
+#define GETRES() (uint16_t)( ((xcb->crtc_index [0x35] & 0x02) >> 1 ) << 10 | ((xcb->crtc_index [7] & 0x20) >> 5) << 9 | (xcb->crtc_index [7] & 0x01) << 8 | xcb->crtc_index [6] )
+#endif
 
 extern uint32_t et4000Read ( uint32_t, uint32_t*, int );
 extern uint32_t et4000Write ( uint32_t, uint32_t, int );

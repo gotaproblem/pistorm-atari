@@ -60,7 +60,7 @@ extern int FPU68020_SELECTED; /* cryptodad */
 /* ======================================================================== */
 
 int  m68ki_initial_cycles;
-int  m68ki_remaining_cycles = 0;                     /* Number of clocks remaining */
+volatile int  m68ki_remaining_cycles = 0;                     /* Number of clocks remaining */
 uint m68ki_tracing = 0;
 uint m68ki_address_space;
 

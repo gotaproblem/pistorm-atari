@@ -3,7 +3,7 @@
  * syntax
  * ataritest --peek address=0xff8200 loop=yes
  * ataritest --poke address=0x600 data=0x33
- * ataritest --clearmem size=16536 pattern=0x1234
+ * ataritest --clearmem size=16536 pattern=0x1234 loop=yes
  * ataritest --dumprom address=0xe00000 size=192 or size=256
  * ataritest --init 512 or 1024 or 2048 or 4096
  * ataritest --memory tests=rwx size=512 loop=yes
@@ -54,12 +54,14 @@
 
 int  parser ( int argc, char **argv );
 int  memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8_t *garbagePtr );
-void clearmem ( uint32_t length, uint32_t *duration, uint16_t pattern );
+void clearmem ( uint32_t length, uint32_t *duration, uint16_t pattern, int8_t loop );
 void setMemory ( uint32_t size );
 void peek ( uint32_t start );
 void poke ( uint32_t address, uint8_t data );
 void dump ( uint32_t ROMsize, uint32_t ROMaddress );
 void memspeed ( uint32_t length );
+void hwTest ( void );
+void devTest ( int rw );
 
 int doReads;
 int doWrites;
@@ -78,6 +80,10 @@ int cmdDump = 0;
 int cmdClear = 0;
 int cmdInit = 0;
 int cmdMemSpeed = 0;
+int targetF = 200;
+int cmdHWTEST = 0;
+int cmdDevTest = 0;
+int rwtest = 0;
 uint32_t ROMsize = 192;
 uint32_t ROMaddress = 0x00e00000;
 uint16_t clrPattern = 0x0000;
@@ -86,6 +92,7 @@ uint16_t clrPattern = 0x0000;
 uint8_t *garbege_datas;
 extern volatile unsigned int *gpio;
 extern uint8_t fc;
+extern volatile uint32_t g_buserr;
 
 struct timespec f2;
 
@@ -170,22 +177,24 @@ int main(int argc, char *argv[])
 
     cur_loop = 1;
 
-    if (check_emulator()) {
+    if ( check_emulator () ) 
+    {
         printf("PiStorm emulator running, please stop this before running ataritest\n");
         return 1;
     }
 
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &f2);
-    srand((unsigned int)f2.tv_nsec);
+    clock_gettime ( CLOCK_PROCESS_CPUTIME_ID, &f2 );
+    srand ( (unsigned int)f2.tv_nsec );
 
-    signal(SIGINT, sigint_handler);
+    signal ( SIGINT, sigint_handler );
 
-    ps_setup_protocol();
+    //ps_setup_protocol ( targetF );
     //exit(1);
-    ps_reset_state_machine();
-    ps_pulse_reset();
+   // ps_reset_state_machine ();
+   // ps_pulse_reset ();
+    
 
-    usleep(1500);
+   // usleep (1500);
 
 	fc = 6; //0b101;
     //write8( 0xff8001, 0b00001010 ); // memory config 512k bank 0
@@ -203,7 +212,12 @@ int main(int argc, char *argv[])
    
     if ( parser ( argc, argv ) )
     {
-        
+        ps_setup_protocol ( targetF );
+        ps_reset_state_machine ();
+        ps_pulse_reset ();
+
+        //ps_fw_wr (2);
+        //printf ( "[INIT] PiSTorm firmware revision 0x%04X\n", ps_fw_rd () );
 
         //printf ( "memory <%c%c%c> <%d> %s\n", 
         //    doReads ? 'r' : '-', doWrites ? 'w' : '-', doRandoms ? 'x' : '-', 
@@ -245,7 +259,7 @@ int main(int argc, char *argv[])
             printf ( "\nClearing ATARI ST RAM - %d KB\n", testSize );
             fflush (stdout);
 
-            clearmem ( testSize * SIZE_KILO, &duration, clrPattern );
+            clearmem ( testSize * SIZE_KILO, &duration, clrPattern, loopTests );
             
             printf ( "\nATARI ST RAM cleared in %d ms @ %.2f MB/s\n\n", 
                 //duration, ( (float)((testSize * 1024) - OFFSET) / (float)duration * 1000.0) / 1024 );
@@ -394,12 +408,23 @@ test_loop:
                 goto test_loop;
             }
         }
+    
+        if ( cmdHWTEST )
+        {
+            hwTest ();
+
+        }
+
+        if ( cmdDevTest )
+        {
+            devTest ( rwtest );
+        }
     }
 
     else
     {
         printf ( "ATARITEST syntax error\n"
-                 "--clearmem <size=xxx> <pattern=xxxx>\n"
+                 "--clearmem <size=xxx> <pattern=xxxx> <loop=yes>\n"
                  "     fills memory for specified size with 0's or pattern.\n"
                  "     <size> 512 to 4096. If not supplied, 512 is used.\n"
                  "     <pattern> memory will be filled with 16bit pattern\n"
@@ -501,6 +526,9 @@ void peek ( uint32_t start )
     for ( i = 0; i < size; ++i, address++ ) 
     {
         data [i] = read8 (address);
+
+        if ( g_buserr )
+            printf ( "bus error\n" );
 
         if ( !(address % 16) )
             printf( " $%.6X  | ", address );
@@ -1604,21 +1632,27 @@ int memTest ( int direction, int type, uint32_t startAdd, uint32_t length, uint8
 
 
 /* no checks performed - raw performance reported */
-void clearmem ( uint32_t length, uint32_t *duration, uint16_t pattern )
+void clearmem ( uint32_t length, uint32_t *duration, uint16_t pattern, int8_t loopYN )
 {
     struct timespec tmsStart, tmsEnd;
+    uint32_t loop = 1;
 
-
+    if ( loopYN )
+        loop = 0xffffffff; 
+        
     clock_gettime ( CLOCK_REALTIME, &tmsStart );
     
-    for ( uint32_t n = 8; n < length; n += 2 ) {
+    while ( loop-- )
+    {
+        for ( uint32_t n = 8; n < length; n += 2 ) {
 
-        write16 ( n, pattern );
+            write16 ( n, pattern );
 
-        if ( n % (length / 64)  == 0 ) 
-        {
-            printf ( "." );
-            fflush ( stdout );
+            if ( n % (length / 64)  == 0 ) 
+            {
+                printf ( "." );
+                fflush ( stdout );
+            }
         }
     }
 
@@ -1743,7 +1777,7 @@ int parser ( int argc, char **argv )
                 cmdMem = 1;
         }
 
-        else if ( strcmp ( cmdptr, "clearmem" ) == 0 )
+        if ( strcmp ( cmdptr, "clearmem" ) == 0 )
         {
             valid = 1; 
 
@@ -1770,6 +1804,14 @@ int parser ( int argc, char **argv )
                     tptr = strtok ( NULL, "" );
                     sscanf ( tptr, "%x", &clrPattern );
                 } 
+
+                else if ( strcmp ( aptr, "loop" ) == 0 )
+                {   
+                    tptr = strtok ( NULL, "" );
+
+                    if ( strcmp ( tptr, "yes" ) == 0 )
+                        loopTests = 1;
+                }
 
                 else
                     valid = 0;
@@ -1854,7 +1896,7 @@ int parser ( int argc, char **argv )
         }
 
         //  syntax --dumprom size=256 address=0xe00000 
-        else if ( strcmp ( cmdptr, "dumprom" ) == 0 )
+        if ( strcmp ( cmdptr, "dumprom" ) == 0 )
         {
             valid = 1; 
 
@@ -1952,7 +1994,270 @@ int parser ( int argc, char **argv )
             if ( valid )
                 cmdMemSpeed = 1;
         }
+    
+        if ( strcmp ( cmdptr, "clock" ) == 0 )
+        {
+            //valid = 1;
+            char *p;
+            //printf ( "argv = %s\n", argv[a+1] );
+            targetF = strtol ( argv [a+1], &p, 10 );
+            //printf ( "targetF = %d\n", targetF );
+        }
+
+        if ( strcmp ( cmdptr, "hardware" ) == 0 )
+        {
+            cmdHWTEST = 1;
+            valid = 1;
+        }
+
+        if ( strcmp ( cmdptr, "dev" ) == 0 )
+        {
+            valid = 1;
+
+            for ( int z = 2; z && valid && a < argc - 1; z-- )
+            {
+                strncpy ( arg, argv [++a], 80 );
+                argptr = strtok_r ( arg, " ", &savePtr );
+                aptr = strtok ( argptr, "=" );
+    
+                if ( strcmp ( aptr, "address" ) == 0 )
+                {
+                    tptr = strtok ( NULL, "" );
+                    sscanf ( tptr, "%x", &padd );
+                }
+
+                else if ( strcmp ( aptr, "read" ) == 0 )
+                {   
+                    rwtest = 1;
+                }
+
+                else if ( strcmp ( aptr, "write" ) == 0 )
+                {   
+                    rwtest = 0;
+                }
+
+                else
+                    valid = 0;
+
+                argptr = strtok ( savePtr, " " );
+            }
+
+            if ( valid )
+            {
+                cmdDevTest = 1;
+            }
+        }
     }
 
     return valid | syntax;
+}
+
+
+
+#define SIZE_KILO 1024
+#define SIZE_MEGA (1024 * 1024)
+#define SIZE_GIGA (1024 * 1024 * 1024)
+
+//uint8_t garbege_datas[4 * SIZE_MEGA];
+
+void hwTest ( void )
+{
+    int j;
+    uint16_t tmp;
+    uint32_t test_size = 512 * SIZE_KILO, cur_loop = 0;
+    uint8_t loop_tests = 0, total_errors = 0;
+
+    test_size = 512 * SIZE_KILO;
+            
+    garbege_datas = malloc ( test_size );
+
+    if ( !garbege_datas )
+    {
+        printf ( "Failed to allocate memory for garbege datas\n" );
+
+        return;
+    }
+
+    printf ( "\nTesting PiStorm Hardware\n" );
+
+
+test_loop:
+
+    printf ( "Data bus short circuit test - D0-D15\n" );
+
+    uint16_t d;
+
+    for ( uint32_t db = 0; db < 16; db++ )
+    {
+        write16 ( 0x10, (1 << db) );
+
+        for ( uint32_t s = 0; s < 16; s++ )
+        {
+            if ( s == db )
+                continue;
+
+            if ( ( d = read16 ( 0x10 ) ) == (1 << db) )
+            {
+                printf ( "data bus short - wrote 0x%X, read 0x%X, between data lines %d and %d\n", (1 << db), d, db, s );
+            }
+        }
+
+        write16 ( 0x10, 0x00 );
+    }
+
+    printf ( "Address bus short circuit test - A1-A21\n" );
+
+    //uint8_t d;
+
+    for ( uint32_t a = 1; a < 22; a++ )
+    {
+        write8 ( 0x10 + (1 << a), 0x5a );
+
+        for ( uint32_t s = 2; s < 22; s++ )
+        {
+            if ( s == a )
+                continue;
+
+            if ( ( d = read8 ( 0x10 + (1 << s) ) ) == 0x5a )
+            {
+                printf ( "address bus short at 0x%X and 0x%X - read 0x%X, between address lines %d and %d\n", 
+                    0x10 + (1 << a), 0x10 + (1 << s), d, a, s );
+            }
+        }
+
+        write8 ( 0x10 + (1 << a), 0x00 );
+    }
+
+
+
+    printf ( "Address bus test (24 bit)\n" );
+
+    for ( uint32_t j = 0; j < 24; ++j )
+    {
+      uint32_t ja = 1 << j;
+      
+      printf ( "address bit: $%.6X... ",ja );
+
+      for (uint32_t i = 0; i < test_size; i++) 
+	  {
+		  //write 512k writes on each address pin (A1-23)
+          write16 ( ja, 0xFFFF );
+      }
+      printf ( "ok\n" );
+    }
+    
+
+    
+	printf ( "\nData bus test (write)\n" );
+
+	j = 0;
+    for ( ; j < 16; ++j )
+    {
+      printf ( "write16: bit %.4X... ", 1 << j );
+
+      for ( uint32_t i = 0; i < test_size; i++ ) 
+	  {
+        while(garbege_datas[i] == 0x00)
+        {
+            garbege_datas[i] = (uint8_t)(rand() % 0xFF);
+        }
+            
+        write16 ( 1 << j, 1 << j );
+      }
+
+      printf ( "ok\n" );
+    }
+    
+
+/*
+	//printf("And back down... \n");
+	for (j=15;j>=0;--j)
+    {
+      printf("write16: data = %.4X... ", 1 << j);
+      for (uint32_t i = 0; i < test_size; i++) 
+	  {
+          while(garbege_datas[i] == 0x00)
+		  {
+              garbege_datas[i] = (uint8_t)(rand() % 0xFF);
+          }
+
+		  write32(i, (uint16_t)(1 << j));
+      }
+      printf ( "ok\n");
+    }
+*/
+
+	//printf ( "\nThe following test only works on non-A variant flip-flops (373 or 374's not 373A or 374A\n" );
+	printf ( "\nData bus test (read/write)\n" );
+
+    for ( j = 0; j < 16; ++j )
+    {
+	  tmp = 1 << j;
+
+      printf ( "read16/write16: bit %.4X... ", tmp );
+
+      write16 ( j + 0x600, tmp );
+	  //sleep(1);
+      uint16_t c = read16 ( j + 0x600 );
+      
+      if (c != tmp) 
+	  {
+          printf("READ16: write/read data mismatch: read %.2X should be %.2X.\n",  c, tmp);
+          errors++;
+      }
+      printf ( "ok\n");
+    }
+/*
+    printf ( "\nData bus test (read/write)\n" );
+
+	for (j=15;j>=0;--j)
+    {
+	  uint16_t tmp = 1 << j;
+      printf("write and read back data bus: bit %.4X... ", tmp );
+      write16(j+1, tmp);
+	  //sleep(1);
+      uint16_t c = read16(j+1);
+      if (c != tmp) 
+	  {
+          printf("failed read %.2X should be %.2X.\n",  c, tmp);
+          errors++;
+      }
+      else
+      {
+        printf ( "ok\n");
+      }
+    }
+*/
+
+    printf ( "\nHardware total errors: %d\n", errors );
+
+    total_errors += errors;
+    errors = 0;
+    sleep (1);
+
+    if (loop_tests) {
+        printf ("Loop %d done. Begin loop %d.\n", cur_loop + 1, cur_loop + 2);
+        printf ("Current total errors: %d.\n", total_errors);
+        goto test_loop;
+    }
+
+    return;
+}
+
+
+void devTest ( int rw )
+{
+    printf ( "\nATARITEST - DEV\n%s address 0x%08X\n", rw ? "READ looping" : "WRITE looping", padd );
+
+    if ( rw == 1 )
+    {
+        while ( 1 )
+            read16 ( padd );
+    }
+
+    else
+    {
+        while ( 1 )
+            write16 ( padd, 0x5555 );
+    }
 }

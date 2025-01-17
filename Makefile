@@ -1,3 +1,10 @@
+#
+# atari-pistorm make file
+# cryptodad
+#
+# syntax PI3 = make PIMODEL=PI3
+# syntax PI4 = make
+#
 EXENAME          = emulator
 
 MAINFILES        = emulator.c \
@@ -13,8 +20,8 @@ MAINFILES        = emulator.c \
 				platforms/dummy/dummy-platform.c \
 				platforms/dummy/dummy-registers.c \
 				platforms/atari/rtg.c \
-				platforms/atari/blitter.c
-#				platforms/atari/et4000.c
+				platforms/atari/blitter.c \
+				platforms/atari/et4000.c
 
 
 MUSASHIFILES     = m68kcpu.c m68kdasm.c softfloat/softfloat.c softfloat/softfloat_fpsp.c
@@ -25,7 +32,7 @@ MUSASHIGENERATOR = m68kmake
 .CFILES   = $(MAINFILES) $(MUSASHIFILES) $(MUSASHIGENCFILES)
 .OFILES   = $(.CFILES:%.c=%.o)
 
-CC        = gcc
+CC        = gcc -g
 
 PIOPTS	  = -march=armv8-a -mfloat-abi=hard -mfpu=neon-fp-armv8
 

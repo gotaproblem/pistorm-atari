@@ -14,18 +14,30 @@
 #define PIN_A1 3
 #define PIN_CLK 4
 #define PIN_RESET 5
-#define PIN_RD 6
-#define PIN_WR 7
+#define PIN_RD 0x40 // 1 << 6
+#define PIN_WR 0x80 // 1 << 7
+#define PIN_WR_CLR 0x80
 //#define PIN_D(x) (8 + x)
 
-#define REG_DATA 0
-#define REG_ADDR_LO 1
-#define REG_ADDR_HI 2
-#define REG_STATUS 3
+#define PI_TXN_IN_PROGRESS 1
+
+/* commands */
+#define REG_DATA 0x00
+#define REG_ADDR_LO 0x04 //1
+#define REG_ADDR_HI 0x08 //2
+#define REG_STATUS 0x0C
 
 #define STATUS_BIT_INIT 1
 #define STATUS_BIT_BERR 1
 #define STATUS_BIT_RESET 2
+#define STATUS_BIT_HALT 1
+
+#define FW_WR 0x8000
+
+#define WRITE_BYTE 0x0100
+#define WRITE_WORD 0x0000
+#define READ_BYTE  0x0300
+#define READ_WORD  0x0200
 
 #define STATUS_MASK_IPL 0xe000
 #define STATUS_SHIFT_IPL 13
@@ -56,16 +68,22 @@
   *(gpio + (((g) / 10))) |= \
       (((a) <= 3 ? (a) + 4 : (a) == 4 ? 3 : 2) << (((g) % 10) * 3))
 
-#define GPIO_PULL *(gpio + 37)      // Pull up/pull down
-#define GPIO_PULLCLK0 *(gpio + 38)  // Pull up/pull down clock
+//#define GPIO_PULL *(gpio + 37)      // Pull up/pull down
+//#define GPIO_PULLCLK0 *(gpio + 38)  // Pull up/pull down clock
 
-#define GPFSEL0_INPUT 0x00244240 /* GPIO 2,3,6,7 always OUTPUTS - GPIO 4 = 100 = Alt Fn 0 = GPCLK0 */
+//#define GPFSEL0_INPUT 0x00244240 /* GPIO 2,3,6,7 always OUTPUTS - GPIO 4 = 100 = Alt Fn 0 = GPCLK0 */
+//#define GPFSEL0_INPUT 0x00248240 /* GPIO 0, 1, 4, 5 INPUTS */
+#define GPFSEL0_INPUT 0x00240240 /* GPIO 0, 1, 4, 5, 6 INPUTS */
 #define GPFSEL1_INPUT 0x00000000 /* GPIO 10-19 all INPUTS */
 #define GPFSEL2_INPUT 0x00000000 /* GPIO 20-23 all INPUTS */
 
-#define GPFSEL0_OUTPUT 0x09244240 /* GPIO 0-3, 5-9 OUTPUTS */
+//#define GPFSEL0_OUTPUT 0x09244240 /* GPIO 0-3, 5-9 OUTPUTS */
+//#define GPFSEL0_OUTPUT 0x09248240 /* GPIO 2, 3, 5-9 OUTPUTS */ 
+#define GPFSEL0_OUTPUT 0x09240240 /* GPIO 2, 3, 7-9 OUTPUTS */ 
 #define GPFSEL1_OUTPUT 0x09249249 /* GPIO 10-19 OUTPUTS */
 #define GPFSEL2_OUTPUT 0x00000249 /* GPIO 20-23 OUTPUTS */
+
+#define NOP asm("nop"); asm("nop"); asm("nop"); asm("nop");
 
 #if (0)
 #define GPFSEL_OUTPUT \
@@ -191,17 +209,24 @@ void ps_write_32(uint32_t address, uint32_t data);
 uint16_t ps_read_status_reg();
 void ps_write_status_reg(unsigned int value);
 
-void ps_setup_protocol();
-void ps_reset_state_machine();
-void ps_pulse_reset();
+void ps_setup_protocol ();
+void ps_reset_state_machine ();
+void ps_pulse_reset ();
+void ps_pulse_halt ();
+void ps_fw_wr ( uint16_t );
+uint16_t ps_fw_rd ();
+uint16_t ps_read_ipl ();
 
 /* cryptodad */
+#define PI_STATUS_RESET(x) ((x) & 0x0002)
+#define PI_STATUS_FWREV(x) ((x) & 0x1FFC)
+#define PI_STATUS_IPL(x) (((x) & 0xE000) >> 13)
 /* cryptodad */
 #define PS_CNF_CPU 0x0001
 void ps_config ();
-void ps_berrIAK ( uint32_t, int );
+//void ps_berrIAK ( uint32_t, int );
 
-unsigned int ps_get_ipl_zero();
+//unsigned int ps_get_ipl_zero();
 
 #define read8 ps_read_8
 #define read16 ps_read_16
