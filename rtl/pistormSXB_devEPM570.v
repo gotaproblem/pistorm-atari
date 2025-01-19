@@ -1,5 +1,5 @@
 /*
- * 12 JAN 2025
+ * 19 JAN 2025
  *
  * Tested with 373 & 374 latches
  * Tested Pi4 with 1500/500 & 1800/500 clocks
@@ -46,10 +46,8 @@
  
 module pistormsxb_devEPM570(
     output reg     	PI_TXN_IN_PROGRESS, 	// GPIO0
-    //output reg     	PI_IPL_ZERO,        	// GPIO1
 	output reg     	PI_IPL1,        		// GPIO1
     input   [1:0]   PI_A,       			// GPIO[3..2]
-    //input           PI_CLK,     			// GPIO4
 	output reg      PI_IPL2,     			// GPIO4
     output      	PI_BERR,   				// GPIO5
     input           PI_RD,      			// GPIO6
@@ -91,16 +89,7 @@ module pistormsxb_devEPM570(
     input           M68K_BR_n,
     output reg     	M68K_BG_n,
     input           M68K_BGACK_n
-    //input           M68K_C1,
-    //input           M68K_C3,
-    //input           CLK_SEL
   );
-
-	//wire gCLK 								= PI_CLK;
-	//reg [2:0] c8m_sync;
-	//wire c8m 								= M68K_CLK;
-	//wire c8m 								= c8m_sync[2];
-	//wire c1c3_clk 							= !(M68K_C1 ^ M68K_C3);
 
 	localparam REG_DATA 					= 2'd0;
 	localparam REG_ADDR_LO 					= 2'd1;
@@ -143,12 +132,8 @@ module pistormsxb_devEPM570(
 
 	wire trigger;
 	assign trigger = (PI_A == REG_STATUS && CMDRD);
-	
-	//assign PI_D = trigger ? {ipl, 11'b0, !( M68K_RESET_n || reset_out ), 1'b0} : 16'bz;
-	//assign PI_D = trigger ? {ipl, fwrev, !( M68K_RESET_n || reset_out ), 1'b0} : 16'bz;	
-	assign PI_D = trigger ? {ipl, fwrev, ~M68K_RESET_n, 1'b0} : 16'bz;	
-	//assign PI_D = trigger ? {ipl, fwrev, ~M68K_RESET_n, BGi} : 16'bz;	
-	//assign PI_D = trigger ? {ipl, states, ~M68K_RESET_n, 1'b0} : 16'bz;	
+		
+	assign PI_D = trigger ? {ipl, fwrev, ~M68K_RESET_n, 1'b0} : 16'bz;		
 	
 	reg [15:0] status;
 	wire reset_out 							= status[1]; /* ps_protocol.c -> ps_write_status_reg (STATUS_BIT_INIT) */
@@ -156,7 +141,6 @@ module pistormsxb_devEPM570(
 	wire halt								= status[0];
 	
 	assign M68K_RESET_n 					= (reset_out) ? LO : 1'bz;
-	//assign M68K_HALT_n 						= (reset_out) ? LO : 1'bz;
 	assign M68K_HALT_n 						= (halt) ? LO : 1'bz;
 	
 	reg op_rw 								= HI;
@@ -197,10 +181,6 @@ module pistormsxb_devEPM570(
 		end
 	end
 	
-	//assign LTCH_D_WR_U 						= PI_A == REG_DATA && CMDWR;
-	//assign LTCH_D_WR_L 						= PI_A == REG_DATA && CMDWR;
-	assign LTCH_D_RD_OE_n					= !(PI_A == REG_DATA && CMDRD);
-	
 	
 	reg a0;
 	
@@ -210,14 +190,6 @@ module pistormsxb_devEPM570(
 	reg [2:0] ipl_1;
 	reg [2:0] ipl_2;
 	reg [2:0] reset_d 						= 3'b000;
-  
-  
-	//always @(posedge gCLK) begin
-	//	c8m_sync 							<= {c8m_sync[1:0], M68K_CLK};
-	//end
-
-	//wire c8m_rising 						= !c8m_sync[1] && c8m_sync[0];
-	//wire c8m_falling 						= c8m_sync[1] && !c8m_sync[0];
 	
 	
 	/* INTERRUPT CONTROL */
@@ -226,27 +198,10 @@ module pistormsxb_devEPM570(
 	 * check current IPL with previous IPL
 	 * only report interrupt if current IP{L > previous IPL 
 	 */
-	/*
-	always @(c8m) begin
 	
-		ipl 								<= ~M68K_IPL_n;
-		reset_d[2:1] 						<= { reset_d[1:0], M68K_RESET_n };
-	end
-	
-	always @( negedge PI_TXN_IN_PROGRESS ) begin
-	
-		//if ( s6 && !PI_TXN_IN_PROGRESS ) begin
-		
-			//ipl 							<= ~M68K_IPL_n;
-			
-			//reset_d[2:1] 					<= { reset_d[1:0], M68K_RESET_n };
-			PI_IPL_ZERO 					<= ( (ipl == 3'd0 && ~M68K_IPL_n == 3'd0) && reset_d );
-		//end
-	end	
-	*/
-	//reg PI_IPL_ZERO;
 	/* IPL lines should be serviced on negative edge */
 	always @( posedge c8m ) begin
+	
 		if ( c8m_rising ) begin
 		/* only interested in interrupts when a RW has finished */
 		//if ( !PI_TXN_IN_PROGRESS ) begin
@@ -257,7 +212,6 @@ module pistormsxb_devEPM570(
 		end
 			
 		reset_d[2:1] 						<= { reset_d[1:0], M68K_RESET_n };
-		//PI_IPL_ZERO 						<= ( ipl == 3'd0 && reset_d );
 	end	
 	
 	
@@ -289,6 +243,7 @@ module pistormsxb_devEPM570(
 	/* Bus Arbitration */
 	reg [3:0] BG_DELAY 						= 4'b1111;
 	reg [5:0] BR_DELAY 						= 6'b111111;
+	reg [5:0] BGACK_DELAY					= 6'b000000;
 
 	
 	assign c8m = aCLK[0];
@@ -330,6 +285,7 @@ module pistormsxb_devEPM570(
 	
 	always @( c8m ) begin
 
+		BGACK_DELAY							<= {BGACK_DELAY[4:0], M68K_BGACK_n};
 		BGACKi								<= M68K_BGACK_n;
 		BRi									<= M68K_BR_n;
 		M68K_BG_n							<= BGi;		
@@ -350,21 +306,14 @@ module pistormsxb_devEPM570(
 	always @(negedge c8m) begin
 	
 		// Blitter requires address and data busses to be established 
-		//if ( BGi && ((gotBR && BGACKi) || (gotBR && !BGACKi)) && !AS_INT ) begin
-		//if ( (!BRi && BGi && BGACKi && !ASi) ) begin
 		if ( BGi && gotBR && !AS_INT ) begin
 		
-			//if (c8m_falling)
-				BGi 						<= LO;
+			BGi 							<= LO;
 		end
 		
-		//else if ( (!BGi && ((!gotBR && !BGACKi) || (!gotBR && BGACKi))) || (s0 && AS_INT) ) begin
-		//else if ( BRi && !BGi ) begin
 		else if ( (!BGi && !gotBR) || (s0 && AS_INT) ) begin
-		//else if ( (!BGi && !gotBR) ) begin
 		
-			//if (c8m_falling)
-				BGi 						<= HI;
+			BGi 							<= HI;
 		end
 		
 		
@@ -378,12 +327,12 @@ module pistormsxb_devEPM570(
 		case (BR_DELAY[1:0])
 		
 			2'b10: begin
-				gotBR <= HI;
+				gotBR 						<= HI;
 				
 			end
 			
 			2'b01: begin
-				gotBR <= LO;
+											gotBR <= LO;
 			end
 		endcase
 	end
@@ -392,24 +341,16 @@ module pistormsxb_devEPM570(
 	// posedge addrhi_done - upper address word is latched
 	// then need to put 24 bit address on address bus
 	// then can assert AS
-	//always @(addrhi_done, reset_sm, s7, s0) begin
 	always @(addrhi_done, reset_sm, s6) begin
-	
-		 //if ( s2 ) begin
-		
-		//	PI_BERR 						<= HI;
-		//end
 		
 		if ( addrhi_done && !PI_TXN_IN_PROGRESS ) begin
 		
 			PI_TXN_IN_PROGRESS 				<= HI;
-			//PI_BERR							<= HI;
 		end
 		
 		if ( s6 || reset_sm ) begin
 		
 			PI_TXN_IN_PROGRESS 				<= LO;
-			//PI_BERR							<= M68K_BERR_n;
 		end
 	end
 	
@@ -421,21 +362,9 @@ module pistormsxb_devEPM570(
 	 * ideally make PI_WR autonomous
 	 * posedge PI_WR = write command sent
 	 */
-	//reg CMDWR;
-	assign CMDWR = PI_WR;
-	/*
-	always @(PI_WR) begin
 	
-		if ( PI_WR )
-			CMDWR 							<= HI;
-			
-		//else begin
-		
-		else if ( !PI_WR )
-				CMDWR 						<= LO;
-		//end
-	end
-	*/
+	assign CMDWR = PI_WR;
+	
 	reg addrlo_done 						= LO;
 	reg addrhi_done 						= LO;
 	reg data_done 							= LO;
@@ -536,10 +465,10 @@ module pistormsxb_devEPM570(
 	 always @(posedge c8m, posedge s0rst) begin
 		if(s0rst)
 		  s0<=1'd0;
-		else if(s7 | oor) begin
+		//else if(s7 | oor) begin
 		//else if( (s7 | oor) && M68K_BERR_n && BGACKi ) begin
-		//else if( (s7 | oor) && BGACKi ) begin
-		  //s0 <= BGACKi;
+		else if( (s7 | oor) && BGACKi ) begin
+
 		  s0 <= 1'b1;
 		end
 	end
@@ -570,8 +499,9 @@ module pistormsxb_devEPM570(
 		if (s3rst)
 		  s3<=1'd0;
 		//else if(s2) begin
-		else if (s2 && PI_TXN_IN_PROGRESS && BGACKi) begin
+		//else if (s2 && PI_TXN_IN_PROGRESS && BGACKi) begin
 		//else if (s2 && PI_TXN_IN_PROGRESS) begin
+		else if (s2 && BGACKi) begin
 		
 		  s3 <= 1'd1;
 		end
@@ -613,26 +543,18 @@ module pistormsxb_devEPM570(
 	// Entering S1, the processor drives a valid address on the address bus.
 	// As the clock rises at the end of S7, the processor places the address and data buses in the high-impedance state
   
-	//assign FC_INT = op_fc;
-	//assign FC_INT = (s1|s2|s3|s4|s5|s6| (s7) ) ? op_fc : CPU_SPACE;
-	//assign FC_INT = ( PI_TXN_IN_PROGRESS && (s0|s1|s2|s3|s4|s5|s6|s7) ) ? op_fc : CPU_SPACE;
-	//assign FC_INT = ( PI_TXN_IN_PROGRESS && (s0|s1|s2|s3|s4|s5|s6) ) ? op_fc : CPU_SPACE;
 	assign FC_INT = ( PI_TXN_IN_PROGRESS && (s0|s1|s2|s3|s4|s5) ) || (s6|s7) ? op_fc : CPU_SPACE;
 	
-	//assign PI_BERR = (s7) ? M68K_BERR_n : HI;
-	//assign PI_BERR = ( PI_TXN_IN_PROGRESS && (s5|s6|s7) ) ? M68K_BERR_n : HI;
 	assign PI_BERR = M68K_BERR_n;
 	
 	
 	/* Data Bus Hi-Z on trailing edge of S7 */
 	assign LTCH_D_WR_OE_n = ( PI_TXN_IN_PROGRESS && (s3|s4|s5|s6|s7) ) && M68K_BERR_n ? op_rw : HI;
-	//assign LTCH_D_WR_OE_n = ( PI_TXN_IN_PROGRESS && (s3|s4|s5|s6|s7) ) ? op_rw : HI;
-	//assign LTCH_D_WR_OE_n = ( PI_TXN_IN_PROGRESS && (s3|s4|s5) ) || (s6|s7) ? op_rw : HI;
 	
 	/* Address Bus Hi-Z on trailing edge of S7 */
 	assign LTCH_A_OE_n = ( PI_TXN_IN_PROGRESS && (s1|s2|s3|s4|s5|s6|s7) ) && M68K_BERR_n ? LO : HI;
-	//assign LTCH_A_OE_n = ( PI_TXN_IN_PROGRESS && (s1|s2|s3|s4|s5|s6|s7) ) ? LO : HI;
-	//assign LTCH_A_OE_n = ( PI_TXN_IN_PROGRESS && (s1|s2|s3|s4|s5) ) || (s6|s7) ? LO : HI;
+	
+	assign LTCH_D_RD_OE_n = !(PI_A == REG_DATA && CMDRD);
 	
 	/* Data is driven on to the Bus in S6 */
 	/* 374 edge d-type flip/flop - on rising edge, data is latched */
@@ -642,7 +564,6 @@ module pistormsxb_devEPM570(
 
 // On the rising edge of S2, the processor asserts AS and drives R/W low.
 // On the falling edge of the clock entering S7, the processor negates AS, UDS, or LDS
-	//assign AS_INT = ( PI_TXN_IN_PROGRESS && (s2|s3|s4|s5|s6) ) ? LO : HI;
 	assign AS_INT = ( PI_TXN_IN_PROGRESS && (s2|s3|s4|s5) ) || (s6) ? LO : HI;
 	
 
@@ -653,16 +574,11 @@ module pistormsxb_devEPM570(
 	 * read (op_rw == 1)
 	 * write (op_rw == 0)
 	 */
-	//assign UDS_INT = ( PI_TXN_IN_PROGRESS && (~op_rw & (s4|s5|s6)) ) ? op_uds_n : ( PI_TXN_IN_PROGRESS && (op_rw & (s2|s3|s4|s5|s6)) ) ? op_uds_n : HI;
-	//assign LDS_INT = ( PI_TXN_IN_PROGRESS && (~op_rw & (s4|s5|s6)) ) ? op_lds_n : ( PI_TXN_IN_PROGRESS && (op_rw & (s2|s3|s4|s5|s6)) ) ? op_lds_n : HI;
 	assign UDS_INT = ( PI_TXN_IN_PROGRESS && (~op_rw & (s4|s5)) ) || (s6) ? op_uds_n : ( PI_TXN_IN_PROGRESS && (op_rw & (s2|s3|s4|s5)) ) || (s6) ? op_uds_n : HI;
 	assign LDS_INT = ( PI_TXN_IN_PROGRESS && (~op_rw & (s4|s5)) ) || (s6) ? op_lds_n : ( PI_TXN_IN_PROGRESS && (op_rw & (s2|s3|s4|s5)) ) || (s6) ? op_lds_n : HI;
 	
 // On the rising edge of S2, the processor asserts AS and drives R/W low.
 // As the clock rises at the end of S7, the processor drives R/W high
-	//assign RW_INT = (s2|s3|s4|s5|s6|s7) ? op_rw : HI;
-	//assign RW_INT = (s2|s3|s4|s5|s6| (s7 & c8m_falling) ) ? op_rw : HI;
-	//assign RW_INT = ( PI_TXN_IN_PROGRESS && (s2|s3|s4|s5|s6|s7) ) ? op_rw : HI;
 	assign RW_INT = ( PI_TXN_IN_PROGRESS && (s2|s3|s4|s5) ) || (s6|s7) ? op_rw : HI;
 	
 	
@@ -679,18 +595,19 @@ module pistormsxb_devEPM570(
 	
 	assign VM_INT = M68K_VMA_nr ? HI : LO;
   
-/*
+
 	assign M68K_FC 							= (M68K_BGACK_n & ~reset_out) ? FC_INT	: 3'bzzz;
 	assign M68K_AS_n 						= (M68K_BGACK_n & ~reset_out) ? AS_INT 	: 1'bz;
 	assign M68K_UDS_n 						= (M68K_BGACK_n & ~reset_out) ? UDS_INT : 1'bz;
 	assign M68K_LDS_n 						= (M68K_BGACK_n & ~reset_out) ? LDS_INT : 1'bz;
 	assign M68K_RW 							= (M68K_BGACK_n & ~reset_out) ? RW_INT 	: 1'bz;
 	assign M68K_VMA_n						= (M68K_BGACK_n & ~reset_out) ? VMA_INT : 1'bz;
-*/
+/*
 	assign M68K_FC 							= BGACKi ? FC_INT	: 3'bzzz;
 	assign M68K_AS_n 						= BGACKi ? AS_INT 	: 1'bz;
 	assign M68K_UDS_n 						= BGACKi ? UDS_INT 	: 1'bz;
 	assign M68K_LDS_n 						= BGACKi ? LDS_INT 	: 1'bz;
 	assign M68K_RW 							= BGACKi ? RW_INT	: 1'bz;
 	assign M68K_VMA_n						= BGACKi ? VMA_INT 	: 1'bz;
+*/
 endmodule
