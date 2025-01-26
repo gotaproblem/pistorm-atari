@@ -467,8 +467,8 @@ module pistormsxb_devEPM570(
 		  s0<=1'd0;
 		//else if(s7 | oor) begin
 		//else if( (s7 | oor) && M68K_BERR_n && BGACKi ) begin
-		else if( (s7 | oor) && BGACKi ) begin
-
+		//else if( (s7 | oor) && BGACKi ) begin
+		else if( (s7 | oor) && BGACK_DELAY[2] ) begin
 		  s0 <= 1'b1;
 		end
 	end
@@ -478,17 +478,17 @@ module pistormsxb_devEPM570(
 		if(s1rst)
 		  s1<=1'd0;
 		//else if(s0) begin
-		//else if(s0 & PI_TXN_IN_PROGRESS & BGACKi)
+		//else if(s0 & PI_TXN_IN_PROGRESS & BGACKi) begin
 		else if(s0 && BGACKi) begin // BGACKi here works for bad apple
 		  s1<=1'd1;
 		end
 	end
 	
-	// checking PI_TXN_IN_PROGRESS here results in R/W of 3.4/3.2
 	always @(posedge c8m, posedge s2rst) begin
 		if(s2rst)
 		  s2<=1'd0;
-		else if(s1) begin
+		//else if(s1) begin
+		else if(s1 && BGACKi) begin
 		//else if(s1 && PI_TXN_IN_PROGRESS && BGACKi) begin
 		  s2<=1'd1;
 		end
@@ -498,10 +498,10 @@ module pistormsxb_devEPM570(
 	always @(negedge c8m, posedge s3rst) begin
 		if (s3rst)
 		  s3<=1'd0;
-		//else if(s2) begin
+		else if(s2) begin
 		//else if (s2 && PI_TXN_IN_PROGRESS && BGACKi) begin
 		//else if (s2 && PI_TXN_IN_PROGRESS) begin
-		else if (s2 && BGACKi) begin
+		//else if (s2 && BGACKi) begin
 		
 		  s3 <= 1'd1;
 		end
@@ -553,6 +553,7 @@ module pistormsxb_devEPM570(
 	
 	/* Address Bus Hi-Z on trailing edge of S7 */
 	assign LTCH_A_OE_n = ( PI_TXN_IN_PROGRESS && (s1|s2|s3|s4|s5|s6|s7) ) && M68K_BERR_n ? LO : HI;
+	//assign LTCH_A_OE_n = ( PI_TXN_IN_PROGRESS && (s2|s3|s4|s5|s6|s7) ) && M68K_BERR_n ? LO : HI;
 	
 	assign LTCH_D_RD_OE_n = !(PI_A == REG_DATA && CMDRD);
 	
@@ -565,7 +566,7 @@ module pistormsxb_devEPM570(
 // On the rising edge of S2, the processor asserts AS and drives R/W low.
 // On the falling edge of the clock entering S7, the processor negates AS, UDS, or LDS
 	assign AS_INT = ( PI_TXN_IN_PROGRESS && (s2|s3|s4|s5) ) || (s6) ? LO : HI;
-	
+	//assign AS_INT = ( PI_TXN_IN_PROGRESS && (s3|s4|s5) ) || (s6) ? LO : HI;
 
 // READ : On the rising edge of state 2 (S2), the processor asserts AS and UDS, LDS, or DS
 // WRITE : At the rising edge of S4, the processor asserts UDS, or LDS // wrong: DS should be set in s3
@@ -576,6 +577,8 @@ module pistormsxb_devEPM570(
 	 */
 	assign UDS_INT = ( PI_TXN_IN_PROGRESS && (~op_rw & (s4|s5)) ) || (s6) ? op_uds_n : ( PI_TXN_IN_PROGRESS && (op_rw & (s2|s3|s4|s5)) ) || (s6) ? op_uds_n : HI;
 	assign LDS_INT = ( PI_TXN_IN_PROGRESS && (~op_rw & (s4|s5)) ) || (s6) ? op_lds_n : ( PI_TXN_IN_PROGRESS && (op_rw & (s2|s3|s4|s5)) ) || (s6) ? op_lds_n : HI;
+	//assign UDS_INT = ( PI_TXN_IN_PROGRESS && (s3|s4|s5) ) || (s6) ? op_uds_n : HI;
+	//assign LDS_INT = ( PI_TXN_IN_PROGRESS && (s3|s4|s5) ) || (s6) ? op_lds_n : HI;
 	
 // On the rising edge of S2, the processor asserts AS and drives R/W low.
 // As the clock rises at the end of S7, the processor drives R/W high
