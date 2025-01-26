@@ -2507,8 +2507,8 @@ static inline void m68ki_exception_bus_error(m68ki_cpu_core *state)
 	//}
 
 	uint sr = m68ki_init_exception(state);
-	//m68ki_stack_frame_1000(state, REG_PPC, sr, EXCEPTION_BUS_ERROR); // 68010 only
-	m68ki_stack_frame_buserr(state, sr);
+	m68ki_stack_frame_1000(state, REG_PPC, sr, EXCEPTION_BUS_ERROR); // 68010 only
+	//m68ki_stack_frame_buserr(state, sr);
 
 	m68ki_jump_vector ( state, EXCEPTION_BUS_ERROR );
 	//longjmp(m68ki_bus_error_jmp_buf, 1);

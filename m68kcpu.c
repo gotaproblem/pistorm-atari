@@ -966,7 +966,7 @@ void m68k_set_cpu_type(struct m68ki_cpu_core *state, unsigned int cpu_type)
 uint m68k_get_address_mask(m68ki_cpu_core *state) {
 	return state->address_mask;
 }
-#if (0)
+#if (1)
 /* Execute some instructions until we use up num_cycles clock cycles */
 /* ASG: removed per-instruction interrupt checks */
 int m68k_execute(m68ki_cpu_core *state, int num_cycles)

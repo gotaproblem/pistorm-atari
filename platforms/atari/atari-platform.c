@@ -201,6 +201,13 @@ void setvar_atari(struct emulator_config *cfg, char *var, char *val)
         }
     }
 */
+    if CHKVAR ( "fdd0" ) 
+    {
+        if ( val && strlen ( val ) != 0 )
+            set_hard_drive_image_file_atari ( 0, val );
+    }
+
+
     if CHKVAR ( "hdd0" ) 
     {
         if ( val && strlen ( val ) != 0 )

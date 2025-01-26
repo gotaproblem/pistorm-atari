@@ -88,6 +88,20 @@ volatile int pending_irq = 0;
 volatile uint16_t g_reset = 0;
 volatile int g_int_mask;
 
+uint8_t GPIP;
+
+struct DMA_s {
+
+  uint16_t data_seccount;
+  uint16_t status_mode;
+  uint8_t  hi;
+  uint8_t  mid;
+  uint8_t  lo;
+
+};
+
+struct DMA_s DMA;
+
 uint8_t load_new_config = 0;
 int mem_fd;
 unsigned int cpu_type = M68K_CPU_TYPE_68000;
@@ -524,56 +538,56 @@ void *ipl_task ()
   uint16_t g_pending_irq, prev_irq;
   uint16_t status, ipl, berr;
   int32_t timeout;
+  //uint8_t kbd;
+  //int once;
 
   usleep ( 1000000 );  
 
   cpu3 ();
 
+  /* wait for emulation to start */
   while ( !cpu_emulation_running )
     ;
 
   while ( cpu_emulation_running )
   {
+    /* check interrupts when RTG frame buffer is not being drawn */
+    if ( ET4000Initialised )
+      while ( !RTG_VSYNC )
+        ;
+
+    /* read IPL bits */
     status = ps_read_ipl ();
     g_irq = ((status & 0x10) >> 2) | (status & 0x02);
-    g_reset = 0;//!(status & 0x40);
 
-    /* check for bus-error when txn is not in progress */
-    //if ( !(status & 0x01) )
-    //  g_buserr = !((status & 0x20) >> 5);// && !(status & 0x01);
-
-    if ( g_reset )
-    {
-      while ( g_reset )
-        usleep (1000000);
-    }
-
-    //if ( g_irq <= g_int_mask )
-    //  g_irq = 0;
-/*
-    if ( g_irq <= g_int_mask )
-      last_irq = g_irq;
-
-    else if ( g_irq == 0 && last_irq > g_irq )
-      g_irq = last_irq;
-*/
-  
     timeout = 100000;
+    //once = 1;
+
+    /* wait for interrupt to be serviced by emulator */
     while ( g_irq && timeout-- )
     {
-      NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP;
-      NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP;
-      NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP;
-      //usleep (1);
+      //NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP;
+      //NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP;
+      //NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP; NOP;
+
+      /* read keyboard ACIA */
+      //if ( once && !(status & 0x01) )
+      //{
+      //  kbd = ps_read_8 ( 0x00FFFC00 );
+      //  if ( (kbd & 0x70) > 0x0F )
+      //    printf ( "ACIA error 0x%X\n", kbd & 0xFF );
+
+      //  once = 0;
+      //}
+      //else
+      usleep (1);
     }
-    
+#ifdef DEBUG_INT      
     if ( timeout <= 0 )
     {
       printf ( "IPL timedout - INT MASK is %d - g_irq = %d, 0x%X\n", g_int_mask, g_irq, ps_read_ipl () );
-      //ps_reset_state_machine ();
-      //printf ( "state machine reset\n" );
     }
-
+#endif   
 
     /* 
      * Atari CPU clock is 8MHz = clock cycle of 125ns
@@ -592,6 +606,15 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 {
   static uint32_t l;
 
+  /* eat up any reset cycles */
+	if (RESET_CYCLES) {
+	    int rc = RESET_CYCLES;
+	    RESET_CYCLES = 0;
+	    num_cycles -= rc;
+	    if (num_cycles <= 0)
+		return;
+	}
+
 	/* Set our pool of clock cycles available */
 	SET_CYCLES ( num_cycles );
 	m68ki_initial_cycles = num_cycles;
@@ -599,16 +622,15 @@ static inline void m68k_execute_bef ( m68ki_cpu_core *state, int num_cycles )
 	/* Make sure we're not stopped */
 	if ( !CPU_STOPPED )
 	{
-    //m68ki_check_bus_error_trap();
-    //g_buserr = 0;
+    g_buserr = 0;
 
 		/* Main loop.  Keep going until we run out of loop cycles */
 execute:
     m68ki_use_data_space ();
 
     REG_PPC = REG_PC;
-    REG_IR = m68ki_read_imm16_addr_slowpath ( state, REG_PC );
-      
+    //REG_IR = m68ki_read_imm16_addr_slowpath ( state, REG_PC );
+    REG_IR = m68ki_read_imm_16 (state);
     m68ki_instruction_jump_table [REG_IR] (state);
     USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
 
@@ -617,12 +639,15 @@ execute:
       printf ( "BUS ERROR 0x%08X\n", REG_PC );
       m68ki_exception_bus_error ( state ); 
     }
-
-      // cryptodad make sure m68kcpu.h m68ki_set_sr() has relevent line commented out
+/*
+    else
+    {
+      m68ki_instruction_jump_table [REG_IR] (state);
+      USE_CYCLES ( CYC_INSTRUCTION [REG_IR] );
+    }
+*/
+    // cryptodad make sure m68kcpu.h m68ki_set_sr() has relevent line commented out
     if ( GET_CYCLES () > 0 )
-      //if ( GET_CYCLES () > 0 && !ps_read_ipl () )
-      //if ( GET_CYCLES () > 0 && ((g_irq = ps_read_ipl ()) != 0) )
-      //if ( GET_CYCLES () > 0 && !g_irq )
       goto execute;
 
     REG_PPC = REG_PC;
@@ -682,6 +707,7 @@ void *cpu_task()
 	m68ki_cpu_core *state = &m68ki_cpu;
   int statem, prev_state, fcount;
   uint16_t reset, ipl;
+  int lc;
   
   state->gpio = gpio;
 	m68k_pulse_reset(state);
@@ -698,8 +724,6 @@ void *cpu_task()
     ;
 
 run:
-  //m68k_execute_bef ( state, loop_cycles );
-
 #if (0)
   status = ps_read_status_reg ();
   
@@ -732,6 +756,7 @@ run:
 
 #else
 
+  lc = loop_cycles;
   ipl = g_irq;
 
   if ( g_reset ) 
@@ -746,6 +771,7 @@ run:
 
     g_reset = 0;
     g_irq = 0;
+    g_buserr = 0;
   }
 
   else if ( g_buserr )
@@ -756,8 +782,9 @@ run:
       g_irq = 0;
     }
 
-    g_buserr = 0;
-    m68k_execute_bef ( state, loop_cycles );
+   // g_buserr = 0;
+
+    //m68k_execute ( state, loop_cycles );
   }
 
   else if ( ipl )//&& !g_buserr )
@@ -780,36 +807,17 @@ run:
     //}
     
 
-    m68k_execute_bef ( state, 1 );
+    //m68k_execute ( state, 1 );
+    lc = 1;
   }
 
-  /* this is needed to service remaining level 2 interrupts */
-  //else if ( ipl == 0 && !g_buserr )
-  //else if ( last_irq && !g_buserr )
+  //else
   //{
-  //  m68k_set_irq ( last_irq );
-  //  m68ki_check_interrupts ( state );
-
-    //if ( last_irq )
-    //{
-    //  printf ( "last_irq = %d\n", last_irq );
-    //m68k_set_irq ( last_irq );
-    //m68ki_check_interrupts ( state );
-    //g_int_mask = FLAG_INT_MASK >> 8;
-  //  g_irq = 0;
-  //  last_irq = 0;
-    //}
-
-    //g_irq = 0;
-
-  //  m68k_execute_bef ( state, 1 );
+  //  g_buserr = 0;
+  //  m68k_execute ( state, loop_cycles );
   //}
 
-  else
-  {
-    g_buserr = 0;
-    m68k_execute_bef ( state, loop_cycles );
-  }
+  m68k_execute_bef ( state, lc );
 
 #endif  
 
@@ -1082,6 +1090,9 @@ int main ( int argc, char *argv[] )
   
   /* get Atari memory size */
   /* NOTE this ONLY works if stable communication between Pi and Atari i.e. ataritest works */
+  /* NOTE jan 2025 - bus error is NOT generated on addresses falling within the first 4MB */
+  uint32_t s;
+
   printf ( "[MAIN] Checking physical ATARI memory... " );
 
   cpu_set_fc ( 6 );
@@ -1089,30 +1100,18 @@ int main ( int argc, char *argv[] )
   g_buserr = 0;
 
   /* configure MMU for all 4MB *not sure if this is correct for smaller memory sizes */
-  ps_write_8 ( ((uint32_t)0x00ff8001), ATARI_MMU_4M ); 
-
-  uint32_t s;
-  uint8_t n;
+  ps_write_8 ( (uint32_t)0x00ff8001, ATARI_MMU_4M ); 
+  
   /* check permutations - 512KB, 1MB, 2MB, 4MB */
-  for ( s = 0x00080000; s <= 0x00400000; s <<= 1 )
+  for ( s = 0x00080000; s < 0x00800000; s <<= 1 )
   {     
-    ps_write_8 ( s, 0x12 );
+    ps_write_8 ( s, 0x55 );
 
     usleep ( 1 );
 
-    /* first check for bus error */
-    if ( g_buserr ) 
-    {
-      //printf ( "bus error\n" );
-      break;
-    }
-
     /* now check we can read back same data */
-    if ( (n = ps_read_8 ( s ) ) != 0x12 ) 
-    {
-      //printf ( "%p = 0x%X\n", s - 1, n );
+    if ( ps_read_8 ( s ) != 0x55 ) 
       break;
-    }
 
     usleep ( 1 );
   }
@@ -1215,7 +1214,7 @@ int main ( int argc, char *argv[] )
  */
 void cpu_pulse_reset ( void ) 
 {
-  //printf ("%s CPU RST\n", __func__ );
+  printf ("%s CPU RST\n", __func__ );
   ps_pulse_reset (); // toggle hardware reset signal
 
   if ( WTC_initialised )
@@ -1288,6 +1287,8 @@ static inline uint32_t check_ff_st ( uint32_t add )
 
 static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_t *res ) 
 { 
+  static uint32_t v;
+
 #if defined FAUX_BLITTER
   /* Faux Blitter */
   if ( Blitter_enabled && (addr >= 0x00FF8A00 && addr < 0x00FF8A3E) )
@@ -1311,16 +1312,37 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
   }
  #endif
 #endif
+  g_buserr = 0;
 
   if ( ET4000Initialised && ( (addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP) ))//|| (addr >= 0xFEC00000 && addr < 0xFEDC0400) ) )
   {
-    while ( !RTG_VSYNC );
-    return et4000Read ( addr, res, type );
+    while ( !RTG_VSYNC )
+      ;
+
+    v = et4000Read ( addr, res, type );
+
+    g_buserr = 0;
+
+    return v;
   }
 
-  /* Set Atari's date/time - picked up by TOS program -> pistorm.prg */
-  /* FFFC40 is undefined in the Atari-Compendium, coming after MSTe RTC defines */
-  /* pistorm.prg reads these two 16bit addresses, then writes date/time to IKBD */
+  /* GPIP check */
+  //if ( addr == 0x00FFFA01 )
+  //{
+    //printf ( "reading GPIP 0x%X\n", GPIP );
+  //  *res = GPIP;
+
+  //  return 1;
+  //}
+
+  /* 
+   * Set Atari's date/time - read by TOS program -> PISTORM.PRG
+   * Needed two spare words to write the BCD data/time data to
+   * FFFC40 is undefined in the Atari-Compendium, so used that
+   * PISTORM.PRG reads these two 16 bit addresses, then writes the date/time to IKBD
+   * 
+   * This will only be used once when Atari boots 
+   */
   if ( RTC_enabled && (addr >= 0x00FFFC40 && addr < 0x00FFFC44) )
   {
     uint16_t atari_dt;
@@ -1352,10 +1374,13 @@ static inline int32_t platform_read_check ( uint8_t type, uint32_t addr, uint32_
 
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) )
   {
-    g_buserr = 0; /* can't have a buss error if mapped memory is used */
-
     if ( handle_mapped_read ( cfg, addr, &mapped_data, type ) != -1 ) 
     {
+      if ( g_buserr )
+        printf ( "mapped read got a berr 0x%X\n", addr );
+
+      g_buserr = 0; /* can't have a buss error if mapped memory is used */
+
       *res = mapped_data;
       
       return 1;
@@ -1425,7 +1450,29 @@ unsigned int m68k_read_memory_8 ( uint32_t address )
 
   //if ( ET4000Initialised )
   //  pthread_mutex_unlock ( &rtglock ); 
-  
+#ifdef INTERCEPT_DMA
+  /* GPIP check */
+  if ( address == 0x00FFFA01 )
+  {
+    //printf ( "reading GPIP 0x%X\n", GPIP );
+    GPIP = r;
+  }
+
+  /* DMA */
+  else if ( address >= 0x00FF8609 && address < 0x00FF860E )
+  {
+    printf ( "DMA read8 0x%X, 0x%X\n", address, value & 0xFF );
+
+    if ( address == 0x00FF8609 )
+      DMA.hi = r;
+
+    else if ( address == 0x00FF860B )
+      DMA.mid = r;
+
+    else if ( address == 0x00FF860D )
+      DMA.lo = r;
+  }
+ #endif 
   return r;
 }
 
@@ -1478,7 +1525,19 @@ unsigned int m68k_read_memory_16 ( uint32_t address )
 
   //if ( ET4000Initialised )
   //  pthread_mutex_unlock ( &rtglock ); 
+#ifdef INTERCEPT_DMA
+  /* DMA */
+  if ( address >= 0x00FF8604 && address < 0x00FF8608 )
+  {
+    printf ( "DMA read16 0x%X, 0x%X\n", address, value & 0xFFFF );
 
+    if ( address == 0x00FF8604 )
+      DMA.data_seccount = r;
+
+    else if ( address == 0x00FF8606 )
+      DMA.status_mode = r;
+  }
+#endif
   return r;
 }
 
@@ -1562,17 +1621,31 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
   }
  #endif
 #endif
+  g_buserr = 0;
 
   if ( ET4000Initialised && ( (addr >= NOVA_ET4000_VRAMBASE && addr < NOVA_ET4000_REGTOP) ))// || (addr >= 0xFEC00000 && addr < 0xFEDC0400) ) )
   {
     //printf ( "calling et4000Write () with addr 0x%X\n", addr );
     //pthread_mutex_lock ( &rtglock ); 
-    while ( !RTG_VSYNC );
+    while ( !RTG_VSYNC )
+      ;
+
     et4000Write ( addr, val, type );
+    
     //pthread_mutex_unlock ( &rtglock ); 
+    g_buserr = 0;
 
     return 1;
   }
+
+  /* GPIP check */
+  //if ( addr == 0x00FFFA01 )
+  //{
+  //  printf ( "writing GPIP 0x%X\n", val & 0xFF );
+  //  GPIP = val;
+
+  //  return 1;
+  //}
 
   if ( IDE_enabled && (addr >= IDEBASEADDR && addr < IDETOPADDR) )
   {
@@ -1581,10 +1654,13 @@ static inline int32_t platform_write_check ( uint8_t type, uint32_t addr, uint32
 
   if ( ( addr >= cfg->mapped_low && addr < cfg->mapped_high ) ) 
   {
-    g_buserr = 0; /* can't have a buss error if mapped memory is used */
-
     if ( handle_mapped_write ( cfg, addr, val, type ) != -1 )
     {
+      if ( g_buserr )
+        printf ( "mapped write got a berr 0x%X\n", addr );
+
+      g_buserr = 0; /* can't have a buss error if mapped memory is used */
+      
       return 1;
     }
   }
@@ -1626,9 +1702,29 @@ void m68k_write_memory_8 ( uint32_t address, unsigned int value )
 */
   //if ( ET4000Initialised )
   //  pthread_mutex_lock ( &rtglock ); 
-
-  ps_write_8 ( address, value );
+#ifdef INTERCEPT_DMA
+  /* GPIP check */
+  if ( address == 0x00FFFA01 )
+    ps_write_8 ( address, GPIP );
   
+  /* DMA */
+  else if ( address >= 0x00FF8609 && address < 0x00FF860E )
+  {
+    printf ( "DMA write8 0x%X, 0x%X\n", address, value & 0xFF );
+
+    //if ( address == 0x00FF8609 )
+    //  ps_write_8 ( address, DMA.hi );
+
+   // else if ( address == 0x00FF860B )
+    //  ps_write_8 ( address, DMA.mid );
+
+    //else if ( address == 0x00FF860D )
+    //  ps_write_8 ( address, DMA.lo );
+  }
+#endif
+  //else
+    ps_write_8 ( address, value );
+
   //if ( ET4000Initialised )
   //  pthread_mutex_unlock ( &rtglock ); 
 
@@ -1653,8 +1749,21 @@ void m68k_write_memory_16 ( uint32_t address, unsigned int value )
   address = check_ff_st( address );
   if ( address & 0xFF000000 )
     return;
+#ifdef INTERCEPT_DMA
+  /* DMA */
+  if ( address >= 0x00FF8604 && address < 0x00FF8608 )
+  {
+    printf ( "DMA write16 0x%X, 0x%X\n", address, value & 0xFFFF );
 
-  ps_write_16 ( address, value );
+   // if ( address == 0x00FF8604 )
+    //  ps_write_16 ( address, DMA.data_seccount );
+
+   // else if ( address == 0x00FF8606 )
+    //  ps_write_16 ( address, DMA.status_mode );
+  }
+#endif
+  //else
+    ps_write_16 ( address, value );
   
   //if ( ET4000Initialised )
   //  pthread_mutex_unlock ( &rtglock ); 

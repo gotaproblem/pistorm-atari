@@ -386,8 +386,12 @@ static void cmd_seek_complete(struct ide_taskfile *tf)
   struct ide_drive *d = tf->drive;
   if (d->failed)
     drive_failed(tf);
+
   d->offset = xlate_block(tf);
-  if (d->offset == -1 || lseek(d->fd, 512 * d->offset, SEEK_SET) == -1) {
+
+  if (d->offset == -1 || lseek(d->fd, 512 * d->offset, SEEK_SET) == -1) 
+  {
+    printf ( "%s offset failure %d\n", __func__, d->offset );
     tf->status &= ~ST_DSC;
     tf->status |= ST_ERR;
     tf->error |= ERR_IDNF;
@@ -433,7 +437,10 @@ static void cmd_writesectors_complete(struct ide_taskfile *tf)
   /* 0 = 256 sectors */
   d->length = tf->count ? tf->count : 256;
 /*  fprintf(stderr, "WRITE %d SECTORS @ %ld\n", d->length, d->offset); */
-  if (d->offset == -1 ||  lseek(d->fd, 512 * d->offset, SEEK_SET) == -1) {
+
+  if (d->offset == -1 ||  lseek(d->fd, 512 * d->offset, SEEK_SET) == -1) 
+  {
+    printf ( "%s offset failure %d\n", __func__, d->offset );
     tf->status |= ST_ERR;
     tf->error |= ERR_IDNF;
     tf->status &= ~ST_DSC;
@@ -853,9 +860,9 @@ int ide_attach_st (struct ide_controller *c, int drive, int fd)
   d->lba = 0;
   d->header_present = 0;
 
-  d->heads = 1;
+  d->heads = 2;
   d->sectors = 9;
-  d->cylinders = 79;
+  d->cylinders = 80;
 
   d->controller->lba4 = 0;
 
@@ -863,11 +870,11 @@ int ide_attach_st (struct ide_controller *c, int drive, int fd)
   lseek(fd, 0, SEEK_SET);
 
   if (file_size > 720 * 1024) {
-    //printf ( "[IDE/FDD] Floppy image is too big\n" );
+    printf ( "[IDE/FDD] %s Floppy image is too big\n", __func__ );
     return -1;
   }
 
-  ide_make_ident(drive, d->cylinders, d->heads, d->sectors, "PISTORM IDE FD", d->identify);
+  ide_make_ident ( drive, d->cylinders, d->heads, d->sectors, "PISTORM IDE FD", d->identify );
 
   return 0;
 }
@@ -899,7 +906,7 @@ int ide_attach_hdf ( struct ide_controller *c, int drive, int fd )
   lseek64 ( fd, 0, SEEK_SET );
 
   if (file_size < 4 * 1000 * 1000) {
-    //printf ( "[IDE/HDL] File size is too small. Image must be > 4 MB\n" );
+    printf ( "[IDE/HDD] File size is too small. Image must be > 4 MB\n" );
     return -1;
   }
 
@@ -1059,7 +1066,7 @@ int ide_make_ident ( int drive, uint16_t c, uint8_t h, uint8_t s, char *name, ui
 
   memset ( p, 0, 512 );
   oldsize = c * h * s;
-
+//printf ( "%s 1\n", __func__ );
 	
 	put_le16(p + 0, (1 << 15) | (1 << 6));//0x0040);
 	put_le16(p + 1, c);
@@ -1087,10 +1094,12 @@ int ide_make_ident ( int drive, uint16_t c, uint8_t h, uint8_t s, char *name, ui
 
 	put_le16(p + 48, 1); /* dword I/O */
 	put_le16(p + 49, (1 << 9)); //(1 << 11) | (1 << 9) | (1 << 8)); /* DMA and LBA supported */
+  //put_le16(p + 49, (0 << 9)); //(1 << 11) | (1 << 9) | (1 << 8)); /* DMA and LBA supported */
 	put_le16(p + 51, (240 << 8)); //0x200); /* PIO transfer cycle */
 	put_le16(p + 52, 0x200); /* DMA transfer cycle */
 	put_le16(p + 53, 1);// | (1 << 1) | (1 << 2)); /* words 54-58,64-70,88 are valid */
-  
+  //put_le16(p + 53, 0);// | (1 << 1) | (1 << 2)); /* words 54-58,64-70,88 are valid */
+
 	put_le16(p + 54, c);
 	put_le16(p + 55, h);
 	put_le16(p + 56, s);
@@ -1114,15 +1123,16 @@ int IDE_make_drive(uint8_t type, int fd)
   uint16_t c;
   uint32_t sectors;
   uint16_t ident[256];
-
+printf ( "%s 1\n", __func__ );
   if (type < 1 || type > MAX_DRIVE_TYPE)
     return -2;
-
+printf ( "%s 2\n", __func__ );
   memset(ident, 0, 512);
   memcpy(ident, ide_magic, 8);
+
   if (write(fd, ident, 512) != 512)
     return -1;
-
+printf ( "%s 3\n", __func__ );
   memset(ident, 0, 8);
   ident[0] = le16((1 << 15) | (1 << 6));	/* Non removable */
   make_serial(ident + 10);
@@ -1130,7 +1140,8 @@ int IDE_make_drive(uint8_t type, int fd)
   ident[51] = le16(240 /* PIO2 */ << 8);	/* PIO cycle time */
   ident[53] = le16(1);		/* Geometry words are valid */
 
-  switch(type) {
+  switch(type) 
+  {
     case ACME_ROADRUNNER:
       /* 504MB drive with LBA support */
       c = 1024;
@@ -1183,6 +1194,7 @@ int IDE_make_drive(uint8_t type, int fd)
       make_ascii(ident + 27, "ACME ZIPPIBUS v0.1", 40);
       break;
   }
+
   ident[1] = le16(c);
   ident[3] = le16(h);
   ident[6] = le16(s);
@@ -1194,12 +1206,15 @@ int IDE_make_drive(uint8_t type, int fd)
   ident[58] = le16(sectors >> 16);
   ident[60] = ident[57];
   ident[61] = ident[58];
+
   if (write(fd, ident, 512) != 512)
     return -1;
 
   memset(ident, 0xE5, 512);
+
   while(sectors--)
     if (write(fd, ident, 512) != 512)
       return -1;
+
   return 0;
 }

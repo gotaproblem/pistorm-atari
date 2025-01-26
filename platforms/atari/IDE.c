@@ -87,14 +87,14 @@ void InitIDE (void)
       
       else 
       {
-        if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 2 ), "ST" ) == 0 )
+        if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 2 ), "st" ) == 0 )
         {
-          printf ( "[FDD%d] Attaching FDD image %s.\n", i, atari_image_file [i] );
+          //printf ( "[IDE%d] Attaching FDD image %s.\n", port, atari_image_file [i] );
 
           ide_attach_st ( atariIDE [port], i, atarifd );
           num_IDE_drives++;
 
-          printf ( "[FDD%d] FDD Image %s attached\n", i, atari_image_file [i] );
+          printf ( "[IDE%d] FDD Image %s attached as HDD%d\n", port, atari_image_file [i], i );
         }
 
         else if ( strcmp ( atari_image_file [i] + ( strlen (atari_image_file [i] ) - 3 ), "img" ) == 0 

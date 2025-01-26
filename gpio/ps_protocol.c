@@ -408,9 +408,9 @@ void ps_write_8 ( uint32_t address, uint16_t data )
 inline
 void ps_write_32 ( uint32_t address, uint32_t value ) 
 {
-  ps_write_16 ( address, value >> 16 );
-  ps_write_16 ( address + 2, value );
-/*
+  //ps_write_16 ( address, value >> 16 );
+  //ps_write_16 ( address + 2, value );
+
   static uint32_t l;
   static uint16_t w1, w2;
 
@@ -453,9 +453,9 @@ void ps_write_32 ( uint32_t address, uint32_t value )
 
   while ( ( l = *ioread ) & PI_TXN_IN_PROGRESS );
 
-  g_irq = CHECK_IRQ (l);
+  //g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
-*/
+
 }
 
 
@@ -567,19 +567,19 @@ else
 
 uint32_t ps_read_32 ( uint32_t address ) 
 {
-  return ( ps_read_16 ( address ) << 16 ) | ps_read_16 ( address + 2 );
-/*
+  //return ( ps_read_16 ( address ) << 16 ) | ps_read_16 ( address + 2 );
+
   static uint32_t l;
   static uint16_t w1, w2;
 
   *ioset = ( (address & 0xffff) << 8 ) | REG_ADDR_LO;
   *ioset = PIN_WR;
-  *ioclr = PIN_WR;
+  *ioclr = PIN_WR; *ioclr = PIN_WR; *ioclr = PIN_WR;
   *ioclr = TXN_END;
 
   *ioset = ( ( (fc << 13) | 0x0200 | (address >> 16)  ) << 8 ) |  REG_ADDR_HI;
   *ioset = PIN_WR;
-  *ioclr = PIN_WR;
+  *ioclr = PIN_WR; *ioclr = PIN_WR; *ioclr = PIN_WR;
   *ioclr = TXN_END;
 
   *ioset = REG_DATA;
@@ -594,12 +594,12 @@ uint32_t ps_read_32 ( uint32_t address )
 
   *ioset = ( (address & 0xffff) << 8 ) | REG_ADDR_LO;
   *ioset = PIN_WR;
-  *ioclr = PIN_WR;
+  *ioclr = PIN_WR; *ioclr = PIN_WR; *ioclr = PIN_WR;
   *ioclr = TXN_END;
   
   *ioset = ( ( (fc << 13) | 0x0200 | (address >> 16)  ) << 8 ) |  REG_ADDR_HI;
   *ioset = PIN_WR;
-  *ioclr = PIN_WR;
+  *ioclr = PIN_WR; *ioclr = PIN_WR; *ioclr = PIN_WR;
   *ioclr = TXN_END;
 
   *ioset = REG_DATA;
@@ -609,13 +609,12 @@ uint32_t ps_read_32 ( uint32_t address )
 
  	*ioclr = TXN_END;
   
-  g_irq = CHECK_IRQ (l);
+  //g_irq = CHECK_IRQ (l);
   g_buserr = CHECK_BERR (l);
 
   w2 = l >> 8;
   
   return (uint32_t)(w1 << 16) | w2;
-*/
 }
 
 
