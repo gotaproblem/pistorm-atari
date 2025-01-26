@@ -1,4 +1,5 @@
 #!/bin/bash
+pistormDIR=$(pwd)
 if [ -d "../screendumps" ] ; then
     cd ../screendumps
     filename=screendump
@@ -9,6 +10,6 @@ if [ -d "../screendumps" ] ; then
     done
     filename=$filename$i
     
-    mv ../pistorm-atari/screendump.png "$filename".png
-    rm ../pistorm-atari/screendump.raw
+    mv $pistormDIR/screendump.png "$filename".png
+    rm $pistormDIR/screendump.raw
 fi
