@@ -13,21 +13,21 @@
 # Project information
 
 * This fork is solely for the Atari platform. All Amiga code has been removed.
-* Development is ongoing on an Atari STe, utilising an exxos PLLC adapter board to allow the fitting of the PiStorm interface. The ongoing work is a "proof-of-concept". If proven to offer acceptable performance, then bespoke hardware will be needed to allow installation within the confines of the Atari ST platform. **If you are lucky enough to own a Phoenix H5 board (exxos shop), then the PiStorm with Pi4 fits nicely :)**
-* The Atari platform differs greatly to the Amiga platform. Atari uses FC lines and depends heavily upon bus arbitration and interrupts.
-* Initial development was on a PI3B, but performance was poor. A PI3A+ was tried and again the performance was poor. Finally, a PI4B was tried. Although initial performance was still poor in comparison to the Amiga, there was headroom for improvemnt. Over many months, performance has slowly increased, and at time of writing, performance is finally acceptable. 
+* Development is ongoing on an Atari STe, utilising an exxos PLLC adapter board to allow the fitting of the PiStorm interface. The ongoing work is a "proof-of-concept". If proven to offer acceptable performance, then bespoke hardware will be needed to allow installation within the confines of the Atari ST platforms. **If you are lucky enough to own a Phoenix H5 board (exxos shop), then the PiStorm with Pi4 fits nicely :)**
+* The Atari platform differs greatly to the Amiga platform. The Atari ST uses the FC signals, interrups and bus arbitration.
+* ~~Initial development was on a PI3B, but performance was poor. A PI3A+ was tried and again the performance was poor. Finally, a PI4B was tried. Although initial performance was still poor in comparison to the Amiga, there was headroom for improvemnt. Over many months, performance has slowly increased, and at time of writing, performance is finally acceptable.~~
 
 **NOTE**
 
+The current builds require a Pi4. This hopefully will change once a stable solution is found.
+The current firmware may not work with PiSTorm boards using 74LVC16374 latches. It's a case of trying and seeing. All efforts are being made to correct this.
+
 ~~PiStorm must have 374 latches. Any other are known not to be compatible for the moment.~~
-
-Sep 2023 - Firmware development has resolved the different latch/flip-flop type dependancy. Meaning, both 373 and 374 parts now work.
-
-Sep 2023 - Pi3A+ now offers acceptible performance
-
-Oct 2023 - Pi3B is working but needs to be overclocked
-
-Oct 2023 - Pi Zero 2W is working but needs to be overslocked
+~~Sep 2023 - Firmware development has resolved the different latch/flip-flop type dependancy. Meaning, both 373 and 374 parts now work.~~
+~~Sep 2023 - Pi3A+ now offers acceptible performance~~
+~~Oct 2023 - Pi3B is working but needs to be overclocked~~
+~~Oct 2023 - Pi Zero 2W is working but needs to be overslocked~~
+Jun 2025 - Only use the latest branch. Anything before the jan2025 branch is obsolete
 
 # Extended functionality
 
@@ -36,10 +36,10 @@ A virtual IDE interface is included which allows for two disk drive images to be
 An additional three virtual IDE interfaces are now included, allowing for a total of eight disk drive images - a potential 64GB of disk space.
 
 * Atari ST ROM images can be loaded at initialisation. For example, the emulation can boot using TOS 1.04 (ST only), TOS 1.06, TOS 1.62, TOS 2.06 or even EMUTos
-* Alt-RAM/TT-RAM option can be added to increase performance
+* Alt-RAM/TT-RAM option can be added (68020, 68030, 68040 only), to increase performance
 * 68020 CPU can be used with an FPU
 * ET4000 SVGA graphics is now available with 1MB VRAM
-* Screen dumps can be taken when using ET4000
+* Screen grabs can be taken when using ET4000
 * Additional interfaces will be added with time
 
 # Now to get up-and-running
