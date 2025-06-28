@@ -27,6 +27,7 @@ The current firmware may not work with PiSTorm boards using 74LVC16374 latches. 
 ~~Sep 2023 - Pi3A+ now offers acceptible performance~~
 ~~Oct 2023 - Pi3B is working but needs to be overclocked~~
 ~~Oct 2023 - Pi Zero 2W is working but needs to be overslocked~~
+
 Jun 2025 - Only use the latest branch. Anything before the jan2025 branch is obsolete
 
 # Extended functionality
